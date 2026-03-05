@@ -64,8 +64,8 @@ import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
-const adapter: TaskAdapter = {
-  manifest: {
+class PmTaskAdapter implements TaskAdapter {
+  readonly manifest: TaskAdapter["manifest"] = {
     taskId: "pm",
     label: "PM",
     variants: [
@@ -74,13 +74,35 @@ const adapter: TaskAdapter = {
       { id: "annikaHons", label: "NBack PM Text (Blocked PM/Control)", configPath: "pm/annikaHons" },
       { id: "word_multicat", label: "NBack PM Word Multicat", configPath: "pm/word_multicat" },
     ],
-  },
-  async launch(context) {
-    await runPmJsPsychTask(context);
-  },
-};
+  };
 
-export const pmAdapter = adapter;
+  private context: TaskAdapterContext | null = null;
+  private runtime: PmRuntimeState | null = null;
+  private removeKeyScrollBlocker: (() => void) | null = null;
+
+  async initialize(context: TaskAdapterContext): Promise<void> {
+    this.context = context;
+    this.runtime = await preparePmRuntime(context);
+  }
+
+  async execute(): Promise<unknown> {
+    if (!this.context || !this.runtime) {
+      throw new Error("PM Task not initialized");
+    }
+    await runPmJsPsychTask(this.context, this.runtime);
+    return { success: true };
+  }
+
+  async terminate(): Promise<void> {
+    setCursorHidden(false);
+    if (this.removeKeyScrollBlocker) {
+      this.removeKeyScrollBlocker();
+      this.removeKeyScrollBlocker = null;
+    }
+  }
+}
+
+export const pmAdapter = new PmTaskAdapter();
 
 function shouldHideCursorForPhase(phase: unknown): boolean {
   if (typeof phase !== "string") return false;
@@ -267,12 +289,11 @@ async function preparePmRuntime(context: TaskAdapterContext): Promise<PmRuntimeS
   };
 }
 
-async function runPmJsPsychTask(context: TaskAdapterContext): Promise<void> {
-  const runtime = await preparePmRuntime(context);
+async function runPmJsPsychTask(context: TaskAdapterContext, runtime: PmRuntimeState): Promise<void> {
   const { parsed, plan, eventLogger } = runtime;
   const root = context.container;
   let jsPsychRef: ReturnType<typeof initJsPsych> | null = null;
-  const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
+  // Note: key scroll blocker is managed by adapter.terminate now
   root.style.maxWidth = "1000px";
   root.style.margin = "0 auto";
   root.style.fontFamily = "system-ui";
@@ -454,7 +475,6 @@ async function runPmJsPsychTask(context: TaskAdapterContext): Promise<void> {
     await runJsPsychTimeline(jsPsychRef, timeline);
   } finally {
     setCursorHidden(false);
-    removeKeyScrollBlocker();
   }
 
   const records = collectPmRecords(jsPsychRef.data.get().values(), runtime.participantId, runtime.variantId);

@@ -1,0 +1,119 @@
+:root {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color: #0f172a;
+  background: linear-gradient(180deg, #e8edf4 0%, #f7fafc 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app-experiment#app {
+  max-width: none;
+  width: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+.experiment-stage {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+.jspsych-display-element,
+.jspsych-content-wrapper,
+.jspsych-content {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.meta {
+  font-size: 14px;
+  color: #334155;
+}
+
+code {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.exp-continue-screen {
+  text-align: center;
+  color: #0f172a;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.exp-continue-actions {
+  margin-top: 14px;
+}
+
+.exp-continue-btn {
+  appearance: none;
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exp-continue-btn:hover {
+  background: #111827;
+}
+
+.exp-continue-btn:focus-visible {
+  outline: 2px solid #334155;
+  outline-offset: 2px;
+}
+
+.conveyor-stage-shell {
+  margin: 0 auto;
+  position: relative;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  background: #e5e7eb;
+}
+
+.conveyor-container {
+  position: relative;
+}
+
+.trial-start-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--overlay-padding, 14px 18px);
+  background: var(--overlay-bg, rgba(255, 255, 255, 0.92));
+  border: var(--overlay-border, 1px solid #d1d5db);
+  border-radius: var(--overlay-radius, 8px);
+  color: var(--overlay-color, #111827);
+  font-size: var(--overlay-font-size, 18px);
+  text-align: center;
+  line-height: 1.35;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
+}

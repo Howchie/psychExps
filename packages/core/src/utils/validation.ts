@@ -1,4 +1,4 @@
-import type { JSONObject } from "./types";
+import type { JSONObject } from "../api/types";
 
 const asObject = (value: unknown): value is JSONObject =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));

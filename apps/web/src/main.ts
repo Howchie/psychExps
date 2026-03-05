@@ -1,13 +1,13 @@
 import "./styles.css";
 
 import {
-  buildMergedConfig,
+  ConfigurationManager,
+  LifecycleManager,
   configureAutoResponder,
   resolveAutoResponderProfile,
   resolveSelection,
   buildTaskMap,
   getVariantOrThrow,
-  loadJsonFile,
   installFullscreenOnFirstInteraction,
   installGlobalScrollBlocker,
   resolvePageBackground,
@@ -31,6 +31,7 @@ async function bootstrap(): Promise<void> {
     throw new Error("Missing #app container");
   }
 
+  const configManager = new ConfigurationManager();
   const adapters: TaskAdapter[] = [sftAdapter, pmAdapter];
   const adapterMap = buildTaskMap(adapters);
 
@@ -51,18 +52,18 @@ async function bootstrap(): Promise<void> {
       const explicitPath = selection.configPath.endsWith(".json")
         ? selection.configPath
         : `/configs/${selection.configPath}.json`;
-      resolvedVariantConfig = await loadJsonFile(explicitPath);
+      resolvedVariantConfig = await configManager.load(explicitPath);
     }
   } else if (variant.configPath) {
     const fromMap = taskConfigsByPath[variant.configPath];
     if (fromMap) {
       resolvedVariantConfig = fromMap;
     } else {
-      resolvedVariantConfig = await loadJsonFile(`/configs/${variant.configPath}.json`);
+      resolvedVariantConfig = await configManager.load(`/configs/${variant.configPath}.json`);
     }
   }
 
-  const mergedTaskConfig = buildMergedConfig(
+  const mergedTaskConfig = configManager.merge(
     {},
     taskDefaults[selection.taskId] ?? {},
     resolvedVariantConfig,
@@ -93,8 +94,10 @@ async function bootstrap(): Promise<void> {
 
   const removeGlobalScrollBlocker = installGlobalScrollBlocker();
   const removeFullscreenHooks = installFullscreenOnFirstInteraction(launchContainer);
+  
+  const lifecycle = new LifecycleManager(adapter);
   try {
-    await adapter.launch({
+    await lifecycle.run({
       container: launchContainer,
       selection,
       coreConfig: coreDefaultConfig,

@@ -1,0 +1,37 @@
+import type { CoreConfig } from "@experiments/core";
+
+export const coreDefaultConfig: CoreConfig = {
+  selection: {
+    taskId: "sft",
+    variantId: "default",
+  },
+  participant: {
+    participantParamCandidates: ["PROLIFIC_PID", "SONA_ID", "participant", "survey_code"],
+    studyParamCandidates: ["STUDY_ID", "study_id"],
+    sessionParamCandidates: ["SESSION_ID", "session_id"],
+  },
+  completion: {
+    redirect: {
+      enabled: false,
+      completeUrlTemplate: "",
+      incompleteUrlTemplate: "",
+    },
+  },
+  data: {
+    localSave: true,
+    filePrefix: "experiments",
+  },
+  autoresponder: {
+    enabled: false,
+    continueDelayMs: { minMs: 800, maxMs: 2600 },
+    responseRtMs: { meanMs: 720, sdMs: 210, minMs: 180, maxMs: 3200 },
+    timeoutRate: 0.08,
+    errorRate: 0.12,
+    interActionDelayMs: { minMs: 450, maxMs: 1200 },
+    holdDurationMs: { minMs: 220, maxMs: 860 },
+    maxTrialDurationMs: 90000,
+  },
+  ui: {
+    pageBackground: "linear-gradient(180deg, #e8edf4 0%, #f7fafc 100%)",
+  },
+};
