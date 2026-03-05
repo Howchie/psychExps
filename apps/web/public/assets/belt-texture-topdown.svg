@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="beltBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a434d" />
+      <stop offset="50%" stop-color="#2a323b" />
+      <stop offset="100%" stop-color="#202730" />
+    </linearGradient>
+    <pattern id="centerRibs" width="12" height="120" patternUnits="userSpaceOnUse">
+      <rect x="0" y="22" width="8" height="76" rx="1" fill="#4d5863" />
+      <rect x="8" y="22" width="4" height="76" fill="#2b333c" />
+    </pattern>
+    <pattern id="sideCleats" width="16" height="120" patternUnits="userSpaceOnUse">
+      <rect x="0" y="8" width="12" height="6" rx="1" fill="#6b7280" />
+      <rect x="0" y="106" width="12" height="6" rx="1" fill="#6b7280" />
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="120" height="120" fill="url(#beltBody)" />
+  <rect x="0" y="0" width="120" height="120" fill="url(#centerRibs)" opacity="0.9" />
+  <rect x="0" y="0" width="120" height="120" fill="url(#sideCleats)" opacity="0.65" />
+
+  <rect x="0" y="16" width="120" height="2" fill="#111827" opacity="0.65" />
+  <rect x="0" y="102" width="120" height="2" fill="#111827" opacity="0.65" />
+  <rect x="0" y="18" width="120" height="2" fill="#9ca3af" opacity="0.22" />
+  <rect x="0" y="100" width="120" height="2" fill="#9ca3af" opacity="0.22" />
+</svg>

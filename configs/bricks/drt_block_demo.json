@@ -1,0 +1,305 @@
+{
+  "task": {
+    "implementation": "native_bricks",
+    "runner": "native",
+    "title": "Bricks DRT Block Scope Demo"
+  },
+  "display": {
+    "canvasWidth": 1200,
+    "canvasHeight": 760,
+    "viewportPaddingPx": 24,
+    "backgroundColor": "#7f858a",
+    "backgroundTexture": {
+      "enable": true,
+      "src": "assets/warehouse-tile.svg",
+      "alpha": 0.55,
+      "scale": 2,
+      "scrollFactor": 0
+    },
+    "beltColor": "#e5e7eb",
+    "beltHeight": 56,
+    "beltGap": 40,
+    "brickHeight": 36,
+    "brickCornerRadius": 3,
+    "ui": {
+      "showHUD": true,
+      "hudFontFamily": "\"Segoe UI\", \"Helvetica Neue\", Arial, sans-serif",
+      "hudFontSize": 16,
+      "hudFontWeight": 600,
+      "hudPanel": true,
+      "hudPanelColor": "#0f172a",
+      "hudPanelAlpha": 0.38,
+      "showTimer": true,
+      "showRemainingBlocks": false,
+      "showDroppedBlocks": true,
+      "showPoints": false,
+      "showDRT": true
+    },
+    "beltTexture": {
+      "enable": true,
+      "src": "assets/belt-texture.png",
+      "alpha": 1,
+      "scale": 1,
+      "scrollFactor": 1
+    },
+    "dueDateMarker": {
+      "enable": true,
+      "color": "#111827",
+      "widthPx": 4,
+      "heightPx": 44,
+      "alpha": 0.95
+    },
+    "preset": {
+      "mode": "random_per_trial",
+      "pool": [
+        "warehouse_concrete_checker",
+        "industrial_sleek_flat",
+        "kraft_wood_packaging"
+      ]
+    },
+    "performance": {
+      "maxDevicePixelRatio": 2,
+      "maxFrameDtMs": 50,
+      "maxActiveEffects": 240
+    }
+  },
+  "conveyors": {
+    "nConveyors": 4,
+    "lengthPx": [
+      940,
+      1020,
+      1100,
+      1180
+    ],
+    "speedPxPerSec": {
+      "type": "fixed",
+      "value": 30
+    }
+  },
+  "bricks": {
+    "completionMode": "hold_duration",
+    "completionParams": {
+      "target_hold_ms": 200,
+      "progress_per_perfect": 0.19,
+      "progress_curve": 1,
+      "overshoot_tolerance_ms": 250,
+      "width_scaling": true,
+      "width_reference_px": 160,
+      "width_scaling_exponent": 1
+    },
+    "colorCategories": [
+      {
+        "id": "steel_blue",
+        "label": "Steel Blue",
+        "color": "#3b82f6"
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "color": "#64748b"
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "color": "#0d9488"
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "color": "#d97706"
+      }
+    ],
+    "initialBricks": {
+      "type": "fixed",
+      "value": 0
+    },
+    "forcedSet": [
+      {
+        "conveyorIndex": 0,
+        "x": 80,
+        "width": 220,
+        "value": 12,
+        "isTarget": true,
+        "label": "Experimental Brick"
+      },
+      {
+        "conveyorIndex": 1,
+        "x": 160,
+        "width": 140,
+        "value": 3
+      },
+      {
+        "conveyorIndex": 2,
+        "x": 120,
+        "width": 180,
+        "value": 3
+      },
+      {
+        "conveyorIndex": 3,
+        "x": 200,
+        "width": 100,
+        "value": 3
+      }
+    ],
+    "maxBricksPerTrial": 4,
+    "spawn": {
+      "ratePerSec": {
+        "type": "fixed",
+        "value": 0
+      },
+      "interSpawnDist": null,
+      "minSpacingPx": 0,
+      "byConveyor": true,
+      "maxActivePerConveyor": 1
+    }
+  },
+  "drt": {
+    "enable": true,
+    "stim_type": "visual",
+    "stim_visual_config": {
+      "shape": "square",
+      "color": "#dc2626",
+      "size_px": 32,
+      "x": 600,
+      "y": 30
+    },
+    "key": " ",
+    "isi_sampler": {
+      "type": "uniform",
+      "min": 3000,
+      "max": 5000
+    },
+    "response_deadline_ms": 2500,
+    "scope": "block"
+  },
+  "trial": {
+    "mode": "fixed_time",
+    "maxTimeSec": 40,
+    "forcedOrder": {
+      "enable": true,
+      "switchMode": "on_clear",
+      "switchOnDrop": true,
+      "sequence": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "spotlightPadding": 18,
+      "dimAlpha": 0.45,
+      "coverStory": {
+        "enableAmmoCue": false
+      }
+    }
+  },
+  "experiment": {
+    "showBetweenBlockSummary": false,
+    "startTrialsOnSpace": true,
+    "startOverlay": {
+      "text": "Press the space bar to begin.",
+      "padding": "14px 18px",
+      "background": "rgba(255, 255, 255, 0.92)",
+      "border": "1px solid #d1d5db",
+      "borderRadius": "8px",
+      "color": "#111827",
+      "fontSize": "18px"
+    }
+  },
+  "debug": {
+    "pointerOverlay": false,
+    "pointerConsole": false,
+    "saveTrialLog": false,
+    "printTrialLog": false,
+    "trialLogPrefix": "moray_spotlight_order"
+  },
+  "surveys": {
+    "postTrial": [
+      {
+        "preset": "atwit",
+        "prompt": "ATWIT: Rate your overall workload during the just-completed trial (1-10)."
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "label": "Block 1 (DRT block scope)",
+      "trials": 3,
+      "manipulation": "exp_2nd"
+    },
+    {
+      "label": "Block 2 (DRT block scope)",
+      "trials": 3,
+      "manipulation": "exp_3rd"
+    }
+  ],
+  "manipulations": [
+    {
+      "id": "exp_2nd",
+      "label": "Experimental Brick 2nd",
+      "overrides": {
+        "trial": {
+          "forcedOrder": {
+            "sequence": [
+              1,
+              0,
+              2,
+              3
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "exp_3rd",
+      "label": "Experimental Brick 3rd",
+      "overrides": {
+        "trial": {
+          "forcedOrder": {
+            "sequence": [
+              1,
+              2,
+              0,
+              3
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "exp_4th",
+      "label": "Experimental Brick 4th",
+      "overrides": {
+        "trial": {
+          "forcedOrder": {
+            "sequence": [
+              1,
+              2,
+              3,
+              0
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "instructions": {
+    "pages": [
+      {
+        "title": "Task",
+        "html": "<p>Four moving blocks represent four tasks. Block length indicates required processing time.</p><p>Each line ends at a vertical marker, which is that task's deadline.</p>"
+      },
+      {
+        "title": "How To Process",
+        "html": "<p>Use time-estimation clearing: press and hold on the spotlighted block, then release near the target hold duration to maximize progress.</p><p>Only the currently spotlighted block can be processed.</p>"
+      },
+      {
+        "title": "Dual Task and Scoring",
+        "html": "<p>During conveyor trials, respond to each DRT signal by pressing the space bar as quickly as possible.</p><p>Your score counter (points) is shown in the top-left HUD and increases when you clear blocks.</p>"
+      },
+      {
+        "title": "Goal",
+        "html": "<p>Complete as many blocks as possible before their deadlines to maximize your score.</p><p>Press the space bar to begin each trial.</p>"
+      }
+    ]
+  }
+}

@@ -17,10 +17,10 @@ import type { TaskAdapter } from "@experiments/core";
 
 import { sftAdapter } from "@experiments/task-sft";
 import { pmAdapter } from "@experiments/task-pm";
-// import { nbackAdapter } from "@experiments/task-nback";
-// import { bricksAdapter } from "@experiments/task-bricks";
-// import { stroopAdapter } from "@experiments/task-stroop";
-// import { trackingAdapter } from "@experiments/task-tracking";
+import { nbackAdapter } from "@experiments/task-nback";
+import { bricksAdapter } from "@experiments/task-bricks";
+import { stroopAdapter } from "@experiments/task-stroop";
+import { trackingAdapter } from "@experiments/task-tracking";
 
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
@@ -32,7 +32,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const configManager = new ConfigurationManager();
-  const adapters: TaskAdapter[] = [sftAdapter, pmAdapter];
+  const adapters: TaskAdapter[] = [sftAdapter, pmAdapter, nbackAdapter, bricksAdapter, stroopAdapter, trackingAdapter];
   const adapterMap = buildTaskMap(adapters);
 
   const selection = resolveSelection(coreDefaultConfig);

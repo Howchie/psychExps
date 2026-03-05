@@ -1,0 +1,78 @@
+{
+  "task": {
+    "implementation": "jspsych_nback",
+    "runner": "jspsych",
+    "title": "NBack + PM Module Demo",
+    "rtTask": {
+      "enabled": true,
+      "timing": {
+        "trialDurationMs": 5000,
+        "fixationOnsetMs": 0,
+        "fixationDurationMs": 500,
+        "stimulusOnsetMs": 1000,
+        "stimulusDurationMs": 4000,
+        "responseWindowStartMs": 1000,
+        "responseWindowEndMs": 5000
+      },
+      "responseTerminatesTrial": false
+    }
+  },
+  "mapping": {
+    "targetKey": "m",
+    "nonTargetKey": "z",
+    "pmKey": "space"
+  },
+  "instructions": {
+    "introPages": [
+      "Respond M for n-back targets and Z for non-targets.",
+      "In PM blocks, press SPACE for PM-category items."
+    ],
+    "blockIntroControlTemplate": "This is a {nLevel}-back block. There are no PM trials in this block.",
+    "blockIntroPmTemplate": "This is a {nLevel}-back PM block. Press SPACE for items from: {pmCategoryText}.",
+    "preBlockBeforeBlockIntro": false,
+    "showBlockLabel": true
+  },
+  "nbackRule": {
+    "lureLagPasses": [[2, 4, 5], [6, 7, 8, 9]],
+    "maxInsertionAttempts": 10
+  },
+  "stimulusPools": {
+    "nbackDraw": {
+      "mode": "without_replacement",
+      "shuffle": true
+    },
+    "pmItemDraw": {
+      "mode": "without_replacement",
+      "shuffle": true
+    },
+    "pmCategoryDraw": {
+      "mode": "round_robin",
+      "shuffle": true
+    }
+  },
+  "stimuli": {
+    "animals": ["cat", "dog", "horse", "mouse", "otter", "goat", "crow", "koala", "moose", "shark"],
+    "fruits": ["apple", "pear", "grape", "melon", "mango", "kiwi", "plum", "lime", "papaya", "peach"],
+    "tools": ["hammer", "saw", "drill", "pliers", "wrench", "chisel", "anvil", "lathe", "vise", "ruler"],
+    "other": ["amber", "brook", "cedar", "dune", "ember", "fjord", "gale", "haven", "islet", "jetty", "knoll", "lagoon", "mesa", "nimbus", "oasis", "prairie", "quartz", "ridge", "shore", "tundra", "upland", "valley", "willow", "xylem", "yarrow", "zephyr"]
+  },
+  "plan": {
+    "manipulations": [
+      { "id": "control_block", "overrides": { "blockType": "control", "pmCount": 0 } },
+      { "id": "pm_block_animals", "overrides": { "blockType": "pm", "activePmCategories": ["animals"], "pmCount": 5, "minPmSeparation": 8, "maxPmSeparation": 11 } },
+      { "id": "pm_block_fruits", "overrides": { "blockType": "pm", "activePmCategories": ["fruits"], "pmCount": 5, "minPmSeparation": 8, "maxPmSeparation": 11 } },
+      { "id": "nlevel_1", "overrides": { "nLevel": 1 } },
+      { "id": "nlevel_2", "overrides": { "nLevel": 2 } },
+      { "id": "nlevel_3", "overrides": { "nLevel": 3 } }
+    ],
+    "blocks": [
+      { "phase": "practice", "label": "Practice 2-back Control", "manipulations": ["control_block", "nlevel_2"], "trials": 20 },
+      { "phase": "practice", "label": "Practice 1-back PM", "manipulations": ["pm_block_animals", "nlevel_1"], "trials": 20 },
+      { "phase": "practice", "label": "Practice 3-back Control", "manipulations": ["control_block", "nlevel_3"], "trials": 20 },
+      { "phase": "main", "label": "Main 1", "manipulations": ["pm_block_animals", "nlevel_1"], "trials": 54 },
+      { "phase": "main", "label": "Main 2", "manipulations": ["control_block", "nlevel_2"], "trials": 54 },
+      { "phase": "main", "label": "Main 3", "manipulations": ["pm_block_fruits", "nlevel_3"], "trials": 54 },
+      { "phase": "main", "label": "Main 4", "manipulations": ["control_block", "nlevel_1"], "trials": 54 }
+    ]
+  }
+}

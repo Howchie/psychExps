@@ -1,0 +1,22 @@
+{
+  "name": "experiments-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tasks/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev -w @experiments/web",
+    "test:auto": "playwright test -c playwright.config.ts"
+  },
+  "dependencies": {
+    "google": "file:../../../geminicli"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

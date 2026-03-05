@@ -432,8 +432,9 @@ export interface DrtControllerOptions {
   now?: () => number;
   displayElement?: HTMLElement | null;
   borderTargetElement?: HTMLElement | null;
-  borderTargetRect?: (() => DOMRect | null) | null;
+  borderTargetRect?: () => DOMRect | null;
   transformRunner?: OnlineParameterTransformRunner | null;
+  onControllerCreated?: (controller: DrtController) => void;
 }
 
 export interface DrtResponseTransformRow {
@@ -598,6 +599,41 @@ export class DrtController {
     }
     this.rafId = null;
     return this.engine.exportData();
+  }
+
+  static asTaskModule(config: ScopedDrtConfig & { onControllerCreated?: (c: DrtController) => void }): TaskModule {
+    return {
+      id: "drt",
+      start: (moduleConfig, address, context) => {
+        const controller = new DrtController(
+          { ...moduleConfig, enabled: true },
+          {},
+          {
+            displayElement: context.displayElement,
+            borderTargetElement: context.borderTargetElement,
+            borderTargetRect: context.borderTargetRect,
+          },
+        );
+        config.onControllerCreated?.(controller);
+        controller.start(0);
+        return {
+          stop: () => {
+            const data = controller.stop();
+            return {
+              ...data,
+              responseRows: controller.exportResponseRows(),
+              transforms: controller.exportTransformData(),
+            };
+          },
+          step: (now) => {
+            // RAF is internal to controller, but we could sync here if needed
+          },
+          handleKey: (key) => {
+            return controller.handleKey(key);
+          },
+        };
+      },
+    };
   }
 
   handleKey(eventKey: unknown): boolean {

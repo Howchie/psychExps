@@ -154,8 +154,9 @@ export interface DrtControllerOptions {
     now?: () => number;
     displayElement?: HTMLElement | null;
     borderTargetElement?: HTMLElement | null;
-    borderTargetRect?: (() => DOMRect | null) | null;
+    borderTargetRect?: () => DOMRect | null;
     transformRunner?: OnlineParameterTransformRunner | null;
+    onControllerCreated?: (controller: DrtController) => void;
 }
 export interface DrtResponseTransformRow {
     responseIndex: number;
@@ -186,6 +187,9 @@ export declare class DrtController {
     isRunning(): boolean;
     start(startOffsetMs?: number): void;
     stop(): DrtEngineData;
+    static asTaskModule(config: ScopedDrtConfig & {
+        onControllerCreated?: (c: DrtController) => void;
+    }): TaskModule;
     handleKey(eventKey: unknown): boolean;
     exportData(): DrtEngineData;
     exportTransformData(): OnlineTransformRuntimeData[];

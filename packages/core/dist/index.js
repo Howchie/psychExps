@@ -23,6 +23,7 @@ export * from "./infrastructure/data";
 export * from "./infrastructure/jatos";
 export * from "./infrastructure/redirect";
 // Web
+export * from "./web/parameterTransforms";
 export * from "./web/ui";
 export * from "./web/lifecycle";
 export * from "./web/runner";

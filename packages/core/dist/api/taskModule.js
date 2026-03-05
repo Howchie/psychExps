@@ -5,48 +5,63 @@ export class TaskModuleRunner {
     modules;
     active = new Map();
     results = [];
-    constructor(modules) {
+    options = {};
+    constructor(modules = []) {
         this.modules = modules;
     }
-    getModule(id) {
-        return this.modules.find(m => m.id === id);
+    setOptions(options) {
+        this.options = { ...this.options, ...options };
     }
     createScopeId(moduleId, address) {
         return `${moduleId}:${address.scope}:${address.blockIndex ?? -1}:${address.trialIndex ?? -1}`;
     }
-    startScope(moduleId, config, address, context) {
-        const mod = this.getModule(moduleId);
-        if (!mod)
-            return;
-        const scopeId = this.createScopeId(moduleId, address);
+    /**
+     * Standardized start method for a module instance.
+     */
+    start(args) {
+        const { module, address, config, context } = args;
+        const scopeId = this.createScopeId(module.id, address);
         if (this.active.has(scopeId))
             return;
-        const handle = mod.start(config, address, context);
-        this.active.set(scopeId, { moduleId, address, handle });
+        const handle = module.start(config, address, context);
+        this.active.set(scopeId, { moduleId: module.id, address, handle });
     }
-    stopScope(moduleId, address) {
-        const scopeId = this.createScopeId(moduleId, address);
-        const entry = this.active.get(scopeId);
-        if (!entry)
-            return;
-        const data = entry.handle.stop();
-        this.active.delete(scopeId);
-        this.results.push({
-            moduleId: entry.moduleId,
-            ...entry.address,
-            data
-        });
+    /**
+     * Standardized stop method for a module instance.
+     */
+    stop(address) {
+        // Find any active module at this exact address
+        for (const [scopeId, entry] of this.active.entries()) {
+            if (entry.address.scope === address.scope &&
+                entry.address.blockIndex === address.blockIndex &&
+                entry.address.trialIndex === address.trialIndex) {
+                const data = entry.handle.stop();
+                this.active.delete(scopeId);
+                const result = {
+                    moduleId: entry.moduleId,
+                    ...entry.address,
+                    data
+                };
+                this.results.push(result);
+                return result;
+            }
+        }
+        return undefined;
     }
     stopAll() {
+        const stopped = [];
         for (const [scopeId, entry] of this.active.entries()) {
             const data = entry.handle.stop();
-            this.results.push({
+            const result = {
                 moduleId: entry.moduleId,
                 ...entry.address,
                 data
-            });
+            };
+            this.results.push(result);
+            stopped.push(result);
         }
         this.active.clear();
+        return stopped;
     }
     step(now) {
         for (const entry of this.active.values()) {

@@ -56,21 +56,44 @@ import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
-const adapter: TaskAdapter = {
-  manifest: {
+class SftTaskAdapter implements TaskAdapter {
+  readonly manifest: TaskAdapter["manifest"] = {
     taskId: "sft",
     label: "SFT (DotsExp)",
     variants: [
       { id: "default", label: "Default", configPath: "sft/default" },
       { id: "staircase_example", label: "Staircase Example", configPath: "sft/staircase_example" },
     ],
-  },
-  async launch(context) {
-    await runSftTask(context);
-  },
-};
+  };
 
-export const sftAdapter = adapter;
+  private context: TaskAdapterContext | null = null;
+  private removeKeyScrollBlocker: (() => void) | null = null;
+
+  async initialize(context: TaskAdapterContext): Promise<void> {
+    this.context = context;
+  }
+
+  async execute(): Promise<unknown> {
+    if (!this.context) throw new Error("SFT Task not initialized");
+    const result = await runSftTask(this.context);
+    return result;
+  }
+
+  async terminate(): Promise<void> {
+    setCursorHidden(false);
+    if (this.removeKeyScrollBlocker) {
+      this.removeKeyScrollBlocker();
+      this.removeKeyScrollBlocker = null;
+    }
+  }
+
+  // Helper to store the remover since runSftTask is still a standalone function for now
+  setKeyScrollRemover(remover: () => void) {
+    this.removeKeyScrollBlocker = remover;
+  }
+}
+
+export const sftAdapter = new SftTaskAdapter();
 
 function shouldHideCursorForPhase(phase: unknown): boolean {
   if (typeof phase !== "string") return false;
@@ -242,7 +265,7 @@ interface BlockRunningStats {
   accuracy: number;
 }
 
-async function runSftTask(context: TaskAdapterContext): Promise<void> {
+async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
   const root = context.container;
@@ -256,6 +279,9 @@ async function runSftTask(context: TaskAdapterContext): Promise<void> {
   const eventLogger = createEventLogger(context.selection);
   const allowedKeys = allKeys(parsed.responseSemantics);
   const removeKeyScrollBlocker = installKeyScrollBlocker(allowedKeys);
+  if (sftAdapter instanceof SftTaskAdapter) {
+    sftAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
+  }
 
   eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
 
@@ -318,7 +344,6 @@ async function runSftTask(context: TaskAdapterContext): Promise<void> {
     await runJsPsychTimeline(jsPsych, timeline);
   } finally {
     setCursorHidden(false);
-    removeKeyScrollBlocker();
   }
 
   const records = collectMainTrialRecords(jsPsych?.data.get().values() ?? [], context.selection.participant.participantId);
@@ -342,6 +367,8 @@ async function runSftTask(context: TaskAdapterContext): Promise<void> {
     title: "SFT complete",
     message: "Data saved locally.",
   });
+  
+  return payload;
 }
 
 function appendStaircaseTimeline(args: {

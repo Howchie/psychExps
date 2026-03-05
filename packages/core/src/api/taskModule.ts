@@ -11,6 +11,9 @@ export interface TaskModuleContext<TBlock = unknown, TTrial = unknown> {
   blockIndex?: number;
   trial?: TTrial;
   trialIndex?: number;
+  displayElement?: HTMLElement;
+  borderTargetElement?: HTMLElement;
+  borderTargetRect?: () => DOMRect | null;
 }
 
 /**
@@ -51,59 +54,80 @@ export interface TaskModuleResult<TResult = any> extends TaskModuleAddress {
   data: TResult;
 }
 
+export interface TaskModuleRunnerOptions {
+  onEvent?: (event: { type: string } & Record<string, unknown>) => void;
+}
+
 /**
  * Manages active TaskModules during an experiment run.
  */
 export class TaskModuleRunner {
   private active = new Map<string, { moduleId: string; address: TaskModuleAddress; handle: TaskModuleHandle }>();
   private results: TaskModuleResult[] = [];
+  private options: TaskModuleRunnerOptions = {};
 
-  constructor(private modules: TaskModule[]) {}
+  constructor(private modules: TaskModule[] = []) {}
 
-  private getModule(id: string): TaskModule | undefined {
-    return this.modules.find(m => m.id === id);
+  setOptions(options: TaskModuleRunnerOptions): void {
+    this.options = { ...this.options, ...options };
   }
 
   private createScopeId(moduleId: string, address: TaskModuleAddress): string {
     return `${moduleId}:${address.scope}:${address.blockIndex ?? -1}:${address.trialIndex ?? -1}`;
   }
 
-  startScope(moduleId: string, config: any, address: TaskModuleAddress, context: TaskModuleContext): void {
-    const mod = this.getModule(moduleId);
-    if (!mod) return;
-
-    const scopeId = this.createScopeId(moduleId, address);
+  /**
+   * Standardized start method for a module instance.
+   */
+  start(args: { module: TaskModule; address: TaskModuleAddress; config: any; context: TaskModuleContext }): void {
+    const { module, address, config, context } = args;
+    const scopeId = this.createScopeId(module.id, address);
     if (this.active.has(scopeId)) return;
 
-    const handle = mod.start(config, address, context);
-    this.active.set(scopeId, { moduleId, address, handle });
+    const handle = module.start(config, address, context);
+    this.active.set(scopeId, { moduleId: module.id, address, handle });
   }
 
-  stopScope(moduleId: string, address: TaskModuleAddress): void {
-    const scopeId = this.createScopeId(moduleId, address);
-    const entry = this.active.get(scopeId);
-    if (!entry) return;
+  /**
+   * Standardized stop method for a module instance.
+   */
+  stop(address: TaskModuleAddress): TaskModuleResult | undefined {
+    // Find any active module at this exact address
+    for (const [scopeId, entry] of this.active.entries()) {
+      if (
+        entry.address.scope === address.scope &&
+        entry.address.blockIndex === address.blockIndex &&
+        entry.address.trialIndex === address.trialIndex
+      ) {
+        const data = entry.handle.stop();
+        this.active.delete(scopeId);
 
-    const data = entry.handle.stop();
-    this.active.delete(scopeId);
-
-    this.results.push({
-      moduleId: entry.moduleId,
-      ...entry.address,
-      data
-    });
+        const result: TaskModuleResult = {
+          moduleId: entry.moduleId,
+          ...entry.address,
+          data
+        };
+        this.results.push(result);
+        return result;
+      }
+    }
+    return undefined;
   }
 
-  stopAll(): void {
+  stopAll(): TaskModuleResult[] {
+    const stopped: TaskModuleResult[] = [];
     for (const [scopeId, entry] of this.active.entries()) {
       const data = entry.handle.stop();
-      this.results.push({
+      const result: TaskModuleResult = {
         moduleId: entry.moduleId,
         ...entry.address,
         data
-      });
+      };
+      this.results.push(result);
+      stopped.push(result);
     }
     this.active.clear();
+    return stopped;
   }
 
   step(now: number): void {

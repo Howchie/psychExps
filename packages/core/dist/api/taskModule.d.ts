@@ -9,6 +9,9 @@ export interface TaskModuleContext<TBlock = unknown, TTrial = unknown> {
     blockIndex?: number;
     trial?: TTrial;
     trialIndex?: number;
+    displayElement?: HTMLElement;
+    borderTargetElement?: HTMLElement;
+    borderTargetRect?: () => DOMRect | null;
 }
 /**
  * A standard interface for modular task extensions (e.g., DRT, RT-Task).
@@ -42,6 +45,11 @@ export interface TaskModuleResult<TResult = any> extends TaskModuleAddress {
     moduleId: string;
     data: TResult;
 }
+export interface TaskModuleRunnerOptions {
+    onEvent?: (event: {
+        type: string;
+    } & Record<string, unknown>) => void;
+}
 /**
  * Manages active TaskModules during an experiment run.
  */
@@ -49,12 +57,24 @@ export declare class TaskModuleRunner {
     private modules;
     private active;
     private results;
-    constructor(modules: TaskModule[]);
-    private getModule;
+    private options;
+    constructor(modules?: TaskModule[]);
+    setOptions(options: TaskModuleRunnerOptions): void;
     private createScopeId;
-    startScope(moduleId: string, config: any, address: TaskModuleAddress, context: TaskModuleContext): void;
-    stopScope(moduleId: string, address: TaskModuleAddress): void;
-    stopAll(): void;
+    /**
+     * Standardized start method for a module instance.
+     */
+    start(args: {
+        module: TaskModule;
+        address: TaskModuleAddress;
+        config: any;
+        context: TaskModuleContext;
+    }): void;
+    /**
+     * Standardized stop method for a module instance.
+     */
+    stop(address: TaskModuleAddress): TaskModuleResult | undefined;
+    stopAll(): TaskModuleResult[];
     step(now: number): void;
     handleKey(key: string, now: number): boolean;
     getResults(): TaskModuleResult[];

@@ -1,0 +1,1143 @@
+import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createSurveyFromPreset, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, finalizeTaskRun, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, computeRtPhaseDurations, toJsPsychChoices, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, runSurvey, createResponseSemantics, } from "@experiments/core";
+import { initJsPsych } from "jspsych";
+import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
+import CallFunctionPlugin from "@jspsych/plugin-call-function";
+class SftTaskAdapter {
+    manifest = {
+        taskId: "sft",
+        label: "SFT (DotsExp)",
+        variants: [
+            { id: "default", label: "Default", configPath: "sft/default" },
+            { id: "staircase_example", label: "Staircase Example", configPath: "sft/staircase_example" },
+        ],
+    };
+    context = null;
+    removeKeyScrollBlocker = null;
+    async initialize(context) {
+        this.context = context;
+    }
+    async execute() {
+        if (!this.context)
+            throw new Error("SFT Task not initialized");
+        const result = await runSftTask(this.context);
+        return result;
+    }
+    async terminate() {
+        setCursorHidden(false);
+        if (this.removeKeyScrollBlocker) {
+            this.removeKeyScrollBlocker();
+            this.removeKeyScrollBlocker = null;
+        }
+    }
+    // Helper to store the remover since runSftTask is still a standalone function for now
+    setKeyScrollRemover(remover) {
+        this.removeKeyScrollBlocker = remover;
+    }
+}
+export const sftAdapter = new SftTaskAdapter();
+function shouldHideCursorForPhase(phase) {
+    if (typeof phase !== "string")
+        return false;
+    return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
+}
+async function runSftTask(context) {
+    const parsed = parseSftConfig(context.taskConfig, context.selection);
+    const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
+    const root = context.container;
+    root.style.maxWidth = "980px";
+    root.style.margin = "0 auto";
+    root.style.fontFamily = "system-ui";
+    ensureJsPsychCanvasCentered(root);
+    const staircaseRecords = [];
+    const eventLogger = createEventLogger(context.selection);
+    const allowedKeys = allKeys(parsed.responseSemantics);
+    const removeKeyScrollBlocker = installKeyScrollBlocker(allowedKeys);
+    if (sftAdapter instanceof SftTaskAdapter) {
+        sftAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
+    }
+    eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
+    const timeline = [];
+    pushJsPsychContinueScreen(timeline, CallFunctionPlugin, root, `<h2>${escapeHtml(parsed.title)}</h2><p>Participant: <code>${escapeHtml(context.selection.participant.participantId)}</code></p>`, "intro_start", "sft-continue-intro_start");
+    pushJsPsychContinueScreen(timeline, CallFunctionPlugin, root, `<p>${escapeHtml(parsed.instructions)}</p>${renderKeySummary(parsed.responses)}`, "intro_instructions", "sft-continue-intro_instructions");
+    applyGlobalSalience(parsed, parsed.salience);
+    if (parsed.staircase?.enabled) {
+        appendStaircaseTimeline({
+            timeline,
+            container: root,
+            config: parsed,
+            rng,
+            allowedKeys,
+            staircaseRecords,
+            eventLogger,
+        });
+    }
+    const plan = buildBlockPlan(parsed, rng);
+    appendBlockTimeline({
+        timeline,
+        container: root,
+        blocks: plan,
+        config: parsed,
+        rng,
+        allowedKeys,
+        participantId: context.selection.participant.participantId,
+        eventLogger,
+    });
+    let jsPsych = null;
+    try {
+        jsPsych = initJsPsych({
+            display_element: root,
+            on_trial_start: (trial) => {
+                const data = asObject(trial?.data);
+                setCursorHidden(shouldHideCursorForPhase(data?.phase));
+            },
+            on_finish: () => {
+                setCursorHidden(false);
+            },
+        });
+        await runJsPsychTimeline(jsPsych, timeline);
+    }
+    finally {
+        setCursorHidden(false);
+    }
+    const records = collectMainTrialRecords(jsPsych?.data.get().values() ?? [], context.selection.participant.participantId);
+    eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
+    const payload = {
+        selection: context.selection,
+        records,
+        staircaseRecords,
+        events: eventLogger.events,
+        jsPsychData: jsPsych?.data.get().values() ?? [],
+    };
+    await finalizeTaskRun({
+        coreConfig: context.coreConfig,
+        selection: context.selection,
+        payload,
+        csv: { contents: recordsToCsv(records), suffix: "sft" },
+        completionStatus: "complete",
+    });
+    root.innerHTML = renderCenteredNotice({
+        title: "SFT complete",
+        message: "Data saved locally.",
+    });
+    return payload;
+}
+function appendStaircaseTimeline(args) {
+    const { timeline, container, config, rng, allowedKeys, staircaseRecords, eventLogger } = args;
+    const staircase = config.staircase;
+    if (!staircase?.enabled)
+        return;
+    pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, "<h3>Adaptive Calibration</h3><p>A short staircase will estimate threshold and update salience levels.</p>", "staircase_start", "sft-continue-staircase_start");
+    const stimDomain = buildLinearRange(staircase.stimDbMin, staircase.stimDbMax, staircase.stimDbStep);
+    const quest = new QuestBinaryStaircase({
+        stimDomain,
+        thresholdDomain: stimDomain,
+        slopeDomain: staircase.slopeSamples,
+        lapseDomain: staircase.lapseSamples,
+        guessRate: staircase.guessRate,
+    });
+    let activeTrial = null;
+    let updatedSalience = { ...config.salience };
+    let thresholdLuminanceEstimate = 0;
+    for (let trialIndex = 0; trialIndex < staircase.nTrials; trialIndex += 1) {
+        const timelineIndex = trialIndex + 1;
+        timeline.push({
+            type: CallFunctionPlugin,
+            data: { phase: "staircase_prepare", trialIndex: timelineIndex },
+            func: () => {
+                const stimDb = quest.nextStimulus();
+                activeTrial = {
+                    trialIndex: timelineIndex,
+                    stimDb,
+                    trial: {
+                        id: `STAIR_${String(timelineIndex).padStart(3, "0")}`,
+                        trialIndex: timelineIndex,
+                        rule: "OR",
+                        layout: "center",
+                        stimCode: "Hx",
+                        stimCategory: "AN",
+                        salience: { high: dbToLuminance(stimDb), low: 0 },
+                        showRuleCue: false,
+                        ruleCueLabel: null,
+                    },
+                };
+            },
+        });
+        appendDotTrialTimeline({
+            timeline,
+            config,
+            trialProvider: () => activeTrial?.trial ?? null,
+            allowedKeys,
+            rng,
+            phasePrefix: "staircase",
+            onResponse: (response, resolvedTrial, trialData) => {
+                if (!activeTrial || !resolvedTrial)
+                    return;
+                const responseCategory = classifyResponse("OR", response.key, config.responseSemantics);
+                const responseIndex = responseCategory === "yes" ? 0 : 1;
+                quest.update(responseIndex);
+                Object.assign(trialData, {
+                    trialType: "staircase",
+                    rule: resolvedTrial.rule,
+                    stimCode: resolvedTrial.stimCode,
+                    stimCategory: resolvedTrial.stimCategory,
+                    responseCategory,
+                    responseKey: response.key ?? "",
+                    rt: response.rtMs ?? -1,
+                });
+                staircaseRecords.push({
+                    trialIndex: activeTrial.trialIndex,
+                    stimDb: activeTrial.stimDb,
+                    stimLuminance: dbToLuminance(activeTrial.stimDb),
+                    responseKey: response.key ?? "",
+                    responseCategory,
+                    responseIndex,
+                    rt: response.rtMs ?? -1,
+                });
+            },
+        });
+    }
+    timeline.push({
+        type: CallFunctionPlugin,
+        data: { phase: "staircase_finalize" },
+        func: () => {
+            const estimate = quest.estimateMode();
+            const thresholdLum = dbToLuminance(estimate.threshold);
+            thresholdLuminanceEstimate = thresholdLum;
+            const clampMin = Math.min(staircase.clampLuminance[0], staircase.clampLuminance[1]);
+            const clampMax = Math.max(staircase.clampLuminance[0], staircase.clampLuminance[1]);
+            const nextLow = clampUnitRange(thresholdLum * staircase.lowScale, clampMin, clampMax);
+            const nextHigh = clampUnitRange(thresholdLum * staircase.highScale, clampMin, clampMax);
+            updatedSalience = { low: nextLow, high: nextHigh };
+            applyGlobalSalience(config, updatedSalience);
+            eventLogger.emit("staircase_complete", {
+                nTrials: staircaseRecords.length,
+                thresholdLuminance: thresholdLum,
+                updatedSalience,
+            });
+        },
+    });
+    timeline.push({
+        type: CallFunctionPlugin,
+        data: { phase: "staircase_end" },
+        async: true,
+        func: (done) => {
+            const host = resolveJsPsychContentHost(container);
+            void waitForContinue(host, `<h3>Calibration Complete</h3><p>Threshold luminance estimate: <b>${thresholdLuminanceEstimate.toFixed(4)}</b></p><p>New levels: low=<b>${updatedSalience.low.toFixed(4)}</b>, high=<b>${updatedSalience.high.toFixed(4)}</b></p>`, { buttonId: "sft-staircase-end" }).then(done);
+        },
+    });
+}
+function appendBlockTimeline(args) {
+    const { timeline, container, blocks, config, rng, allowedKeys, participantId, eventLogger } = args;
+    const blockStatsMap = new Map();
+    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+        const block = blocks[blockIndex];
+        blockStatsMap.set(block.id, { correct: 0, total: 0, accuracy: 0 });
+        timeline.push({
+            type: CallFunctionPlugin,
+            data: { phase: "block_start_hook", blockId: block.id, blockIndex },
+            func: () => {
+                eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
+            },
+        });
+        pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>Rule: <b>${escapeHtml(block.rule)}</b></p><p>Trials: ${block.trials.length}</p>`, "block_start", `sft-continue-block_start-${block.id}`, { blockId: block.id });
+        for (let instructionIndex = 0; instructionIndex < block.beforeBlockScreens.length; instructionIndex += 1) {
+            const instruction = block.beforeBlockScreens[instructionIndex];
+            pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`, "block_pre_instruction", `sft-continue-block_pre_instruction-${block.id}-${instructionIndex}`, { blockId: block.id, instructionIndex });
+        }
+        for (let trialIndex = 0; trialIndex < block.trials.length; trialIndex += 1) {
+            const trial = block.trials[trialIndex];
+            let feedbackView = null;
+            appendDotTrialTimeline({
+                timeline,
+                config,
+                trialProvider: () => trial,
+                allowedKeys,
+                rng,
+                phasePrefix: "main",
+                dataContext: {
+                    blockId: block.id,
+                    blockIndex,
+                    trialId: trial.id,
+                    trialIndex,
+                    participantId,
+                    blockLabel: block.label,
+                    blockRule: block.rule,
+                    rule: trial.rule,
+                    layout: trial.layout,
+                    stimCode: trial.stimCode,
+                    stimCategory: trial.stimCategory,
+                },
+                onResponse: (response, resolvedTrial, trialData) => {
+                    if (!resolvedTrial)
+                        return;
+                    const responseCategory = classifyResponse(resolvedTrial.rule, response.key, config.responseSemantics);
+                    const expectedCategory = computeCorrectResponse(resolvedTrial.rule, resolvedTrial.stimCategory);
+                    const [channel1, channel2] = stimCodeToChannels(resolvedTrial.stimCode);
+                    const outcome = evaluateTrialOutcome({
+                        responseCategory,
+                        rt: response.rtMs,
+                        stimulusCategory: resolvedTrial.stimCategory,
+                        expectedCategory,
+                    });
+                    feedbackView = resolveTrialFeedbackView({
+                        feedback: block.feedback,
+                        responseCategory: outcome.responseCategory,
+                        correct: outcome.correct,
+                    });
+                    Object.assign(trialData, {
+                        participantId,
+                        blockId: block.id,
+                        blockLabel: block.label,
+                        blockRule: block.rule,
+                        trialId: resolvedTrial.id,
+                        trialIndex: resolvedTrial.trialIndex,
+                        rule: resolvedTrial.rule,
+                        layout: resolvedTrial.layout,
+                        stimCode: resolvedTrial.stimCode,
+                        channel1,
+                        channel2,
+                        stimCategory: resolvedTrial.stimCategory,
+                        expectedCategory: outcome.expectedCategory ?? expectedCategory,
+                        responseCategory: outcome.responseCategory,
+                        responseKey: response.key ?? "",
+                        rt: outcome.rt,
+                        correct: outcome.correct,
+                        trialType: "sft",
+                    });
+                    const stats = blockStatsMap.get(block.id);
+                    if (stats) {
+                        stats.correct += outcome.correct;
+                        stats.total += 1;
+                        stats.accuracy = stats.total > 0 ? (stats.correct / stats.total) * 100 : 0;
+                    }
+                    eventLogger.emit("trial_complete", {
+                        blockId: block.id,
+                        rule: resolvedTrial.rule,
+                        trialType: "sft",
+                        correct: outcome.correct,
+                        responseKey: response.key ?? "",
+                        rt: outcome.rt,
+                        responseCategory: outcome.responseCategory,
+                    }, { blockIndex, trialIndex });
+                },
+                feedback: {
+                    enabled: block.feedback.enabled,
+                    config: block.feedback,
+                    phaseMode: config.rtTask.feedbackPhase,
+                    viewProvider: () => feedbackView,
+                },
+            });
+            const supportsPostResponseFeedback = !config.rtTask.responseTerminatesTrial;
+            if (block.feedback.enabled &&
+                block.feedback.durationMs > 0 &&
+                !(config.rtTask.feedbackPhase === "post_response" && supportsPostResponseFeedback)) {
+                timeline.push({
+                    type: CanvasKeyboardResponsePlugin,
+                    stimulus: (canvas) => {
+                        drawFeedbackPhase(canvas, config, block.feedback, feedbackView);
+                    },
+                    canvas_size: [computeCanvasLayout(config).totalHeightPx, config.display.aperturePx],
+                    choices: "NO_KEYS",
+                    response_ends_trial: false,
+                    trial_duration: block.feedback.durationMs,
+                    data: {
+                        blockId: block.id,
+                        blockIndex,
+                        trialId: trial.id,
+                        trialIndex,
+                        phase: "main_feedback",
+                    },
+                });
+            }
+            const hasNextTrialInBlock = trialIndex < block.trials.length - 1;
+            if (hasNextTrialInBlock && config.betweenTrialSurveys.length > 0) {
+                timeline.push({
+                    type: CallFunctionPlugin,
+                    data: { phase: "between_trial_survey", blockId: block.id, blockIndex, trialId: trial.id, trialIndex },
+                    async: true,
+                    func: (done) => {
+                        const host = resolveJsPsychContentHost(container);
+                        void runSequentialSurveys(host, config.betweenTrialSurveys, `sft-between-${block.id}-${trial.id}`).then((results) => {
+                            eventLogger.emit("between_trial_survey_complete", {
+                                blockId: block.id,
+                                trialId: trial.id,
+                                surveys: results.map((entry) => ({
+                                    surveyId: entry.surveyId,
+                                    answers: entry.answers,
+                                    scores: entry.scores ?? {},
+                                })),
+                            }, { blockIndex, trialIndex });
+                        }).finally(done);
+                    },
+                });
+            }
+        }
+        timeline.push({
+            type: CallFunctionPlugin,
+            data: { phase: "block_end_hook", blockId: block.id, blockIndex },
+            func: () => {
+                const stats = blockStatsMap.get(block.id);
+                eventLogger.emit("block_end", { blockId: block.id, accuracy: stats?.accuracy ?? 0 }, { blockIndex });
+            },
+        });
+        timeline.push({
+            type: CallFunctionPlugin,
+            data: { phase: "block_end", blockId: block.id, blockIndex },
+            async: true,
+            func: (done) => {
+                const stats = blockStatsMap.get(block.id);
+                const accuracy = stats?.accuracy ?? 0;
+                const host = resolveJsPsychContentHost(container);
+                void waitForContinue(host, `<h3>End of ${escapeHtml(block.label)}</h3><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`, { buttonId: `sft-end-${block.id}` }).then(done);
+            },
+        });
+        for (let instructionIndex = 0; instructionIndex < block.afterBlockScreens.length; instructionIndex += 1) {
+            const instruction = block.afterBlockScreens[instructionIndex];
+            pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`, "block_post_instruction", `sft-continue-block_post_instruction-${block.id}-${instructionIndex}`, { blockId: block.id, instructionIndex });
+        }
+    }
+}
+function appendDotTrialTimeline(args) {
+    const { timeline, config, trialProvider, allowedKeys, rng, phasePrefix, onResponse, dataContext, feedback } = args;
+    const responseTerminatesTrial = config.rtTask.responseTerminatesTrial;
+    const fallbackFixationMs = jitter(config.timing.fixationMs, rng);
+    const fallbackBlankMs = Math.max(0, config.timing.blankMs);
+    const fallbackResponseMs = Math.max(0, config.timing.responseDeadlineMs);
+    const fallbackPostMs = Math.max(0, config.timing.stimulusMs);
+    const rtPhases = config.rtTask.enabled
+        ? computeRtPhaseDurations(config.rtTask.timing, { responseTerminatesTrial })
+        : null;
+    const preFixationBlankMs = config.rtTask.enabled ? Math.max(0, Math.round(rtPhases?.preFixationBlankMs ?? 0)) : 0;
+    const fixationMs = config.rtTask.enabled
+        ? config.rtTask.fixationJitter.enabled
+            ? randomInt(config.rtTask.fixationJitter.minMs, config.rtTask.fixationJitter.maxMs, rng)
+            : Math.max(0, Math.round(rtPhases?.fixationMs ?? 0))
+        : fallbackFixationMs;
+    const blankMs = config.rtTask.enabled ? Math.max(0, Math.round(rtPhases?.blankMs ?? 0)) : fallbackBlankMs;
+    const responseWindowMs = config.rtTask.enabled ? Math.max(0, Math.round(rtPhases?.responseMs ?? 0)) : fallbackResponseMs;
+    const responsePreStimBlankMs = config.rtTask.enabled
+        ? Math.max(0, Math.round(rtPhases?.responsePreStimulusBlankMs ?? 0))
+        : 0;
+    const responseStimulusMs = config.rtTask.enabled
+        ? Math.max(0, Math.round(rtPhases?.responseStimulusMs ?? 0))
+        : responseWindowMs;
+    const responsePostStimBlankMs = config.rtTask.enabled
+        ? Math.max(0, Math.round(rtPhases?.responsePostStimulusBlankMs ?? 0))
+        : 0;
+    const postResponseStimulusMs = responseTerminatesTrial
+        ? 0
+        : config.rtTask.enabled
+            ? Math.max(0, Math.round(rtPhases?.postResponseStimulusMs ?? 0))
+            : fallbackPostMs;
+    const postResponseBlankMs = responseTerminatesTrial
+        ? 0
+        : config.rtTask.enabled
+            ? Math.max(0, Math.round(rtPhases?.postResponseBlankMs ?? 0))
+            : 0;
+    const baseData = dataContext ?? {};
+    const layout = computeCanvasLayout(config);
+    const jsPsychAllowedKeys = toJsPsychChoices(allowedKeys);
+    if (preFixationBlankMs > 0) {
+        timeline.push({
+            type: CanvasKeyboardResponsePlugin,
+            stimulus: (canvas) => {
+                const trial = trialProvider();
+                drawBlankPhase(canvas, config, trial);
+            },
+            canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+            choices: "NO_KEYS",
+            response_ends_trial: false,
+            trial_duration: preFixationBlankMs,
+            data: { ...baseData, phase: `${phasePrefix}_pre_fixation_blank` },
+        });
+    }
+    timeline.push({
+        type: CanvasKeyboardResponsePlugin,
+        stimulus: (canvas) => {
+            const trial = trialProvider();
+            drawFixationPhase(canvas, config, trial);
+        },
+        canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+        choices: "NO_KEYS",
+        response_ends_trial: false,
+        trial_duration: fixationMs,
+        data: { ...baseData, phase: `${phasePrefix}_fixation` },
+    });
+    timeline.push({
+        type: CanvasKeyboardResponsePlugin,
+        stimulus: (canvas) => {
+            const trial = trialProvider();
+            drawBlankPhase(canvas, config, trial);
+        },
+        canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+        choices: "NO_KEYS",
+        response_ends_trial: false,
+        trial_duration: blankMs,
+        data: { ...baseData, phase: `${phasePrefix}_blank` },
+    });
+    const responseSegments = [];
+    if (!responseTerminatesTrial && config.rtTask.enabled) {
+        if (responsePreStimBlankMs > 0) {
+            responseSegments.push({
+                phase: `${phasePrefix}_response_window_pre_stim_blank`,
+                durationMs: responsePreStimBlankMs,
+                showStimulus: false,
+            });
+        }
+        if (responseStimulusMs > 0) {
+            responseSegments.push({
+                phase: `${phasePrefix}_response_window_stimulus`,
+                durationMs: responseStimulusMs,
+                showStimulus: true,
+            });
+        }
+        if (responsePostStimBlankMs > 0) {
+            responseSegments.push({
+                phase: `${phasePrefix}_response_window_post_stim_blank`,
+                durationMs: responsePostStimBlankMs,
+                showStimulus: false,
+            });
+        }
+    }
+    if (responseSegments.length === 0) {
+        responseSegments.push({
+            phase: `${phasePrefix}_response_window`,
+            durationMs: responseWindowMs,
+            showStimulus: true,
+        });
+    }
+    let capturedResponse = { key: null, rtMs: null };
+    let responseSeen = false;
+    responseSegments.forEach((segment, segmentIndex) => {
+        const isLast = segmentIndex === responseSegments.length - 1;
+        timeline.push({
+            type: CanvasKeyboardResponsePlugin,
+            stimulus: (canvas) => {
+                const trial = trialProvider();
+                if (segment.showStimulus) {
+                    drawStimulusPhase(canvas, config, trial);
+                }
+                else {
+                    drawBlankPhase(canvas, config, trial);
+                }
+            },
+            canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+            choices: jsPsychAllowedKeys,
+            response_ends_trial: responseTerminatesTrial,
+            trial_duration: segment.durationMs,
+            data: { ...baseData, phase: segment.phase },
+            on_finish: (data) => {
+                if (!responseSeen) {
+                    const response = extractTrialResponse(data);
+                    if (response.key || response.rtMs != null) {
+                        capturedResponse = response;
+                        responseSeen = true;
+                    }
+                }
+                if (isLast) {
+                    onResponse(capturedResponse, trialProvider(), data);
+                }
+            },
+        });
+    });
+    if (!responseTerminatesTrial) {
+        if (feedback?.enabled && feedback.phaseMode === "post_response" && feedback.config.durationMs > 0) {
+            timeline.push({
+                type: CanvasKeyboardResponsePlugin,
+                stimulus: (canvas) => {
+                    drawFeedbackPhase(canvas, config, feedback.config, feedback.viewProvider());
+                },
+                canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+                choices: "NO_KEYS",
+                response_ends_trial: false,
+                trial_duration: Math.max(0, feedback.config.durationMs),
+                data: { ...baseData, phase: `${phasePrefix}_post_response_feedback` },
+            });
+        }
+        else {
+            const postStimMs = config.rtTask.enabled && config.rtTask.postResponseContent === "blank" ? 0 : postResponseStimulusMs;
+            const postBlankMs = config.rtTask.enabled && config.rtTask.postResponseContent === "blank"
+                ? postResponseStimulusMs + postResponseBlankMs
+                : postResponseBlankMs;
+            if (postStimMs > 0) {
+                timeline.push({
+                    type: CanvasKeyboardResponsePlugin,
+                    stimulus: (canvas) => {
+                        const trial = trialProvider();
+                        drawStimulusPhase(canvas, config, trial);
+                    },
+                    canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+                    choices: "NO_KEYS",
+                    response_ends_trial: false,
+                    trial_duration: postStimMs,
+                    data: { ...baseData, phase: `${phasePrefix}_post_response_stimulus` },
+                });
+            }
+            if (postBlankMs > 0) {
+                timeline.push({
+                    type: CanvasKeyboardResponsePlugin,
+                    stimulus: (canvas) => {
+                        const trial = trialProvider();
+                        drawBlankPhase(canvas, config, trial);
+                    },
+                    canvas_size: [layout.totalHeightPx, config.display.aperturePx],
+                    choices: "NO_KEYS",
+                    response_ends_trial: false,
+                    trial_duration: postBlankMs,
+                    data: { ...baseData, phase: `${phasePrefix}_post_response_blank` },
+                });
+            }
+        }
+    }
+}
+function extractTrialResponse(data) {
+    const rawKey = data.response;
+    const rawRt = data.rt;
+    const key = typeof rawKey === "string" ? normalizeKey(rawKey) : null;
+    const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
+    return { key, rtMs };
+}
+function applyGlobalSalience(config, salience) {
+    config.salience = { ...salience };
+    for (const manipulation of config.manipulations) {
+        for (const variant of manipulation.variants) {
+            variant.salience = { ...salience };
+        }
+    }
+}
+function parseSftConfig(config, selection) {
+    const design = asObject(config.design);
+    const manipRaw = asArray(design?.manipulations);
+    const blockRaw = asArray(design?.blocks);
+    if (manipRaw.length === 0)
+        throw new Error("SFT config invalid: design.manipulations is empty.");
+    if (blockRaw.length === 0)
+        throw new Error("SFT config invalid: design.blocks is empty.");
+    const responsesRaw = asObject(config.responses);
+    const keysRaw = asObject(responsesRaw?.keys);
+    const idRaw = asObject(keysRaw?.ID);
+    const manipulations = manipRaw.map((raw, idx) => parseManipulation(raw, idx, config));
+    const feedbackDefaults = parseTrialFeedbackConfig(asObject(config.feedback), null);
+    const known = new Set(manipulations.map((m) => m.id));
+    const poolAllocator = createManipulationPoolAllocator(design?.manipulationPools, [
+        selection.participant.participantId,
+        selection.participant.sessionId,
+        selection.variantId,
+        "sft_design_manipulation_pools",
+    ]);
+    const blocks = blockRaw.map((raw, idx) => {
+        const b = asObject(raw);
+        if (!b)
+            throw new Error(`Invalid SFT block ${idx + 1}`);
+        const id = asString(b.id) || asString(b.block_id) || `BLOCK_${idx + 1}`;
+        const label = asString(b.label) || id;
+        const nTrials = toPositiveNumber(b.nTrials ?? b.n_trials, 36);
+        const manipulationIds = resolveBlockManipulationIds(b, poolAllocator);
+        const manipulationId = manipulationIds.length > 0 ? manipulationIds[0] : asString(b.manipulation) || manipulations[0].id;
+        if (manipulationIds.length > 1) {
+            throw new Error(`SFT block '${id}' resolved multiple manipulations; SFT blocks must resolve exactly one manipulation.`);
+        }
+        if (!known.has(manipulationId))
+            throw new Error(`Unknown manipulation '${manipulationId}' in block '${id}'.`);
+        const feedback = parseTrialFeedbackConfig(asObject(b.feedback), feedbackDefaults);
+        const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
+        const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
+        const beforeBlockScreens = toStringScreens(rawBeforeBlockScreens);
+        const afterBlockScreens = toStringScreens(rawAfterBlockScreens);
+        return { id, label, nTrials, manipulationId, feedback, beforeBlockScreens, afterBlockScreens };
+    });
+    const stimulusRaw = asObject(config.stimulus);
+    const salienceRaw = asObject(stimulusRaw?.salience_levels);
+    const conditionCodes = asArray(stimulusRaw?.condition_codes).map((v) => asString(v)).filter((v) => Boolean(v));
+    const legacyTiming = {
+        fixationMs: toNonNegativeNumber(asObject(config.timing)?.fixation_truncexp ? (asObject(asObject(config.timing)?.fixation_truncexp)?.mean ?? 500) : 500, 500),
+        blankMs: toNonNegativeNumber(asObject(config.timing)?.blank_ms, 66),
+        stimulusMs: toPositiveNumber(asObject(config.timing)?.stimulus_ms, 100),
+        responseDeadlineMs: toPositiveNumber(asObject(config.timing)?.response_deadline_ms, 3000),
+        responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
+    };
+    const rtTask = parseSftRtTaskConfig(config, legacyTiming);
+    const responses = {
+        orYes: asStringArray(asObject(keysRaw?.OR)?.yes, ["a"]),
+        orNo: asStringArray(asObject(keysRaw?.OR)?.no, ["l"]),
+        andYes: asStringArray(asObject(keysRaw?.AND)?.yes, ["a"]),
+        andNo: asStringArray(asObject(keysRaw?.AND)?.no, ["l"]),
+        xorYes: asStringArray(asObject(keysRaw?.XOR)?.yes, ["a"]),
+        xorNo: asStringArray(asObject(keysRaw?.XOR)?.no, ["l"]),
+        idAB: asStringArray(idRaw?.AB, ["q"]),
+        idAN: asStringArray(idRaw?.AN, ["w"]),
+        idNB: asStringArray(idRaw?.NB, ["o"]),
+        idNN: asStringArray(idRaw?.NN, ["p"]),
+    };
+    const responseSemantics = {
+        OR: createResponseSemantics({
+            yes: responses.orYes,
+            no: responses.orNo,
+        }),
+        AND: createResponseSemantics({
+            yes: responses.andYes,
+            no: responses.andNo,
+        }),
+        XOR: createResponseSemantics({
+            yes: responses.xorYes,
+            no: responses.xorNo,
+        }),
+        ID: createResponseSemantics({
+            AB: responses.idAB,
+            AN: responses.idAN,
+            NB: responses.idNB,
+            NN: responses.idNN,
+        }),
+    };
+    return {
+        title: asString(asObject(config.task)?.title) || "SFT Task",
+        instructions: asString(asObject(config.task)?.instructions) ||
+            "Respond according to the block rule. OR/AND/XOR use yes/no keys; ID uses four category keys.",
+        timing: {
+            fixationMs: legacyTiming.fixationMs,
+            blankMs: legacyTiming.blankMs,
+            stimulusMs: legacyTiming.stimulusMs,
+            responseDeadlineMs: legacyTiming.responseDeadlineMs,
+            responseTerminatesTrial: legacyTiming.responseTerminatesTrial,
+        },
+        display: {
+            aperturePx: toPositiveNumber(asObject(config.display)?.aperture_px, 250),
+            dotOffsetPx: toPositiveNumber(asObject(config.display)?.dot_offset_px, 44),
+            dotRadiusPx: toPositiveNumber(asObject(config.display)?.dot_radius_px, 7),
+            canvasBackground: asString(asObject(config.display)?.canvas_background) || "#000000",
+            canvasBorder: asString(asObject(config.display)?.canvas_border) || "2px solid #444",
+            cueColor: asString(asObject(config.display)?.cue_color) || "#0f172a",
+        },
+        responses,
+        responseSemantics,
+        salience: {
+            high: toUnitNumber(salienceRaw?.high, 0.7),
+            low: toUnitNumber(salienceRaw?.low, 0.2),
+        },
+        conditionCodes: conditionCodes.length > 0 ? conditionCodes : ["HH", "HL", "LH", "LL", "Hx", "Lx", "xH", "xL", "xx"],
+        manipulations,
+        blocks,
+        staircase: parseStaircase(config),
+        feedbackDefaults,
+        rtTask,
+        betweenTrialSurveys: parseBetweenTrialSurveys(config),
+    };
+}
+function parseBetweenTrialSurveys(config) {
+    const surveysNode = asObject(config.surveys);
+    const betweenTrial = asArray(surveysNode?.betweenTrial);
+    return betweenTrial
+        .map((entry) => toSurveyDefinition(entry))
+        .filter((entry) => Boolean(entry));
+}
+function toSurveyDefinition(raw) {
+    const objectNode = asObject(raw);
+    if (!objectNode)
+        return null;
+    const preset = asString(objectNode.preset);
+    if (preset === "atwit" || preset === "nasa_tlx") {
+        return createSurveyFromPreset(objectNode);
+    }
+    return null;
+}
+async function runSequentialSurveys(container, surveys, buttonPrefix) {
+    const results = [];
+    for (let i = 0; i < surveys.length; i += 1) {
+        const survey = surveys[i];
+        const result = await runSurvey(container, survey, {
+            buttonId: `${buttonPrefix}-survey-submit-${i + 1}`,
+        });
+        results.push(result);
+    }
+    return results;
+}
+function parseSftRtTaskConfig(config, legacyTiming) {
+    const taskRaw = asObject(config.task);
+    const rtRaw = asObject(taskRaw?.rtTask);
+    const enabled = rtRaw ? rtRaw.enabled !== false : false;
+    const legacyTrialDuration = Math.max(1, legacyTiming.fixationMs +
+        legacyTiming.blankMs +
+        legacyTiming.responseDeadlineMs +
+        (legacyTiming.responseTerminatesTrial ? 0 : legacyTiming.stimulusMs));
+    const timingRaw = asObject(rtRaw?.timing);
+    const timing = {
+        trialDurationMs: toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration),
+        fixationOnsetMs: toNonNegativeNumber(timingRaw?.fixationOnsetMs, 0),
+        fixationDurationMs: toNonNegativeNumber(timingRaw?.fixationDurationMs, legacyTiming.fixationMs),
+        stimulusOnsetMs: toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs),
+        stimulusDurationMs: toNonNegativeNumber(timingRaw?.stimulusDurationMs, Math.max(0, toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration) - toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs))),
+        responseWindowStartMs: toNonNegativeNumber(timingRaw?.responseWindowStartMs, legacyTiming.fixationMs + legacyTiming.blankMs),
+        responseWindowEndMs: toNonNegativeNumber(timingRaw?.responseWindowEndMs, legacyTiming.fixationMs + legacyTiming.blankMs + legacyTiming.responseDeadlineMs),
+    };
+    const jitterRaw = asObject(rtRaw?.fixationJitter);
+    const defaultJitterMin = Math.max(0, Math.round(legacyTiming.fixationMs * 0.5));
+    const defaultJitterMax = Math.max(defaultJitterMin + 1, Math.round(legacyTiming.fixationMs * 1.5));
+    const jitterMin = toNonNegativeNumber(jitterRaw?.minMs, defaultJitterMin);
+    const jitterMax = Math.max(jitterMin, toNonNegativeNumber(jitterRaw?.maxMs, defaultJitterMax));
+    const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "").toLowerCase();
+    const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "").toLowerCase();
+    return {
+        enabled,
+        timing,
+        fixationJitter: {
+            enabled: jitterRaw ? jitterRaw.enabled !== false : false,
+            minMs: jitterMin,
+            maxMs: jitterMax,
+        },
+        responseTerminatesTrial: rtRaw
+            ? rtRaw.responseTerminatesTrial !== false
+            : legacyTiming.responseTerminatesTrial,
+        postResponseContent: postResponseContentRaw === "blank" ? "blank" : "stimulus",
+        feedbackPhase: feedbackPhaseRaw === "post_response" ? "post_response" : "separate",
+    };
+}
+function parseStaircase(config) {
+    const raw = asObject(config.staircase);
+    if (!raw)
+        return null;
+    const enabled = Boolean(raw.enabled);
+    return {
+        enabled,
+        nTrials: toPositiveNumber(raw.n_trials ?? raw.nTrials, 20),
+        stimDbMin: toFiniteNumber(raw.stim_db_min, -2.5),
+        stimDbMax: toFiniteNumber(raw.stim_db_max, -0.2),
+        stimDbStep: Math.max(0.001, Math.abs(toFiniteNumber(raw.stim_db_step, 0.1))),
+        slopeSamples: toNumberArray(raw.slope_samples, [1, 1.5, 2, 2.5, 3, 3.5]),
+        lapseSamples: toNumberArray(raw.lapse_samples, [0, 0.01, 0.02, 0.04]),
+        guessRate: Math.max(0, Math.min(1, toFiniteNumber(raw.guess_rate ?? raw.guess, 0.5))),
+        lowScale: Math.max(0, toFiniteNumber(raw.low_scale, 0.6)),
+        highScale: Math.max(0, toFiniteNumber(raw.high_scale, 1.3)),
+        clampLuminance: [
+            Math.max(0.00001, toFiniteNumber(asArray(raw.clamp_luminance)[0], 0.01)),
+            Math.max(0.00001, toFiniteNumber(asArray(raw.clamp_luminance)[1], 0.95)),
+        ],
+    };
+}
+function parseManipulation(raw, index, config) {
+    const m = asObject(raw);
+    if (!m)
+        throw new Error(`Invalid manipulation at index ${index}`);
+    const id = asString(m.id) || `manip_${index + 1}`;
+    const trialPlan = asObject(m.trial_plan);
+    const variantsRaw = asArray(trialPlan?.variants);
+    const schedule = asObject(trialPlan?.schedule) || { mode: "weighted" };
+    let variants = (variantsRaw.length > 0 ? variantsRaw : [m]).map((entry, vIndex) => {
+        const v = asObject(entry) || {};
+        const ruleRaw = (asString(v.rule) || "OR").toUpperCase();
+        const rule = (["OR", "AND", "XOR", "ID", "MIXED"].includes(ruleRaw) ? ruleRaw : "OR");
+        const layoutRaw = (asString(v.layout) || asString(asObject(config.display)?.dot_positions_mode) || "ud").toLowerCase();
+        const layout = (layoutRaw === "lr" || layoutRaw === "center" ? layoutRaw : "ud");
+        const localSal = asObject(v.salience_levels);
+        const defaultSal = asObject(asObject(config.stimulus)?.salience_levels);
+        const pool = asArray(v.trial_pool).map((code) => asString(code)).filter((code) => Boolean(code));
+        return {
+            id: asString(v.id) || `${id}_v${vIndex + 1}`,
+            rule,
+            layout,
+            weight: toPositiveNumber(v.weight, 1),
+            trialPool: pool.length > 0 ? pool : [],
+            trialPoolSchedule: asObject(v.trial_pool_schedule) || { mode: "quota_shuffle" },
+            salience: {
+                high: toUnitNumber(localSal?.high ?? defaultSal?.high, 0.7),
+                low: toUnitNumber(localSal?.low ?? defaultSal?.low, 0.2),
+            },
+            showRuleCue: Boolean(v.show_rule_cue ?? v.showRuleCue),
+            ruleCueLabel: asString(v.rule_cue_label ?? v.ruleCueLabel),
+        };
+    });
+    if (variantsRaw.length === 0 && variants.length === 1 && variants[0].rule === "MIXED") {
+        const base = variants[0];
+        variants = ["OR", "AND", "XOR"].map((rule, idx) => ({
+            ...base,
+            id: `${id}_mixed_${idx + 1}`,
+            rule,
+            weight: 1,
+            showRuleCue: true,
+            ruleCueLabel: rule,
+        }));
+    }
+    return { id, variants, schedule };
+}
+function buildBlockPlan(config, rng) {
+    const manipulationMap = new Map(config.manipulations.map((m) => [m.id, m]));
+    return config.blocks.map((block) => {
+        const manipulation = manipulationMap.get(block.manipulationId);
+        if (!manipulation)
+            throw new Error(`Missing manipulation '${block.manipulationId}'.`);
+        const variants = manipulation.variants;
+        const variantSchedule = buildScheduledItems({
+            items: variants,
+            count: block.nTrials,
+            schedule: manipulation.schedule,
+            weights: variants.map((v) => v.weight),
+            rng: { next: rng },
+            resolveToken: (token) => {
+                if (Number.isInteger(token) && Number(token) >= 0 && Number(token) < variants.length)
+                    return variants[Number(token)];
+                if (typeof token === "string")
+                    return variants.find((v) => v.id === token.trim()) ?? null;
+                return null;
+            },
+        });
+        const uniqueVariants = Array.from(new Set(variantSchedule));
+        const plannedStimuli = new Map();
+        const plannedStimulusIndex = new Map();
+        for (const variant of uniqueVariants) {
+            const pool = variant.trialPool.length > 0 ? variant.trialPool : config.conditionCodes;
+            const countForVariant = variantSchedule.filter((entry) => entry === variant).length;
+            const schedule = buildScheduledItems({
+                items: pool,
+                count: countForVariant,
+                schedule: variant.trialPoolSchedule,
+                weights: pool.map(() => 1),
+                rng: { next: rng },
+            });
+            plannedStimuli.set(variant, schedule);
+            plannedStimulusIndex.set(variant, 0);
+        }
+        const trials = variantSchedule.map((variant, trialIndex) => {
+            const variantScheduleList = plannedStimuli.get(variant) ?? config.conditionCodes;
+            const nextIndex = plannedStimulusIndex.get(variant) ?? 0;
+            const stimCode = variantScheduleList[nextIndex] ?? config.conditionCodes[0];
+            plannedStimulusIndex.set(variant, nextIndex + 1);
+            const category = inferCategoryFromStimCode(stimCode);
+            return {
+                id: `T_${block.id}_${String(trialIndex + 1).padStart(4, "0")}`,
+                trialIndex: trialIndex + 1,
+                rule: variant.rule === "MIXED" ? "OR" : variant.rule,
+                layout: variant.layout,
+                stimCode,
+                stimCategory: category,
+                salience: variant.salience,
+                showRuleCue: variant.showRuleCue,
+                ruleCueLabel: variant.ruleCueLabel,
+            };
+        });
+        const rules = Array.from(new Set(trials.map((t) => t.rule)));
+        return {
+            id: block.id,
+            label: block.label,
+            rule: rules.length === 1 ? rules[0] : "MIXED",
+            trials,
+            feedback: block.feedback,
+            beforeBlockScreens: block.beforeBlockScreens,
+            afterBlockScreens: block.afterBlockScreens,
+        };
+    });
+}
+function computeCanvasLayout(config) {
+    return computeCanvasFrameLayout({
+        aperturePx: config.display.aperturePx,
+        paddingYPx: 16,
+        cueHeightPx: 24,
+        cueMarginBottomPx: 6,
+    });
+}
+function cueTextForTrial(trial) {
+    if (!trial?.showRuleCue)
+        return "";
+    return `Rule: ${trial.ruleCueLabel || trial.rule}`;
+}
+function drawFixationPhase(canvas, config, trial) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+        return;
+    const layout = computeCanvasLayout(config);
+    drawCanvasFramedScene(ctx, layout, {
+        cueText: cueTextForTrial(trial),
+        cueColor: config.display.cueColor,
+        frameBackground: config.display.canvasBackground,
+        frameBorder: config.display.canvasBorder,
+    }, ({ centerX, centerY }) => {
+        drawCanvasCenteredText(ctx, centerX, centerY, "+", {
+            color: "#ffffff",
+            fontSizePx: 36,
+            fontWeight: 700,
+        });
+    });
+}
+function drawBlankPhase(canvas, config, trial) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+        return;
+    const layout = computeCanvasLayout(config);
+    drawCanvasFramedScene(ctx, layout, {
+        cueText: cueTextForTrial(trial),
+        cueColor: config.display.cueColor,
+        frameBackground: config.display.canvasBackground,
+        frameBorder: config.display.canvasBorder,
+    });
+}
+function drawStimulusPhase(canvas, config, trial) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+        return;
+    const layout = computeCanvasLayout(config);
+    drawCanvasFramedScene(ctx, layout, {
+        cueText: cueTextForTrial(trial),
+        cueColor: config.display.cueColor,
+        frameBackground: config.display.canvasBackground,
+        frameBorder: config.display.canvasBorder,
+    }, ({ centerX, centerY }) => {
+        if (!trial)
+            return;
+        const positions = dotPositions(centerX, centerY, trial.layout, config.display.dotOffsetPx);
+        const dots = dotsFromStimCode(trial.stimCode, trial.salience);
+        for (const dot of dots) {
+            const p = positions[dot.loc];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, config.display.dotRadiusPx, 0, Math.PI * 2);
+            ctx.fillStyle = luminanceToGray(dot.luminance);
+            ctx.fill();
+        }
+    });
+}
+function drawFeedbackPhase(canvas, config, feedback, view) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+        return;
+    const layout = computeCanvasLayout(config);
+    drawTrialFeedbackOnCanvas(ctx, layout, feedback, view);
+}
+function renderKeySummary(responses) {
+    const fmt = (keys) => keys.map((key) => escapeHtml(key.toUpperCase())).join(", ");
+    return [
+        "<p><b>Response Keys</b></p>",
+        `<p>OR: yes=${fmt(responses.orYes)} | no=${fmt(responses.orNo)}</p>`,
+        `<p>AND: yes=${fmt(responses.andYes)} | no=${fmt(responses.andNo)}</p>`,
+        `<p>XOR: yes=${fmt(responses.xorYes)} | no=${fmt(responses.xorNo)}</p>`,
+        `<p>ID: AB=${fmt(responses.idAB)} | AN=${fmt(responses.idAN)} | NB=${fmt(responses.idNB)} | NN=${fmt(responses.idNN)}</p>`,
+    ].join("");
+}
+function computeCorrectResponse(rule, stimCategory) {
+    if (rule === "OR")
+        return stimCategory === "NN" ? "no" : "yes";
+    if (rule === "AND")
+        return stimCategory === "AB" ? "yes" : "no";
+    if (rule === "XOR")
+        return stimCategory === "AN" || stimCategory === "NB" ? "yes" : "no";
+    return stimCategory;
+}
+function classifyResponse(rule, key, semantics) {
+    if (rule === "OR")
+        return semantics.OR.responseCategoryFromKey(key);
+    if (rule === "AND")
+        return semantics.AND.responseCategoryFromKey(key);
+    if (rule === "XOR")
+        return semantics.XOR.responseCategoryFromKey(key);
+    return semantics.ID.responseCategoryFromKey(key);
+}
+function dotsFromStimCode(stimCode, salience) {
+    const [a, b] = normalizeStimCode(stimCode).split("");
+    const dots = [];
+    if (a !== "x")
+        dots.push({ loc: "A", luminance: a === "H" ? salience.high : salience.low });
+    if (b !== "x")
+        dots.push({ loc: "B", luminance: b === "H" ? salience.high : salience.low });
+    return dots;
+}
+function inferCategoryFromStimCode(stimCode) {
+    const [a, b] = normalizeStimCode(stimCode).split("");
+    const c1 = a === "x" ? 0 : 1;
+    const c2 = b === "x" ? 0 : 1;
+    if (c1 > 0 && c2 > 0)
+        return "AB";
+    if (c1 > 0 && c2 === 0)
+        return "AN";
+    if (c1 === 0 && c2 > 0)
+        return "NB";
+    return "NN";
+}
+function normalizeStimCode(stimCode) {
+    const s = String(stimCode || "").trim();
+    if (s.length !== 2)
+        return "xx";
+    const a = s[0] === "X" ? "x" : s[0];
+    const b = s[1] === "X" ? "x" : s[1];
+    return `${a}${b}`;
+}
+function stimCharToChannelValue(ch) {
+    if (ch === "H")
+        return 2;
+    if (ch === "L")
+        return 1;
+    return 0;
+}
+function stimCodeToChannels(stimCode) {
+    const [a, b] = normalizeStimCode(stimCode).split("");
+    return [stimCharToChannelValue(a), stimCharToChannelValue(b)];
+}
+function dotPositions(centerX, centerY, mode, offsetPx) {
+    if (mode === "lr")
+        return { A: { x: centerX - offsetPx, y: centerY }, B: { x: centerX + offsetPx, y: centerY } };
+    if (mode === "center")
+        return { A: { x: centerX, y: centerY }, B: { x: centerX, y: centerY } };
+    return { A: { x: centerX, y: centerY - offsetPx }, B: { x: centerX, y: centerY + offsetPx } };
+}
+function luminanceToGray(level) {
+    const v = Math.max(0, Math.min(255, Math.round(Math.max(0, Math.min(1, level)) * 255)));
+    return `rgb(${v},${v},${v})`;
+}
+function allKeys(semantics) {
+    const seen = new Set();
+    const out = [];
+    const groups = [semantics.OR, semantics.AND, semantics.XOR, semantics.ID];
+    for (const group of groups) {
+        for (const key of group.allowedKeys()) {
+            const normalized = normalizeKey(key);
+            if (!normalized || seen.has(normalized))
+                continue;
+            seen.add(normalized);
+            out.push(normalized);
+        }
+    }
+    return out;
+}
+function jitter(mean, rng) {
+    const min = Math.max(50, Math.round(mean * 0.5));
+    const max = Math.round(mean * 1.5);
+    return Math.round(min + rng() * (max - min));
+}
+function randomInt(min, max, rng) {
+    const lo = Math.floor(Math.min(min, max));
+    const hi = Math.floor(Math.max(min, max));
+    if (hi <= lo)
+        return lo;
+    return lo + Math.floor(rng() * (hi - lo + 1));
+}
+function collectMainTrialRecords(rows, participantId) {
+    const output = [];
+    for (const row of rows) {
+        if (row.phase !== "main_response_window")
+            continue;
+        const channel1 = Number(row.channel1);
+        const channel2 = Number(row.channel2);
+        const trialIndex = Number(row.trialIndex);
+        const rt = Number(row.rt);
+        const correct = Number(row.correct);
+        output.push({
+            participantId: asString(row.participantId) || participantId,
+            blockId: asString(row.blockId) || "",
+            blockLabel: asString(row.blockLabel) || "",
+            blockRule: asString(row.blockRule) || "",
+            trialId: asString(row.trialId) || "",
+            trialIndex: Number.isFinite(trialIndex) ? trialIndex : -1,
+            rule: asString(row.rule) || "",
+            layout: asString(row.layout) || "",
+            stimCode: asString(row.stimCode) || "",
+            channel1: Number.isFinite(channel1) ? channel1 : 0,
+            channel2: Number.isFinite(channel2) ? channel2 : 0,
+            stimCategory: asString(row.stimCategory) || "",
+            expectedCategory: asString(row.expectedCategory) || "",
+            responseCategory: asString(row.responseCategory) || "timeout",
+            responseKey: asString(row.responseKey) || "",
+            rt: Number.isFinite(rt) ? rt : -1,
+            correct: correct === 1 ? 1 : 0,
+        });
+    }
+    return output;
+}
+function clampUnitRange(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+//# sourceMappingURL=index.js.map

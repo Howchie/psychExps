@@ -1,0 +1,284 @@
+{
+  "task": {
+    "implementation": "native_bricks",
+    "runner": "native",
+    "title": "Bricks Moray 1991 VPT+VDD Baseline"
+  },
+  "display": {
+    "canvasWidth": 1200,
+    "canvasHeight": 760,
+    "viewportPaddingPx": 24,
+    "backgroundColor": "#7f858a",
+    "backgroundTexture": {
+      "enable": true,
+      "renderMode": "procedural_warehouse",
+      "alpha": 0.84,
+      "scale": 1.15,
+      "scrollFactor": 0,
+      "proceduralWarehouse": {
+        "tileSizePx": 240,
+        "paverWidthPx": 82,
+        "paverHeightPx": 82,
+        "groutPx": 3,
+        "layout": "grid",
+        "rowOffsetPx": 0,
+        "pattern": "checker_alternating",
+        "alternationStrength": 0.07,
+        "variation": 0.12,
+        "edgeShadingAlpha": 0,
+        "noiseCount": 20,
+        "seamDashCount": 8,
+        "baseColor": "#8f959c",
+        "groutColor": "#6e757e",
+        "seamDarkColor": "#4b545f",
+        "seamLightColor": "#b4bac1",
+        "scratchColor": "#5a616b"
+      }
+    },
+    "beltColor": "#e5e7eb",
+    "beltHeight": 56,
+    "beltGap": 40,
+    "brickHeight": 36,
+    "brickCornerRadius": 3,
+    "brickTextureOverlay": {
+      "enable": true,
+      "alpha": 0.14,
+      "plankCount": 3,
+      "seamWidthPx": 1,
+      "grainCount": 4,
+      "nailRadiusPx": 1,
+      "insetPx": 2
+    },
+    "ui": {
+      "showHUD": true,
+      "hudFontFamily": "\"Segoe UI\", \"Helvetica Neue\", Arial, sans-serif",
+      "hudFontSize": 16,
+      "hudFontWeight": 600,
+      "hudPanel": true,
+      "hudPanelColor": "#0f172a",
+      "hudPanelAlpha": 0.38,
+      "showTimer": false,
+      "showRemainingBlocks": false,
+      "showDroppedBlocks": true,
+      "showPoints": true,
+      "showDRT": false
+    },
+    "beltTexture": {
+      "enable": true,
+      "renderMode": "procedural_topdown",
+      "alpha": 1,
+      "scale": 1,
+      "scrollFactor": 1,
+      "proceduralTopdown": {
+        "tileSizePx": 120,
+        "ribStepPx": 12,
+        "ribWidthPx": 8,
+        "sideBandPx": 18,
+        "sideCleatStepPx": 16,
+        "sideCleatLengthPx": 12,
+        "shadeAlpha": 0.55,
+        "baseColor": "#2a323b",
+        "shadeColor": "#202730",
+        "ribColor": "#4d5863",
+        "grooveColor": "#2b333c",
+        "sideCleatColor": "#6b7280",
+        "sideLineDarkColor": "#111827",
+        "sideLineLightColor": "#9ca3af"
+      }
+    },
+    "dueDateMarker": {
+      "enable": true,
+      "color": "#111827",
+      "widthPx": 4,
+      "heightPx": 44,
+      "alpha": 0.95
+    },
+    "missAnimation": {
+      "mode": "furnace",
+      "durationMs": 240,
+      "markerFlashMs": 150,
+      "flashColor": "#ef4444",
+      "disintegrate": {
+        "shardCount": 10,
+        "durationMs": 230,
+        "gravityPxPerSec2": 620,
+        "speedMinPxPerSec": 120,
+        "speedMaxPxPerSec": 250,
+        "furnaceBias": 0.76
+      }
+    },
+    "endFurnace": {
+      "enable": true,
+      "offsetX": 2
+    },
+    "preset": {
+      "mode": "random_per_trial",
+      "pool": [
+        "warehouse_concrete_checker",
+        "industrial_sleek_flat",
+        "kraft_wood_packaging"
+      ]
+    }
+  },
+  "conveyors": {
+    "nConveyors": 4,
+    "lengthPx": {
+      "type": "uniform",
+      "min": 860,
+      "max": 1160
+    },
+    "speedPxPerSec": {
+      "type": "fixed",
+      "value": 42
+    }
+  },
+  "bricks": {
+    "completionMode": "hold_duration",
+    "completionParams": {
+      "target_hold_ms": 500,
+      "progress_per_perfect": 0.175,
+      "progress_curve": 1,
+      "overshoot_tolerance_ms": 180,
+      "width_scaling": true,
+      "width_reference_px": 80,
+      "width_scaling_exponent": 1
+    },
+    "colorCategories": [
+      {
+        "id": "Target",
+        "label": "High Value", 
+        "color": "#fbbf24",
+        "value": { "type": "poisson", "lambda": 15, "min": 11, "max": 19 }
+      },
+      {
+        "id": "Other",
+        "label": "Distractor",
+        "color": {"type": "list", "values": ["#DDA0DD","#66CDAA","#d97706","#FFB6C1","#FF7F50","#228B22","#40E0D0"], "without_replacement": true},
+        "value": { "type": "poisson", "lambda": 5, "min": 1, "max": 9 }
+      }
+    ],
+    "initialBricks": {
+      "type": "fixed",
+      "value": 0
+    },
+    "forcedSet": [],
+    "forcedSetPlan": {
+      "enable": true,
+      "count": 4,
+      "defaults": {
+        "width": { "type": "uniform", "min": 50, "max": 110 }
+      },
+      "fields": {
+        "conveyorIndex": { "values": [0, 1, 2, 3], "draw": "without_replacement" },
+        "xFraction": { "values": [
+            { "type": "uniform", "min": 0.06, "max": 0.10 },
+            { "type": "uniform", "min": 0.08, "max": 0.12 },
+            { "type": "uniform", "min": 0.11, "max": 0.15 },
+            { "type": "uniform", "min": 0.13, "max": 0.15 }
+        ], "draw": "without_replacement" },
+        "colorCategoryId": { "values": ["Target", "Other", "Other", "Other"], "draw": "without_replacement" }
+      }
+    },
+    "maxBricksPerTrial": 4,
+    "spawn": {
+      "ratePerSec": {
+        "type": "fixed",
+        "value": 0
+      },
+      "interSpawnDist": null,
+      "minSpacingPx": 0,
+      "byConveyor": true,
+      "maxActivePerConveyor": 1
+    }
+  },
+  "difficultyModel": {
+    "holdQualityMean": 0.5
+  },
+  "drt": {
+    "enable": false,
+    "stim_type": "visual",
+    "stim_visual_config": {
+      "shape": "square",
+      "color": "#dc2626",
+      "size_px": 32,
+      "x": 600,
+      "y": 30
+    },
+    "key": " ",
+    "isi_sampler": {
+      "type": "uniform",
+      "min": 3000,
+      "max": 5000
+    },
+    "response_deadline_ms": 2500,
+    "audio": {
+      "volume": 0.0
+    }
+  },
+  "trial": {
+    "mode": "max_bricks",
+    "maxTimeSec": null,
+    "forcedOrder": {
+      "enable": false
+    }
+  },
+  "experiment": {
+    "showBetweenBlockSummary": false,
+    "startTrialsOnSpace": true,
+    "startOverlay": {
+      "text": "Press the space bar to begin.",
+      "padding": "14px 18px",
+      "background": "rgba(255, 255, 255, 0.92)",
+      "border": "1px solid #d1d5db",
+      "borderRadius": "8px",
+      "color": "#111827",
+      "fontSize": "18px"
+    }
+  },
+  "debug": {
+    "pointerOverlay": false,
+    "pointerConsole": false,
+    "holdConsole": false,
+    "saveTrialLog": false,
+    "printTrialLog": false,
+    "trialLogPrefix": "moray_pointer_debug"
+  },
+  "surveys": {
+    "postTrial": [
+      {
+        "preset": "atwit",
+        "prompt": "Rate your overall workload during the just-completed trial (1-10)."
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "label": "Baseline",
+      "trials": 4,
+      "manipulation": "baseline"
+    }
+  ],
+  "manipulations": [
+    {
+      "id": "baseline",
+      "label": "VPT + VDD",
+      "overrides": {}
+    }
+  ],
+  "instructions": {
+    "pages": [
+      {
+        "title": "Task",
+        "html": "<p>Four moving blocks represent four tasks. Block length indicates required processing time.</p><p>Each line ends at a vertical marker, which is that task's deadline.</p>"
+      },
+      {
+        "title": "How To Process",
+        "html": "<p>Press and hold on a block, then release. Aim for about 500 ms holds to maximize progress.</p><p>Larger blocks require more successful holds than smaller blocks, reflecting their larger processing demand.</p>"
+      },
+      {
+        "title": "Goal",
+        "html": "<p>Complete as many tasks as possible before their deadlines. No partial credit is awarded when a block reaches its deadline line.</p><p>Press the space bar to begin each trial.</p>"
+      }
+    ]
+  }
+}
