@@ -6,3 +6,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: We have a plan to refactor the code to streamline and reduce complexity throughout**
   *Link: [./tracks/streamline_complexity_20260305/](./tracks/streamline_complexity_20260305/)*
+
+---
+
+- [ ] **Track: implement the plan in the md file to overhaul the architecture of the codebase to streamline and reduce unnecessary complexity**
+*Link: [./tracks/arch_overhaul_20260305/](./tracks/arch_overhaul_20260305/)*
