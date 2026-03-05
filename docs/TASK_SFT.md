@@ -2,11 +2,19 @@
 
 This document describes the current SFT adapter at `tasks/sft/src/index.ts`.
 
-## 1. Runner behavior
+## 1. Implementation Details
 
-SFT currently runs jsPsych-only:
-- Adapter launches jsPsych directly in `runSftTask`.
-- Config still merges through core and may include runner metadata (`task.implementation`, `task.runner`), but runtime path is jsPsych.
+The SFT task is implemented using the standardized `TaskAdapter` interface.
+
+### `SftTaskAdapter` (Class)
+
+- **`initialize(context)`**: Sets up the task context.
+- **`execute()`**: Runs the main SFT task logic (QUEST+ calibration and main trials).
+- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+
+## 2. Runner behavior
+
+SFT currently runs `jspsych` via the `LifecycleManager`.
 
 ## 2. Config schema currently parsed
 

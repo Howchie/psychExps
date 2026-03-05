@@ -2,26 +2,34 @@
 
 This reference tracks current exported behavior of `@experiments/core` in this repo.
 
-## 1. Runner selection
+## 1. Task Lifecycle and Adapters
 
-### `runWithRunner(args: RunWithRunnerArgs): Promise<TaskRunnerSelection>`
+The framework uses a standardized adapter pattern to manage the execution of diverse experimental tasks.
 
-Selects and executes one runner from `native | jspsych`.
+### `TaskAdapter` (Interface)
 
-Selection precedence in `selectRunner`:
-1. `preferredRunner` (if valid).
-2. `resolveRunnerPreference(context.taskConfig)`:
-   - `taskConfig.runner`
-   - `taskConfig.task.runner`
-   - `taskConfig.task.implementation` mapping:
-     - `"jspsych_sft"` -> `"jspsych"`
-     - `"native_*"` -> `"native"`
-3. `defaultRunner` (default `"native"`).
-4. Remaining supported IDs as fallback.
+All task adapters must implement this interface to be compatible with the unified shell and core lifecycle.
 
-Outputs `{ runnerId, runner }`.
+- `readonly manifest: TaskManifest`: Metadata about the task (ID, label, available variants).
+- `initialize(context: TaskAdapterContext): Promise<void>`: (Optional) Called to set up the task, parse configuration, and prepare resources.
+- `execute(): Promise<unknown>`: (Optional) Called to run the main task logic. Should return the task results.
+- `terminate(): Promise<void>`: (Optional) Called after execution (success or failure) to clean up resources like global listeners or timers.
 
-## 2. Selection and config
+### `LifecycleManager` (Class)
+
+Orchestrates the execution of a `TaskAdapter`.
+
+- `constructor(adapter: TaskAdapter)`
+- `run(context: TaskAdapterContext): Promise<unknown>`: Executes the full lifecycle: `initialize` -> `execute` (or legacy `launch`) -> `terminate`. Ensures `terminate` is always called.
+
+## 2. Selection and configuration
+
+### `ConfigurationManager` (Class)
+
+Manages the loading, merging, and validation of experiment configurations.
+
+- `load(path: string): Promise<JSONObject>`: Fetches and parses a JSON config file.
+- `merge(base, taskDefault, variantOverride, runtimeOverride?): JSONObject`: Sequentially deep-merges configuration levels.
 
 ### `resolveSelection(coreConfig: CoreConfig): SelectionContext`
 
@@ -164,27 +172,37 @@ Typical usage:
 - task-local key handler calls `onResponseHandled` after a handled DRT response
 - task cleanup calls `hideAll`
 
-### DRT Scope Contract
+### Task Modules and Extensions
 
-Shared scope snapshot/record contract for module-embedded DRT runtimes:
+The framework supports modular extensions that can be attached to specific scopes (task, block, or trial).
 
-- `DrtScopeSnapshot`
-  - `data: DrtEngineData`
-  - `transforms: OnlineTransformRuntimeData[]`
-  - `responseRows: DrtResponseTransformRow[]`
-- `DrtScopeRecord`
-  - `scopeId`
-  - `scope` (`block | trial`)
-  - `blockIndex`
-  - `trialIndex`
-  - `data`
-  - `transforms`
-  - `responseRows`
-  - optional `context`
+#### `TaskModule` (Interface)
 
-Helper:
-- `toDrtScopeRecord(moduleScopeRecord, context?)`
-  - converts `ModuleEmbedCoordinator` stop records into normalized DRT scope records.
+- `id: string`: Unique identifier for the module.
+- `start(config, address, context): TaskModuleHandle`: Called when a scope starts.
+
+#### `TaskModuleHandle` (Interface)
+
+- `stop(): TResult`: Called when the scope ends.
+- `step?(now: number)`: (Optional) Animation frame tick.
+- `handleKey?(key, now)`: (Optional) Keyboard event handler.
+
+#### `TaskModuleRunner` (Class)
+
+Manages the lifecycle of active modules.
+
+- `constructor(modules?: TaskModule[])`
+- `setOptions(options: { onEvent?: (event) => void })`
+- `start({ module, address, config, context })`: Starts a new module instance at the specified address.
+- `stop(address)`: Stops the module instance at the specified address and records the result.
+- `stopAll()`: Stops all active modules.
+- `getResults(): TaskModuleResult[]`: Returns all results from stopped modules.
+
+### DRT as a Task Module
+
+The `DrtController` provides a static helper to use the DRT engine as a task module:
+
+- `DrtController.asTaskModule(config)`: Returns a `TaskModule` instance configured for DRT.
 
 ### Canvas helpers
 

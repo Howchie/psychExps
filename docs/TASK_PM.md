@@ -2,17 +2,19 @@
 
 This document describes the current PM adapter at `tasks/pm/src/index.ts`.
 
-## 1. Runners and selection
+## 1. Implementation Details
 
-PM supports both runners:
-- `native`
-- `jspsych`
+The PM task is implemented using the standardized `TaskAdapter` interface.
 
-Selection is controlled by core `runWithRunner` precedence. PM passes:
-- `preferredRunner: resolveRunnerPreference(config)`
-- `defaultRunner: "jspsych"`
+### `PmTaskAdapter` (Class)
 
-So jsPsych is the default path, while config can still force native (`runner: "native"` or `task.runner: "native"`).
+- **`initialize(context)`**: Prepares the task runtime by parsing configuration and generating the block plan.
+- **`execute()`**: Launches the jsPsych timeline, handles trial execution, and emits events.
+- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+
+## 2. Runners and selection
+
+PM supports the `jspsych` runner via the `LifecycleManager`. Selection is controlled by core `resolveSelection` and the unified web shell.
 
 ## 2. Config schema currently parsed
 

@@ -2,7 +2,17 @@
 
 This document describes the current tracking adapter at `tasks/tracking/src/index.ts`.
 
-## 1. Purpose
+## 1. Implementation Details
+
+The Tracking task is implemented using the standardized `TaskAdapter` interface.
+
+### `TrackingTaskAdapter` (Class)
+
+- **`initialize(context)`**: Sets up the task context.
+- **`execute()`**: Runs the main Tracking task logic (pursuit or MOT) using a native animation loop and managing DRT scopes via `TaskModuleRunner`.
+- **`terminate()`**: Performs cleanup, including stopping all active task modules and resetting the cursor.
+
+## 2. Purpose
 
 `tracking` is a continuous mouse-tracking task for long trials.
 

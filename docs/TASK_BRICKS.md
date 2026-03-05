@@ -2,20 +2,19 @@
 
 This document describes the current Bricks adapter at `tasks/bricks/src/index.ts`.
 
-## 1. Runtime model
+## 1. Implementation Details
 
-Bricks runs as a native task (no jsPsych timeline). The adapter:
-1. Parses block/manipulation planning config.
-2. Uses core `runTaskSession` for task/block/trial envelopes.
-3. Runs each trial with `runConveyorTrial` (PIXI runtime).
-4. Keeps cursor visible during trials so brick interaction and post-trial surveys are mouse-usable.
+The Bricks task is implemented using the standardized `TaskAdapter` interface.
 
-Block start/end continue screens are rendered via `waitForContinue` inside `runTaskSession` hooks (`onBlockStart`, `onBlockEnd`).
-Bricks DRT runtime config is now coerced via core `coerceScopedDrtConfig` and executed by core `DrtController` (no Bricks-local DRT engine wrapper).
-Bricks trial-loop DRT mode/enabled gating (audio/visual/HUD flag) also resolves via the same core coercion path.
-Bricks trial-loop presentation callbacks are now mediated by core `createDrtPresentationBridge` to keep mode/termination behavior task-neutral while preserving local PIXI/audio rendering.
-Bricks DRT scope lifecycle now runs through core `ModuleEmbedCoordinator` (`trial` and `block` scopes), with `runConveyorTrial` accepting injected scoped DRT handles.
-Bricks now consumes core `DrtScopeRecord` output contract for `drtScopes` payload rows.
+### `BricksTaskAdapter` (Class)
+
+- **`initialize(context)`**: Sets up the task context.
+- **`execute()`**: Runs the main Bricks task logic using core `runTaskSession` and managing DRT scopes via `TaskModuleRunner`.
+- **`terminate()`**: Performs cleanup, including stopping all active task modules.
+
+## 2. Runtime model
+
+Bricks runs as a `native` task via the `LifecycleManager`.
 
 ## 2. Planning schema consumed by adapter
 

@@ -2,9 +2,19 @@
 
 This document reflects the current `tasks/nback` implementation.
 
-## Runner and structure
+## 1. Implementation Details
 
-- Runner: jsPsych (`@jspsych/plugin-canvas-keyboard-response` + `@jspsych/plugin-call-function`)
+The NBack task is implemented using the standardized `TaskAdapter` interface.
+
+### `NbackTaskAdapter` (Class)
+
+- **`initialize(context)`**: Prepares the task runtime by parsing configuration and generating the block plan.
+- **`execute()`**: Runs the jsPsych timeline, handles trial execution, and manages DRT scopes using `TaskModuleRunner`.
+- **`terminate()`**: Performs cleanup, including resetting the cursor, stopping all task modules, and removing keyboard scroll blockers.
+
+## 2. Runner and structure
+
+- Runner: `jspsych` via `LifecycleManager`
 - Adapter: `tasks/nback/src/index.ts`
 - Variants:
   - `nback/default`

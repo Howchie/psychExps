@@ -2,11 +2,19 @@
 
 This document describes the Stroop adapter at `tasks/stroop/src/index.ts`.
 
-## 1. Runner behavior
+## 1. Implementation Details
 
-Stroop currently runs jsPsych-only:
-- `CanvasKeyboardResponsePlugin` for fixation, blank, response, post-response, feedback phases.
-- `CallFunctionPlugin` for block lifecycle hooks and continue screens.
+The Stroop task is implemented using the standardized `TaskAdapter` interface.
+
+### `StroopTaskAdapter` (Class)
+
+- **`initialize(context)`**: Sets up the task context.
+- **`execute()`**: Runs the main Stroop task logic using the jsPsych timeline.
+- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+
+## 2. Runner behavior
+
+Stroop currently runs `jspsych` via the `LifecycleManager`.
 
 ## 2. Config schema currently parsed
 
