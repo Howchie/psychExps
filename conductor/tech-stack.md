@@ -14,8 +14,11 @@
 - **jsquest-plus:** A specialized library for managing experimental questionnaires and participant interactions.
 
 ## Core Framework Architecture
-- **Shared Core (@experiments/core):** Centralized logic for task scheduling, configuration handling, and data collection.
+- **Shared Core (@experiments/core):** Centralized logic for task scheduling, configuration handling, and data collection. Organized into specialized sub-modules (api, engines, infrastructure, utils, web).
+- **ConfigurationManager:** Encapsulated class for robust loading and multi-level merging of experiment configurations.
+- **LifecycleManager:** Standardized orchestrator for task execution, ensuring consistent initialization and cleanup.
 - **Task Adapters (@experiments/task-*):** Independent modules for implementing specific cognitive and psychological tasks.
+- **Standardized TaskAdapter Interface:** Enforces a consistent contract (initialize, execute, terminate) for all task implementations.
 - **Unified Browser Shell (@experiments/web):** A single entry point for all experiments, supporting various task configurations via URL parameters.
 
 ## Testing and Quality Assurance
