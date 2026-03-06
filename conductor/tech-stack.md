@@ -17,6 +17,8 @@
 - **Shared Core (@experiments/core):** Centralized logic for task scheduling, configuration handling, and data collection. Organized into specialized sub-modules (api, engines, infrastructure, utils, web).
 - **ConfigurationManager:** Encapsulated class for robust loading, multi-level merging, and automated variable resolution of experiment configurations.
 - **LifecycleManager:** Standardized orchestrator for task execution, ensuring consistent initialization (including high-level variable resolution) and cleanup.
+- **TaskModuleRunner:** Modular system for managing dynamic task extensions (TaskModules), allowing them to transform experiment plans and handle scoped events/keys.
+- **ProspectiveMemoryModule:** Reusable core engine for injecting prospective memory trials and responses into any host task.
 - **SpatialLayoutManager:** Core utility for generating non-overlapping programmatic positioning of stimuli using various templates (circular, grid, random).
 - **SceneRenderer:** Standardized canvas renderer for structured SceneStimulus models, supporting modular rendering hooks.
 - **Generalized Trial Runner:** Enhanced rtTask engine supporting arbitrary multi-phase trial structures (e.g., Encode -> Mask -> Delay -> Probe).

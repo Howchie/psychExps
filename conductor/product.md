@@ -14,6 +14,7 @@ To provide a highly modular and extensible framework for developing and running 
 ## Key Features
 - **Shared Core Framework:** Provides common services like session management, configuration inheritance, and data collection.
 - **Modular Task Adapters:** Specialized modules for specific cognitive tasks (e.g., SFT, PM, NBack, Stroop) that plug into the core framework.
+- **Modular Task Extensions (TaskModules):** Reusable components (e.g., DRT, Prospective Memory) that can be dynamically injected into any task to extend its functionality without modifying the primary task code.
 - **Unified Browser Shell:** A single entry point for all experiments, supporting various task configurations via URL parameters.
 - **Configuration-Driven:** Experiments are highly configurable via JSON presets, allowing for complex task variations without code changes.
 - **Auto-Responder Integration:** Automated testing capabilities for validating experiment flows.
