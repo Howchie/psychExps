@@ -1,12 +1,12 @@
 # Implementation Plan - High-Level Variable Resolution
 
 ## Phase 1: Core Framework Enhancement
-- [ ] Task: Implement high-level configuration resolution in `@experiments/core`
-    - [ ] Write unit tests for recursive configuration resolution
-    - [ ] Enhance `ConfigurationManager` to support variable resolution after merging
-    - [ ] Update `LifecycleManager` to ensure resolution occurs before `TaskAdapter.initialize`
-    - [ ] Standardize `VariableResolver` instantiation using `SelectionContext`
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
+- [x] Task: Implement high-level configuration resolution in `@experiments/core` (9f87e80)
+    - [x] Write unit tests for recursive configuration resolution
+    - [x] Enhance `ConfigurationManager` to support variable resolution after merging
+    - [x] Update `LifecycleManager` to ensure resolution occurs before `TaskAdapter.initialize`
+    - [x] Standardize `VariableResolver` instantiation using `SelectionContext`
+- [~] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
 
 ## Phase 2: Task Adapter Refactoring (Batch 1)
 - [ ] Task: Refactor `pm` task adapter to remove local variable resolution
