@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi } from 'vitest';
 import { TaskModuleRunner, type TaskModule, type TaskModuleHandle, type TaskModuleAddress, type TaskModuleContext } from './taskModule';
 

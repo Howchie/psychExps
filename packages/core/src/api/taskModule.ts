@@ -1,3 +1,5 @@
+import type { SeededRandom } from "../infrastructure/random";
+
 export type TaskModuleScope = "task" | "block" | "trial";
 
 export interface TaskModuleAddress {
@@ -14,6 +16,10 @@ export interface TaskModuleContext<TBlock = unknown, TTrial = unknown> {
   displayElement?: HTMLElement;
   borderTargetElement?: HTMLElement;
   borderTargetRect?: () => DOMRect | null;
+  rng?: SeededRandom;
+  stimuliByCategory?: Record<string, string[]>;
+  resolver?: VariableResolver;
+  locals?: Record<string, unknown>;
 }
 
 /**
@@ -23,6 +29,18 @@ export interface TaskModuleContext<TBlock = unknown, TTrial = unknown> {
 export interface TaskModule<TConfig = any, TResult = any> {
   readonly id: string;
   
+  /**
+   * Optional: Called during task initialization to allow the module
+   * to transform the experiment plan.
+   */
+  transformPlan?(plan: any, config: TConfig, context: TaskModuleContext): any;
+
+  /**
+   * Optional: Called during block initialization to allow the module
+   * to transform the block's plan.
+   */
+  transformBlockPlan?(block: any, config: TConfig, context: TaskModuleContext): any;
+
   /**
    * Called when the module's scope starts.
    * Returns a handle to the active module instance.
@@ -47,6 +65,16 @@ export interface TaskModuleHandle<TResult = any> {
    * Return true if the key was handled by this module.
    */
   handleKey?(key: string, now: number): boolean;
+
+  /**
+   * Optional: Called when the task wants to retrieve current data from an active module.
+   */
+  getData?(): TResult;
+
+  /**
+   * Optional: Called when the task wants the module to render its state.
+   */
+  render?(ctx: CanvasRenderingContext2D, now: number): void;
 }
 
 export interface TaskModuleResult<TResult = any> extends TaskModuleAddress {
@@ -56,6 +84,7 @@ export interface TaskModuleResult<TResult = any> extends TaskModuleAddress {
 
 export interface TaskModuleRunnerOptions {
   onEvent?: (event: { type: string } & Record<string, unknown>) => void;
+  onModularResponse?: (key: string, timestamp: number) => void;
 }
 
 /**
@@ -65,11 +94,72 @@ export class TaskModuleRunner {
   private active = new Map<string, { moduleId: string; address: TaskModuleAddress; handle: TaskModuleHandle }>();
   private results: TaskModuleResult[] = [];
   private options: TaskModuleRunnerOptions = {};
+  private keyListener: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(private modules: TaskModule[] = []) {}
 
+  /**
+   * Initializes the runner, setting up global listeners.
+   */
+  initialize(): void {
+    if (this.keyListener) return;
+    this.keyListener = (event: KeyboardEvent) => {
+      this.handleKey(event.key, performance.now());
+    };
+    window.addEventListener("keydown", this.keyListener);
+  }
+
+  /**
+   * Cleans up the runner.
+   */
+  terminate(): void {
+    if (this.keyListener) {
+      window.removeEventListener("keydown", this.keyListener);
+      this.keyListener = null;
+    }
+    this.stopAll();
+  }
+
   setOptions(options: TaskModuleRunnerOptions): void {
     this.options = { ...this.options, ...options };
+  }
+
+  /**
+   * Allows registered modules to transform the experiment plan.
+   */
+  transformPlan(plan: any, moduleConfigs: Record<string, any>, context: TaskModuleContext): any {
+    let currentPlan = plan;
+    for (const module of this.modules) {
+      if (module.transformPlan) {
+        const config = moduleConfigs[module.id];
+        if (config) {
+          currentPlan = module.transformPlan(currentPlan, config, context);
+        }
+      }
+    }
+    return currentPlan;
+  }
+
+  /**
+   * Allows registered modules to transform a block's plan.
+   */
+  transformBlockPlan(block: any, moduleConfigs: Record<string, any>, context: TaskModuleContext): any {
+    let currentBlock = block;
+    for (const module of this.modules) {
+      if (module.transformBlockPlan) {
+        let config = moduleConfigs[module.id];
+        if (config) {
+          if (context.resolver) {
+            config = context.resolver.resolveInValue(config, { 
+              blockIndex: context.blockIndex,
+              locals: context.locals
+            });
+          }
+          currentBlock = module.transformBlockPlan(currentBlock, config, context);
+        }
+      }
+    }
+    return currentBlock;
   }
 
   private createScopeId(moduleId: string, address: TaskModuleAddress): string {
@@ -147,6 +237,7 @@ export class TaskModuleRunner {
           key,
           timestamp: now,
         });
+        this.options.onModularResponse?.(key, now);
         return true;
       }
     }
@@ -155,5 +246,26 @@ export class TaskModuleRunner {
 
   getResults(): TaskModuleResult[] {
     return this.results;
+  }
+
+  /**
+   * Returns current data from all active modules matching the criteria.
+   */
+  getActiveData(criteria?: { moduleId?: string; scope?: TaskModuleScope; blockIndex?: number }): TaskModuleResult[] {
+    const output: TaskModuleResult[] = [];
+    for (const entry of this.active.values()) {
+      if (criteria?.moduleId && entry.moduleId !== criteria.moduleId) continue;
+      if (criteria?.scope && entry.address.scope !== criteria.scope) continue;
+      if (criteria?.blockIndex !== undefined && entry.address.blockIndex !== criteria.blockIndex) continue;
+
+      if (entry.handle.getData) {
+        output.push({
+          moduleId: entry.moduleId,
+          ...entry.address,
+          data: entry.handle.getData()
+        });
+      }
+    }
+    return output;
   }
 }

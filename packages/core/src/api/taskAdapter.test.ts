@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi } from 'vitest';
 // We'll import these from where they WILL be.
 // Since they don't exist yet, this will fail to compile/run, which is a good 'Red' phase.

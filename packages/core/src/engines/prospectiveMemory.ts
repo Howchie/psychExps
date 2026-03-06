@@ -1,4 +1,5 @@
 import { SeededRandom } from "../infrastructure/random";
+import type { TaskModule, TaskModuleHandle, TaskModuleAddress, TaskModuleContext } from "../api/taskModule";
 
 export interface ProspectiveMemoryScheduleConfig {
   count: number;
@@ -23,6 +24,90 @@ export interface ProspectiveMemoryCueMatch {
   matched: boolean;
   responseKey: string | null;
   ruleId: string | null;
+}
+
+export interface ProspectiveMemoryModuleConfig {
+  enabled: boolean;
+  schedule: ProspectiveMemoryScheduleConfig;
+  rules: ProspectiveMemoryCueRule[];
+  eligibleTrialTypes?: string[];
+}
+
+export interface ProspectiveMemoryModuleResult {
+  responses: Array<{ key: string; timestamp: number }>;
+}
+
+export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModuleConfig, ProspectiveMemoryModuleResult> {
+  readonly id = "pm";
+
+  transformBlockPlan(block: any, config: ProspectiveMemoryModuleConfig, context: TaskModuleContext): any {
+    if (!config.enabled || !context.rng || !context.stimuliByCategory) return block;
+
+    const trials = Array.isArray(block.trials) ? block.trials : [];
+    const eligibleIndices = trials
+      .map((t: any, idx: number) => ({ type: t.trialType, idx }))
+      .filter((t: any) => !config.eligibleTrialTypes || config.eligibleTrialTypes.includes(t.type))
+      .map((t: any) => t.idx);
+
+    if (eligibleIndices.length === 0) return block;
+
+    const pmPositions = generateProspectiveMemoryPositions(context.rng!, trials.length, config.schedule);
+    
+    // Filter PM positions to only those that fall on eligible trials
+    const validPmPositions = pmPositions.filter(pos => eligibleIndices.includes(pos));
+
+    const newTrials = [...trials];
+    for (const pos of validPmPositions) {
+      // Pick a rule and an item
+      const ruleIndex = context.rng!.int(0, config.rules.length - 1);
+      const rule = config.rules[ruleIndex];
+      
+      let pmItem = "pm_item";
+      let sourceCategory = "unknown";
+
+      if (rule.type === "category_in" && rule.categories.length > 0) {
+        const catIndex = context.rng!.int(0, rule.categories.length - 1);
+        const category = rule.categories[catIndex];
+        const pool = context.stimuliByCategory![category];
+        if (pool && pool.length > 0) {
+          pmItem = pool[context.rng!.int(0, pool.length - 1)];
+          sourceCategory = category;
+        }
+      }
+
+      newTrials[pos] = {
+        ...newTrials[pos],
+        trialType: "PM",
+        item: pmItem,
+        sourceCategory,
+        correctResponse: rule.responseKey,
+        itemCategory: "PM",
+      };
+    }
+
+    return { ...block, trials: newTrials };
+  }
+
+  start(config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult> {
+    const responses: Array<{ key: string; timestamp: number }> = [];
+    const allowedKeys = new Set(config.rules.map(r => r.responseKey));
+
+    return {
+      handleKey: (key, now) => {
+        if (allowedKeys.has(key)) {
+          responses.push({ key, timestamp: now });
+          return true;
+        }
+        return false;
+      },
+      getData: () => ({
+        responses
+      }),
+      stop: () => ({
+        responses
+      })
+    };
+  }
 }
 
 export function generateProspectiveMemoryPositions(

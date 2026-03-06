@@ -112,13 +112,16 @@ export interface TaskRegistry {
 }
 
 import type { VariableResolver } from "../infrastructure/variables";
+import type { TaskModuleRunner } from "./taskModule";
 
 export interface TaskAdapterContext {
   container: HTMLElement;
   selection: SelectionContext;
   coreConfig: CoreConfig;
   taskConfig: JSONObject;
+  rawTaskConfig: JSONObject;
   resolver: VariableResolver;
+  moduleRunner: TaskModuleRunner;
 }
 
 

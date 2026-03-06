@@ -1,5 +1,8 @@
 import { ConfigurationManager } from "../infrastructure/config";
 import { createVariableResolver } from "../infrastructure/variables";
+import { TaskModuleRunner } from "./taskModule";
+import { DrtModule } from "../engines/drt";
+import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
 import type { TaskManifest, TaskAdapterContext, JSONObject } from "./types";
 
 /**
@@ -76,11 +79,21 @@ export class LifecycleManager {
     const configManager = new ConfigurationManager();
     const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
 
+    // Initialize module runner with standard core modules
+    const moduleRunner = new TaskModuleRunner([
+      new DrtModule(),
+      new ProspectiveMemoryModule(),
+    ]);
+
     const resolvedContext: TaskAdapterContext = {
       ...context,
       taskConfig: resolvedConfig,
+      rawTaskConfig: taskConfig,
       resolver: taskResolver,
+      moduleRunner,
     };
+
+    moduleRunner.initialize();
 
     try {
       if (this.adapter.initialize) {
@@ -99,6 +112,7 @@ export class LifecycleManager {
       
       return result;
     } finally {
+      moduleRunner.terminate();
       if (this.adapter.terminate) {
         await this.adapter.terminate();
       }

@@ -242,7 +242,7 @@ export function coerceCsvStimulusConfig(value: unknown): CsvStimulusConfig | nul
 }
 
 export async function loadCategorizedStimulusPools(args: CategorizedPoolLoadArgs): Promise<Record<string, string[]>> {
-  const inline = normalizePoolRecord(args.inlinePools);
+  const inline = normalizePoolRecord(args.inlinePools ?? {});
   if (!args.csvConfig) return inline;
   const loaded = await loadStimuliPoolsFromCsv(args.csvConfig, args.resolver, args.context);
   const out: Record<string, string[]> = { ...inline };

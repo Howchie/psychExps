@@ -15,20 +15,40 @@
         "responseWindowEndMs": 5000
       },
       "responseTerminatesTrial": false
+    },
+    "modules": {
+      "pm": {
+        "enabled": true,
+        "eligibleTrialTypes": ["F"],
+        "schedule": {
+          "count": "$var.pmCount",
+          "minSeparation": 8,
+          "maxSeparation": 11
+        },
+        "rules": [
+          {
+            "type": "category_in",
+            "categories": ["$var.pmCategory"],
+            "responseKey": "space"
+          }
+        ]
+      }
     }
   },
   "mapping": {
     "targetKey": "m",
-    "nonTargetKey": "z",
-    "pmKey": "space"
+    "nonTargetKey": "z"
+  },
+  "variables": {
+    "pmCount": 0,
+    "pmCategory": "animals"
   },
   "instructions": {
     "introPages": [
       "Respond M for n-back targets and Z for non-targets.",
       "In PM blocks, press SPACE for PM-category items."
     ],
-    "blockIntroControlTemplate": "This is a {nLevel}-back block. There are no PM trials in this block.",
-    "blockIntroPmTemplate": "This is a {nLevel}-back PM block. Press SPACE for items from: {pmCategoryText}.",
+    "blockIntroTemplate": "This is a {nLevel}-back block.",
     "preBlockBeforeBlockIntro": false,
     "showBlockLabel": true
   },
@@ -40,14 +60,6 @@
     "nbackDraw": {
       "mode": "without_replacement",
       "shuffle": true
-    },
-    "pmItemDraw": {
-      "mode": "without_replacement",
-      "shuffle": true
-    },
-    "pmCategoryDraw": {
-      "mode": "round_robin",
-      "shuffle": true
     }
   },
   "stimuli": {
@@ -58,9 +70,9 @@
   },
   "plan": {
     "manipulations": [
-      { "id": "control_block", "overrides": { "blockType": "control", "pmCount": 0 } },
-      { "id": "pm_block_animals", "overrides": { "blockType": "pm", "activePmCategories": ["animals"], "pmCount": 5, "minPmSeparation": 8, "maxPmSeparation": 11 } },
-      { "id": "pm_block_fruits", "overrides": { "blockType": "pm", "activePmCategories": ["fruits"], "pmCount": 5, "minPmSeparation": 8, "maxPmSeparation": 11 } },
+      { "id": "control_block", "overrides": { "variables": { "pmCount": 0 } } },
+      { "id": "pm_block_animals", "overrides": { "variables": { "pmCount": 5, "pmCategory": "animals" } } },
+      { "id": "pm_block_fruits", "overrides": { "variables": { "pmCount": 5, "pmCategory": "fruits" } } },
       { "id": "nlevel_1", "overrides": { "nLevel": 1 } },
       { "id": "nlevel_2", "overrides": { "nLevel": 2 } },
       { "id": "nlevel_3", "overrides": { "nLevel": 3 } }

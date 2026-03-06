@@ -11,7 +11,7 @@ describe('NbackTaskAdapter', () => {
       mapping: { targetKey: 'm', nonTargetKey: 'z' },
       plan: {
         blocks: [
-          { phase: 'main', blockType: 'pm', nLevel: 1, trials: 10, pmCount: 1, activePmCategories: ['$var.myCat'] }
+          { phase: 'main', nLevel: 1, trials: 10 }
         ]
       },
       variables: {
@@ -23,6 +23,13 @@ describe('NbackTaskAdapter', () => {
       variables: taskConfig.variables
     });
 
+    const mockModuleRunner = {
+      transformPlan: vi.fn().mockImplementation((plan) => plan),
+      transformBlockPlan: vi.fn().mockImplementation((block) => block),
+      initialize: vi.fn(),
+      terminate: vi.fn()
+    };
+
     const context: any = {
       container: document.createElement('div'),
       selection: {
@@ -30,13 +37,17 @@ describe('NbackTaskAdapter', () => {
         variantId: 'v1'
       },
       taskConfig: taskConfig,
-      resolver: resolver
+      rawTaskConfig: taskConfig,
+      resolver: resolver,
+      moduleRunner: mockModuleRunner,
+      stimuliByCategory: {}
     };
 
     await nbackAdapter.initialize(context);
 
-    // Verify that blocks were parsed and variables resolved
+    // Verify that blocks were parsed
     const runtime = (nbackAdapter as any).runtime;
-    expect(runtime.parsed.mainBlocks[0].activePmCategories).toEqual(['food']);
+    expect(runtime.parsed.mainBlocks[0].nLevel).toBe(1);
+    expect(mockModuleRunner.transformBlockPlan).toHaveBeenCalled();
   });
 });

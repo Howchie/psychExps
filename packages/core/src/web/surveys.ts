@@ -39,6 +39,7 @@ export interface SurveyDefinition {
   id: string;
   title?: string;
   description?: string;
+  showQuestionNumbers?: boolean;
   questions: SurveyQuestion[];
   submitLabel?: string;
   computeScores?: (answers: SurveyAnswerMap) => Record<string, number> | undefined;
@@ -222,18 +223,21 @@ function syncSliderValueLabel(container: HTMLElement, questionId: string): void 
 function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: string): string {
   const title = survey.title ? `<h2 style="margin:0 0 0.75rem 0;">${escapeHtml(survey.title)}</h2>` : "";
   const description = survey.description ? `<p style="margin:0 0 1rem 0;">${escapeHtml(survey.description)}</p>` : "";
-  const questionsHtml = survey.questions.map((question, index) => renderQuestion(question, index + 1)).join("");
+  const showQuestionNumbers = survey.showQuestionNumbers !== false;
+  const questionsHtml = survey.questions.map((question, index) => renderQuestion(question, index + 1, showQuestionNumbers)).join("");
   const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
   return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div style="width:min(900px,96vw);padding:1rem 1.25rem;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1rem 0 0 0;"><button id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
 
-function renderQuestion(question: SurveyQuestion, index: number): string {
+function renderQuestion(question: SurveyQuestion, index: number, showQuestionNumbers: boolean): string {
   const required = question.required !== false;
   const star = required ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
-  const prompt = `<p style="margin:0 0 0.5rem 0;font-weight:600;">${index}. ${escapeHtml(question.prompt)}${star}</p>`;
+  const promptPrefix = showQuestionNumbers ? `${index}. ` : "";
+  const prompt = `<p style="margin:0 0 0.5rem 0;font-weight:600;">${promptPrefix}${escapeHtml(question.prompt)}${star}</p>`;
   const help = question.helpText ? `<p style="margin:0 0 0.6rem 0;color:#374151;">${escapeHtml(question.helpText)}</p>` : "";
   const inner = question.type === "single_choice" ? renderSingleChoice(question) : renderSlider(question);
-  return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;"><legend style="padding:0 0.3rem;">Q${index}</legend>${prompt}${help}${inner}</fieldset>`;
+  const legend = showQuestionNumbers ? `<legend style="padding:0 0.3rem;">Q${index}</legend>` : "";
+  return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;">${legend}${prompt}${help}${inner}</fieldset>`;
 }
 
 function renderSingleChoice(question: SurveySingleChoiceQuestion): string {
@@ -360,6 +364,7 @@ export interface AtwitSurveyOptions {
   prompt?: string;
   min?: number;
   max?: number;
+  showQuestionNumbers?: boolean;
   required?: boolean;
 }
 
@@ -371,6 +376,7 @@ export function createAtwitSurvey(options: AtwitSurveyOptions = {}): SurveyDefin
   return {
     id: options.id ?? "atwit",
     title: options.title ?? "Workload Rating",
+    showQuestionNumbers: options.showQuestionNumbers,
     questions: [
       {
         id: questionId,
@@ -402,6 +408,7 @@ export interface NasaTlxSurveyOptions {
   max?: number;
   step?: number;
   initial?: number;
+  showQuestionNumbers?: boolean;
   showValue?: boolean;
   required?: boolean;
 }
@@ -416,6 +423,7 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
     id: options.id ?? "nasa_tlx",
     title: options.title ?? "NASA TLX",
     description: options.description,
+    showQuestionNumbers: options.showQuestionNumbers,
     questions: selectedSubscales.map((subscale) => ({
       id: subscale.id,
       type: "slider",
@@ -461,6 +469,7 @@ export type SurveyPresetSpec =
       prompt?: string;
       min?: number;
       max?: number;
+      showQuestionNumbers?: boolean;
       required?: boolean;
     }
   | {
@@ -473,6 +482,7 @@ export type SurveyPresetSpec =
       max?: number;
       step?: number;
       initial?: number;
+      showQuestionNumbers?: boolean;
       showValue?: boolean;
       required?: boolean;
     };

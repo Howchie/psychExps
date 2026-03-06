@@ -69,6 +69,12 @@ export interface InstructionPageSlots {
   end: string[];
 }
 
+export interface InstructionScreenSpec {
+  title?: string;
+  text?: string;
+  html?: string;
+}
+
 export function resolveInstructionPageSlots(
   instructions: unknown,
   defaults?: Partial<InstructionPageSlots>,
@@ -82,6 +88,56 @@ export function resolveInstructionPageSlots(
       return toStringScreens(raw?.[key]);
     }
     return toStringScreens(fallback);
+  };
+  return {
+    intro: pickFirstScreens(["pages", "introPages", "intro", "screens"], defaults?.intro),
+    preBlock: pickFirstScreens(["preBlockPages", "beforeBlockPages", "beforeBlockScreens"], defaults?.preBlock),
+    postBlock: pickFirstScreens(["postBlockPages", "afterBlockPages", "afterBlockScreens"], defaults?.postBlock),
+    end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
+  };
+}
+
+export interface InstructionScreenSlots {
+  intro: InstructionScreenSpec[];
+  preBlock: InstructionScreenSpec[];
+  postBlock: InstructionScreenSpec[];
+  end: InstructionScreenSpec[];
+}
+
+export function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[] {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text ? [{ text }] : [];
+  }
+  return asArray(value)
+    .map((item): InstructionScreenSpec | null => {
+      if (typeof item === "string") {
+        const text = item.trim();
+        return text ? { text } : null;
+      }
+      const raw = asObject(item);
+      if (!raw) return null;
+      const title = asString(raw.title) ?? undefined;
+      const html = asString(raw.html) ?? undefined;
+      const text = asString(raw.text) ?? asString(raw.body) ?? asString(raw.content) ?? undefined;
+      if (!html && !text) return null;
+      return { ...(title ? { title } : {}), ...(text ? { text } : {}), ...(html ? { html } : {}) };
+    })
+    .filter((item): item is InstructionScreenSpec => Boolean(item));
+}
+
+export function resolveInstructionScreenSlots(
+  instructions: unknown,
+  defaults?: Partial<InstructionScreenSlots>,
+): InstructionScreenSlots {
+  const raw = asObject(instructions);
+  const hasOwn = (key: string): boolean => Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
+  const pickFirstScreens = (keys: string[], fallback?: InstructionScreenSpec[]): InstructionScreenSpec[] => {
+    for (const key of keys) {
+      if (!hasOwn(key)) continue;
+      return toInstructionScreenSpecs(raw?.[key]);
+    }
+    return Array.isArray(fallback) ? [...fallback] : [];
   };
   return {
     intro: pickFirstScreens(["pages", "introPages", "intro", "screens"], defaults?.intro),
