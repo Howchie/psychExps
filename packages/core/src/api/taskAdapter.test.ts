@@ -154,4 +154,39 @@ describe('LifecycleManager', () => {
       })
     }));
   });
+
+  it('should NOT resolve block-scoped variables at the high level', async () => {
+    const mockAdapter: any = {
+      manifest: { taskId: 'test' },
+      initialize: vi.fn().mockResolvedValue(undefined),
+      execute: vi.fn().mockResolvedValue('ok'),
+      terminate: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const context: any = {
+      container: {},
+      selection: {
+        participant: { participantId: 'p1', sessionId: 's1' },
+        variantId: 'v1'
+      },
+      taskConfig: {
+        variables: {
+          blockVar: { scope: 'block', value: 'BlockValue' },
+          partVar: { scope: 'participant', value: 'PartValue' }
+        },
+        f1: '$var.blockVar',
+        f2: '$var.partVar'
+      }
+    };
+
+    const manager = new LifecycleManager(mockAdapter);
+    await manager.run(context);
+
+    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      taskConfig: expect.objectContaining({
+        f1: '$var.blockVar',
+        f2: 'PartValue'
+      })
+    }));
+  });
 });
