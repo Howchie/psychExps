@@ -36,5 +36,5 @@
     - [x] Add `TASK_CHANGE_DETECTION.md` and update `CORE_API.md`
 - [x] Task: Conductor - User Manual Verification 'Phase 4: Final Validation and Documentation' (Protocol in workflow.md)
 
-## Phase: Review Fixes
-- [x] Task: Apply review suggestions 8d41f88
+## Phase: Review Fixes [checkpoint: eed508d]
+- [x] Task: Apply review suggestions (fix borders, backgrounds, and timeout logic)
