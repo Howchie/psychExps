@@ -27,8 +27,6 @@ import {
   createResponseSemantics,
   computeRtPhaseDurations,
   appendJsPsychContinuePages,
-  createVariableResolver,
-  resolveWithVariables,
   coerceCsvStimulusConfig,
   coerceCategoryDrawConfig,
   coercePoolDrawConfig,
@@ -315,21 +313,25 @@ interface NbackRuntimeState {
 }
 
 async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRuntimeState> {
-  const parsed = parseNbackConfig(context.taskConfig, context.selection);
-  const variableResolver = createNbackVariableResolver(parsed, context);
+  const parsed = parseNbackConfig(context.taskConfig, context.selection, context.resolver);
   parsed.stimuliByCategory = await loadCategorizedStimulusPools({
     inlinePools: parsed.stimuliByCategory,
     csvConfig: parsed.stimuliCsv,
-    resolver: variableResolver,
+    resolver: context.resolver,
   });
-  applyNbackVariableResolution(parsed, variableResolver);
-  const rng = new SeededRandom(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId));
+  const rng = new SeededRandom(
+    hashSeed(
+      context.selection.participant.participantId,
+      context.selection.participant.sessionId,
+      context.selection.variantId,
+    ),
+  );
   const plan = buildExperimentPlan(parsed, rng);
   const eventLogger = createEventLogger(context.selection);
   return {
     parsed,
     plan,
-    variableResolver,
+    variableResolver: context.resolver,
     eventLogger,
     participantId: context.selection.participant.participantId,
     variantId: context.selection.variantId,
@@ -1081,7 +1083,11 @@ function getNbackResponseRowsFromValues(rows: Array<Record<string, unknown>>, bl
   return collectNbackRecords(rows, "", "").filter((row) => row.blockIndex === blockIndex);
 }
 
-function parseNbackConfig(config: JSONObject, selection?: TaskAdapterContext["selection"]): ParsedNbackConfig {
+function parseNbackConfig(
+  config: JSONObject,
+  selection: TaskAdapterContext["selection"] | undefined,
+  variableResolver: VariableResolver,
+): ParsedNbackConfig {
   const mappingRaw = asObject(config.mapping);
   const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
   const nonTargetKey = parseOptionalResponseKey(mappingRaw?.nonTargetKey ?? "z");
@@ -1210,17 +1216,7 @@ function parseNbackConfig(config: JSONObject, selection?: TaskAdapterContext["se
     ...(taskVariables ?? {}),
     ...(configVariables ?? {}),
   };
-  const planVariableResolver = createVariableResolver({
-    variables: variableDefinitions,
-    seedParts: selection
-      ? [
-          selection.participant.participantId,
-          selection.participant.sessionId,
-          selection.variantId,
-          "nback_variables",
-        ]
-      : ["nback_variables"],
-  });
+  
   const lureLagPasses = parseLureLagPasses(nbackRuleRaw?.lureLagPasses);
   const maxInsertionAttempts = toPositiveNumber(nbackRuleRaw?.maxInsertionAttempts, 10);
   const planManipulations = createManipulationOverrideMap(plan?.manipulations);
@@ -1245,7 +1241,7 @@ function parseNbackConfig(config: JSONObject, selection?: TaskAdapterContext["se
       ),
       index,
       null,
-      planVariableResolver,
+      variableResolver,
       feedbackDefaults,
       drt,
     ),
@@ -1349,80 +1345,99 @@ function parseBlock(
   entry: unknown,
   index: number,
   isPractice: boolean | null,
-  variableResolver?: VariableResolver,
+  variableResolver: VariableResolver,
   feedbackFallback?: TrialFeedbackConfig,
   drtFallback?: NbackDrtConfig,
 ): NbackBlockConfig {
   const b = asObject(entry);
   if (!b) throw new Error(`Invalid NBack plan: block ${index + 1} is not an object.`);
   const scope = { blockIndex: index };
-  const resolvedPhase = variableResolver ? variableResolver.resolveToken(b.phase, scope) : b.phase;
+  const resolvedPhase = variableResolver.resolveToken(b.phase, scope);
   const phaseRaw = (asString(resolvedPhase) || "").toLowerCase();
-  const resolvedIsPractice = variableResolver ? variableResolver.resolveToken(b.isPractice, scope) : b.isPractice;
+  const resolvedIsPractice = variableResolver.resolveToken(b.isPractice, scope);
   const inferredPractice = typeof resolvedIsPractice === "boolean" ? resolvedIsPractice : phaseRaw === "practice";
   const isPracticeResolved = isPractice ?? inferredPractice;
-  const resolvedLabel = variableResolver ? variableResolver.resolveToken(b.label, scope) : b.label;
+  const resolvedLabel = variableResolver.resolveToken(b.label, scope);
   const label = asString(resolvedLabel) || `${isPracticeResolved ? "Practice" : "Block"} ${index + 1}`;
-  const resolvedTrials = variableResolver ? variableResolver.resolveToken(b.trials, scope) : b.trials;
+  const resolvedTrials = variableResolver.resolveToken(b.trials, scope);
   const trials = toPositiveNumber(resolvedTrials, isPracticeResolved ? 20 : 54);
-  const resolvedNLevel = variableResolver ? variableResolver.resolveToken(b.nLevel, scope) : b.nLevel;
+  const resolvedNLevel = variableResolver.resolveToken(b.nLevel, scope);
   const nLevel = toPositiveNumber(resolvedNLevel, isPracticeResolved ? 2 : 1);
-  const resolvedBlockType = variableResolver ? variableResolver.resolveToken(b.blockType, scope) : b.blockType;
+  const resolvedBlockType = variableResolver.resolveToken(b.blockType, scope);
   const rawType = (asString(resolvedBlockType) || "control").toLowerCase();
   if (rawType !== "pm" && rawType !== "control") {
     throw new Error(`Invalid NBack plan: block '${label}' has invalid blockType.`);
   }
   const blockType: "PM" | "Control" = rawType === "pm" ? "PM" : "Control";
 
-  const nbackSourceCategories = asStringArray(b.nbackSourceCategories, ["other"]);
-  const activePmCategories = asStringArray(b.activePmCategories, []);
-  const controlSourceCategories = asStringArray(b.controlSourceCategories, []);
-  const resolvedPmCount = variableResolver ? variableResolver.resolveToken(b.pmCount, scope) : b.pmCount;
-  const resolvedMinPmSep = variableResolver ? variableResolver.resolveToken(b.minPmSeparation, scope) : b.minPmSeparation;
-  const resolvedMaxPmSep = variableResolver ? variableResolver.resolveToken(b.maxPmSeparation, scope) : b.maxPmSeparation;
-  const resolvedTargetCount = variableResolver ? variableResolver.resolveToken(b.targetCount, scope) : b.targetCount;
-  const resolvedLureCount = variableResolver ? variableResolver.resolveToken(b.lureCount, scope) : b.lureCount;
-  const resolvedStimulusVariant = variableResolver ? variableResolver.resolveToken(b.stimulusVariant, scope) : b.stimulusVariant;
-  const resolvedFeedbackRaw = variableResolver ? variableResolver.resolveToken(b.feedback, scope) : b.feedback;
+  const nbackSourceCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.nbackSourceCategories, ["other"]),
+    variableResolver,
+    scope,
+  );
+  const activePmCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.activePmCategories, []),
+    variableResolver,
+    scope,
+  );
+  const controlSourceCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.controlSourceCategories, []),
+    variableResolver,
+    scope,
+  );
+  const resolvedPmCount = variableResolver.resolveToken(b.pmCount, scope);
+  const resolvedMinPmSep = variableResolver.resolveToken(b.minPmSeparation, scope);
+  const resolvedMaxPmSep = variableResolver.resolveToken(b.maxPmSeparation, scope);
+  const resolvedTargetCount = variableResolver.resolveToken(b.targetCount, scope);
+  const resolvedLureCount = variableResolver.resolveToken(b.lureCount, scope);
+  const resolvedStimulusVariant = variableResolver.resolveToken(b.stimulusVariant, scope);
+  const resolvedFeedbackRaw = variableResolver.resolveToken(b.feedback, scope);
   const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
   const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
   const rawDrt = b.drt ?? b.drtOverride;
-  const resolvedBeforeBlockScreens = resolveWithVariables(rawBeforeBlockScreens, variableResolver, scope);
-  const resolvedAfterBlockScreens = resolveWithVariables(rawAfterBlockScreens, variableResolver, scope);
-  const resolvedDrt = variableResolver ? variableResolver.resolveToken(rawDrt, scope) : rawDrt;
+  const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
+  const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
+  const resolvedDrt = variableResolver.resolveToken(rawDrt, scope);
   const feedback = parseTrialFeedbackConfig(asObject(resolvedFeedbackRaw), feedbackFallback ?? null);
-  const drt = resolveNbackDrtConfig(drtFallback ?? resolveNbackDrtConfig({
-    enabled: false,
-    scope: "block",
-    key: "space",
-    transformPersistence: "scope",
-    responseWindowMs: 1500,
-    displayDurationMs: 1000,
-    responseTerminatesStimulus: true,
-    isiSampler: { type: "uniform", min: 3000, max: 5000 },
-    parameterTransforms: [],
-    stimMode: "visual",
-    stimModes: [],
-    visual: {
-      shape: "square",
-      color: "#dc2626",
-      sizePx: 32,
-      topPx: 16,
-      leftPx: null,
-    },
-    audio: {
-      volume: 0.25,
-      frequencyHz: 900,
-      durationMs: 120,
-      waveform: "sine",
-    },
-    border: {
-      color: "#dc2626",
-      widthPx: 4,
-      radiusPx: 0,
-      target: "display",
-    },
-  }, null), asObject(resolvedDrt));
+  const drt = resolveNbackDrtConfig(
+    drtFallback ??
+      resolveNbackDrtConfig(
+        {
+          enabled: false,
+          scope: "block",
+          key: "space",
+          transformPersistence: "scope",
+          responseWindowMs: 1500,
+          displayDurationMs: 1000,
+          responseTerminatesStimulus: true,
+          isiSampler: { type: "uniform", min: 3000, max: 5000 },
+          parameterTransforms: [],
+          stimMode: "visual",
+          stimModes: [],
+          visual: {
+            shape: "square",
+            color: "#dc2626",
+            sizePx: 32,
+            topPx: 16,
+            leftPx: null,
+          },
+          audio: {
+            volume: 0.25,
+            frequencyHz: 900,
+            durationMs: 120,
+            waveform: "sine",
+          },
+          border: {
+            color: "#dc2626",
+            widthPx: 4,
+            radiusPx: 0,
+            target: "display",
+          },
+        },
+        null,
+      ),
+    asObject(resolvedDrt),
+  );
 
   return {
     label,
@@ -1838,44 +1853,13 @@ function drawSizedImage(
   );
 }
 
-function createNbackVariableResolver(parsed: ParsedNbackConfig, context: TaskAdapterContext): VariableResolver {
-  return createVariableResolver({
-    variables: parsed.variableDefinitions,
-    seedParts: [
-      context.selection.participant.participantId,
-      context.selection.participant.sessionId,
-      context.selection.variantId,
-      "nback_variables",
-    ],
-  });
-}
-
-function applyNbackVariableResolution(parsed: ParsedNbackConfig, resolver: VariableResolver): void {
-  const blocks = [...parsed.practiceBlocks, ...parsed.mainBlocks];
-
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-    const block = blocks[blockIndex];
-    const scope = { blockIndex };
-    block.nbackSourceCategories = expandCategoryEntriesWithVariables(block.nbackSourceCategories, resolver, scope);
-    block.activePmCategories = expandCategoryEntriesWithVariables(block.activePmCategories, resolver, scope);
-    block.controlSourceCategories = expandCategoryEntriesWithVariables(block.controlSourceCategories, resolver, scope);
-  }
-
-  const referencedCategories = blocks.flatMap((block) => [
-    ...block.nbackSourceCategories,
-    ...block.activePmCategories,
-    ...block.controlSourceCategories,
-  ]);
-  ensureStimulusCategories(parsed.stimuliByCategory, referencedCategories);
-}
-
 function expandCategoryEntriesWithVariables(
   entries: string[],
   resolver: VariableResolver,
   context: { blockIndex: number },
 ): string[] {
   const flattenResolved = (value: unknown): string[] => {
-    const resolved = resolveWithVariables(value, resolver, context);
+    const resolved = resolver.resolveInValue(value, context);
     if (Array.isArray(resolved)) {
       return resolved.flatMap((entry) => flattenResolved(entry));
     }
