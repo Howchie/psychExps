@@ -1,18 +1,18 @@
 # Implementation Plan - High-Level Variable Resolution
 
-## Phase 1: Core Framework Enhancement
+## Phase 1: Core Framework Enhancement [checkpoint: c7fd913]
 - [x] Task: Implement high-level configuration resolution in `@experiments/core` (9f87e80)
     - [x] Write unit tests for recursive configuration resolution
     - [x] Enhance `ConfigurationManager` to support variable resolution after merging
     - [x] Update `LifecycleManager` to ensure resolution occurs before `TaskAdapter.initialize`
     - [x] Standardize `VariableResolver` instantiation using `SelectionContext`
-- [~] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
 
 ## Phase 2: Task Adapter Refactoring (Batch 1)
-- [ ] Task: Refactor `pm` task adapter to remove local variable resolution
+- [~] Task: Refactor `pm` task adapter to remove local variable resolution
     - [ ] Write unit tests for `pm` adapter config parsing without local resolver
     - [ ] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/pm/src/index.ts`
-- [ ] Task: Refactor `sft` task adapter to remove local variable resolution
+...
     - [ ] Write unit tests for `sft` adapter config parsing without local resolver
     - [ ] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/sft/src/index.ts`
 - [ ] Task: Refactor `nback` task adapter to remove local variable resolution
