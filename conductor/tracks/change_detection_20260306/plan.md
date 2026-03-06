@@ -9,14 +9,14 @@
     - [x] Implement `SceneStimulus` types and `diffScenes` utility
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Spatial and Scene Enhancements' (Protocol in workflow.md)
 
-## Phase 2: Core Trial Flow Enhancement
-- [ ] Task: Generalize `rtTask` to support multi-phase structures
-    - [ ] Write unit tests for dynamic phase sequence execution and timing
-    - [ ] Refactor `runBasicRtTrial` or create `runMultiPhaseTrial` to support dynamic stage arrays
-- [ ] Task: Enhance `SceneRenderer` to support multi-slot displays
-    - [ ] Write tests for rendering Images and Shapes within structured slots
-    - [ ] Implement canvas rendering hooks for `SceneStimulus`
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Trial Flow Enhancement' (Protocol in workflow.md)
+## Phase 2: Core Trial Flow Enhancement [checkpoint: bbbe949]
+- [x] Task: Generalize `rtTask` to support multi-phase structures
+    - [x] Write unit tests for dynamic phase sequence execution and timing
+    - [x] Refactor `runBasicRtTrial` or create `runMultiPhaseTrial` to support dynamic stage arrays
+- [x] Task: Enhance `SceneRenderer` to support multi-slot displays
+    - [x] Write tests for rendering Images and Shapes within structured slots
+    - [x] Implement canvas rendering hooks for `SceneStimulus`
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Core Trial Flow Enhancement' (Protocol in workflow.md)
 
 ## Phase 3: Change Detection Task Implementation
 - [ ] Task: Scaffold `tasks/change_detection` package
