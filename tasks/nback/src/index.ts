@@ -1096,7 +1096,7 @@ function parseNbackConfig(
   const nonTargetKey = parseOptionalResponseKey(mappingRaw?.nonTargetKey ?? "z");
   const taskRaw = asObject(config.task);
   const pmRaw = asObject(taskRaw?.pm);
-  const pmKey = parseOptionalResponseKey(mappingRaw?.pmKey ?? pmRaw?.key ?? "space");
+  const pmKey = parseOptionalResponseKey(mappingRaw?.pmKey ?? pmRaw?.key);
   if (nonTargetKey && targetKey === nonTargetKey) {
     throw new Error("Invalid NBack mapping: target and nonTarget keys must be distinct.");
   }
