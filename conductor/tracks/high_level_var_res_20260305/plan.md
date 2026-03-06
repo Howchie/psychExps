@@ -9,10 +9,10 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
 
 ## Phase 2: Task Adapter Refactoring (Batch 1)
-- [~] Task: Refactor `pm` task adapter to remove local variable resolution
-    - [ ] Write unit tests for `pm` adapter config parsing without local resolver
-    - [ ] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/pm/src/index.ts`
-...
+- [x] Task: Refactor `pm` task adapter to remove local variable resolution (2fca233)
+    - [x] Write unit tests for `pm` adapter config parsing without local resolver
+    - [x] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/pm/src/index.ts`
+- [~] Task: Refactor `sft` task adapter to remove local variable resolution
     - [ ] Write unit tests for `sft` adapter config parsing without local resolver
     - [ ] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/sft/src/index.ts`
 - [ ] Task: Refactor `nback` task adapter to remove local variable resolution
