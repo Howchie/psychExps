@@ -65,7 +65,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     });
 
     const trialPlan = buildTrialPlan(taskConfig, rng);
-    const blocks = asArray(asObject(taskConfig.plan)?.blocks);
+    const blocks = asArray(asObject(taskConfig.plan)?.blocks) as JSONObject[];
 
     // Mount canvas with correct height for the layout
     const { canvas, ctx } = mountCanvasElement({
@@ -75,10 +75,10 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     });
     const sceneRenderer = new SceneRenderer(canvas);
 
-    const sessionResult = await runTaskSession({
+    const sessionResult = await runTaskSession<JSONObject, TrialPlanItem, any>({
       blocks: blocks,
       getTrials: ({ blockIndex }) => trialPlan.filter(t => t.blockIndex === blockIndex),
-      runTrial: async ({ trial, trialIndex }) => {
+      runTrial: async ({ trial }) => {
         // Ensure canvas is mounted at start of every trial
         container.innerHTML = "";
         container.appendChild(canvas.parentElement || canvas);
@@ -141,7 +141,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     });
 
     const flatResults = sessionResult.blocks.flatMap(b => b.trialResults);
-    const csv = recordsToCsv(flatResults.map(r => ({
+    const csv = recordsToCsv(flatResults.map((r: any) => ({
       participantId: selection.participant.participantId,
       variantId: selection.variantId,
       ...r,

@@ -1,5 +1,10 @@
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
 import { type CanvasFrameLayout } from "./ui";
+export declare function runSimpleTrialFeedback(container: HTMLElement, args: {
+    correct: number;
+    rtMs: number | null;
+    durationMs?: number;
+}): Promise<void>;
 export interface TrialFeedbackMessages {
     correct: string;
     incorrect: string;

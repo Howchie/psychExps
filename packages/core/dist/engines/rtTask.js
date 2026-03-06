@@ -58,11 +58,27 @@ export function computeRtPhaseDurations(timing, options = {}) {
         fixationEndMs: fixationEnd,
     };
 }
+export async function runCustomRtTrial(args) {
+    const timeline = await runTrialTimeline({
+        container: args.container,
+        stages: args.stages,
+        response: {
+            allowedKeys: (args.response.allowedKeys ?? []).map((entry) => normalizeKey(entry)).filter(Boolean),
+            startMs: args.response.startMs,
+            endMs: args.response.endMs,
+        },
+    });
+    return {
+        key: timeline.key ? normalizeKey(timeline.key) : null,
+        rtMs: timeline.rtMs,
+        timeline,
+    };
+}
 export async function runBasicRtTrial(args) {
     const timings = computeRtPhaseDurations(args.timing, {
         responseTerminatesTrial: args.responseTerminatesTrial,
     });
-    const timeline = await runTrialTimeline({
+    const result = await runCustomRtTrial({
         container: args.container,
         stages: [
             {
@@ -92,16 +108,16 @@ export async function runBasicRtTrial(args) {
             },
         ],
         response: {
-            allowedKeys: (args.allowedKeys ?? []).map((entry) => normalizeKey(entry)).filter(Boolean),
+            allowedKeys: args.allowedKeys,
             startMs: timings.responseStartMs,
             endMs: timings.responseEndMs,
         },
     });
     return {
-        key: timeline.key ? normalizeKey(timeline.key) : null,
-        rtMs: timeline.rtMs,
+        key: result.key,
+        rtMs: result.rtMs,
         timings,
-        timeline,
+        timeline: result.timeline,
     };
 }
 //# sourceMappingURL=rtTask.js.map

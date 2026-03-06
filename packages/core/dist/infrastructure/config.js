@@ -30,6 +30,12 @@ export class ConfigurationManager {
         }
         return merged;
     }
+    /**
+     * Resolves variables in the configuration using the provided resolver.
+     */
+    resolve(config, resolver) {
+        return resolver.resolveInValue(config);
+    }
 }
 /**
  * LEGACY: Standalone function for loading JSON files.

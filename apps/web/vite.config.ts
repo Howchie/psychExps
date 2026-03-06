@@ -11,5 +11,6 @@ export default defineConfig(() => ({
       clientPort: 80,
       protocol: "ws",
     },
+    allowedHosts: ["exp.howardfellowship-eeg.cloud.edu.au",'localhost', '*.localhost']
   },
 }));

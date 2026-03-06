@@ -1,6 +1,16 @@
 import { asObject, asString, toNonNegativeNumber, toPositiveNumber } from "../utils/coerce";
 import { resolveTemplatedString } from "../web/stimulus";
-import { drawCenteredCanvasMessage } from "./ui";
+import { drawCenteredCanvasMessage, sleep } from "./ui";
+// ... (existing interfaces)
+export async function runSimpleTrialFeedback(container, args) {
+    const isCorrect = args.correct === 1;
+    const text = isCorrect ? "Correct" : "Incorrect";
+    const color = isCorrect ? "#22c55e" : "#ef4444";
+    const duration = args.durationMs ?? 1000;
+    container.innerHTML = `<div style="display:flex; justify-content:center; align-items:center; height:100dvh; font-size:48px; font-weight:bold; color:${color}">${text}</div>`;
+    await sleep(duration);
+    container.innerHTML = "";
+}
 const DEFAULT_FEEDBACK = {
     enabled: false,
     durationMs: 400,
@@ -19,8 +29,8 @@ const DEFAULT_FEEDBACK = {
         byResponseCategoryColors: {},
         fontSizePx: 28,
         fontWeight: 700,
-        canvasBackground: "#000000",
-        canvasBorder: "2px solid #444",
+        canvasBackground: "#ffffff",
+        canvasBorder: "2px solid #ddd",
     },
 };
 export function parseTrialFeedbackConfig(value, fallback, defaults = {}) {
@@ -39,15 +49,15 @@ export function parseTrialFeedbackConfig(value, fallback, defaults = {}) {
             byResponseCategory: parseResponseCategoryMap(asObject(messages?.byResponseCategory) ?? asObject(messages?.by_response_category), fallbackMessages.byResponseCategory, defaults.messages?.byResponseCategory),
         },
         style: {
-            correctColor: asString(style?.correct_color ?? style?.correctColor) || fallbackStyle.correctColor || defaults.style?.correctColor || DEFAULT_FEEDBACK.style.correctColor,
-            incorrectColor: asString(style?.incorrect_color ?? style?.incorrectColor) || fallbackStyle.incorrectColor || defaults.style?.incorrectColor || DEFAULT_FEEDBACK.style.incorrectColor,
-            timeoutColor: asString(style?.timeout_color ?? style?.timeoutColor) || fallbackStyle.timeoutColor || defaults.style?.timeoutColor || DEFAULT_FEEDBACK.style.timeoutColor,
-            invalidColor: asString(style?.invalid_color ?? style?.invalidColor) || fallbackStyle.invalidColor || defaults.style?.invalidColor || DEFAULT_FEEDBACK.style.invalidColor,
-            byResponseCategoryColors: parseResponseCategoryMap(asObject(style?.byResponseCategoryColors) ?? asObject(style?.by_response_category_colors), fallbackStyle.byResponseCategoryColors, defaults.style?.byResponseCategoryColors),
-            fontSizePx: toPositiveNumber(style?.font_size_px ?? style?.fontSizePx, fallbackStyle.fontSizePx ?? defaults.style?.fontSizePx ?? DEFAULT_FEEDBACK.style.fontSizePx),
-            fontWeight: toPositiveNumber(style?.font_weight ?? style?.fontWeight, fallbackStyle.fontWeight ?? defaults.style?.fontWeight ?? DEFAULT_FEEDBACK.style.fontWeight),
-            canvasBackground: asString(style?.canvas_background ?? style?.canvasBackground) || fallbackStyle.canvasBackground || defaults.style?.canvasBackground || DEFAULT_FEEDBACK.style.canvasBackground,
-            canvasBorder: asString(style?.canvas_border ?? style?.canvasBorder) || fallbackStyle.canvasBorder || defaults.style?.canvasBorder || DEFAULT_FEEDBACK.style.canvasBorder,
+            correctColor: asString(style?.correct_color ?? style?.correctColor) || fallback?.style?.correctColor || defaults.style?.correctColor || DEFAULT_FEEDBACK.style.correctColor,
+            incorrectColor: asString(style?.incorrect_color ?? style?.incorrectColor) || fallback?.style?.incorrectColor || defaults.style?.incorrectColor || DEFAULT_FEEDBACK.style.incorrectColor,
+            timeoutColor: asString(style?.timeout_color ?? style?.timeoutColor) || fallback?.style?.timeoutColor || defaults.style?.timeoutColor || DEFAULT_FEEDBACK.style.timeoutColor,
+            invalidColor: asString(style?.invalid_color ?? style?.invalidColor) || fallback?.style?.invalidColor || defaults.style?.invalidColor || DEFAULT_FEEDBACK.style.invalidColor,
+            byResponseCategoryColors: parseResponseCategoryMap(asObject(style?.byResponseCategoryColors) ?? asObject(style?.by_response_category_colors), fallback?.style?.byResponseCategoryColors, defaults.style?.byResponseCategoryColors),
+            fontSizePx: toPositiveNumber(style?.font_size_px ?? style?.fontSizePx, fallback?.style?.fontSizePx ?? defaults.style?.fontSizePx ?? DEFAULT_FEEDBACK.style.fontSizePx),
+            fontWeight: toPositiveNumber(style?.font_weight ?? style?.fontWeight, fallback?.style?.fontWeight ?? defaults.style?.fontWeight ?? DEFAULT_FEEDBACK.style.fontWeight),
+            canvasBackground: asString(style?.canvas_background ?? style?.canvasBackground) || fallback?.style?.canvasBackground || defaults.style?.canvasBackground || DEFAULT_FEEDBACK.style.canvasBackground,
+            canvasBorder: asString(style?.canvas_border ?? style?.canvasBorder) || fallback?.style?.canvasBorder || defaults.style?.canvasBorder || DEFAULT_FEEDBACK.style.canvasBorder,
         },
     };
 }

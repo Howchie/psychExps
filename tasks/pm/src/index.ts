@@ -40,7 +40,6 @@ import {
   asObject,
   asArray,
   asString,
-  asStringArray,
   asPositiveNumberArray,
   toStringScreens,
   resolveInstructionPageSlots,
@@ -1124,17 +1123,20 @@ function parseBlock(
   const nLevel = toPositiveNumber(resolvedNLevel, isPracticeResolved ? 2 : 1);
 
   const activePmCategories = expandCategoryEntriesWithVariables(
-    asStringArray(b.activePmCategories, ["pm"]),
+    b.activePmCategories,
+    ["pm"],
     variableResolver,
     scope,
   );
   const nbackSourceCategories = expandCategoryEntriesWithVariables(
-    asStringArray(b.nbackSourceCategories, ["other"]),
+    b.nbackSourceCategories,
+    ["other"],
     variableResolver,
     scope,
   );
   const controlSourceCategories = expandCategoryEntriesWithVariables(
-    asStringArray(b.controlSourceCategories, []),
+    b.controlSourceCategories,
+    [],
     variableResolver,
     scope,
   );
@@ -1584,7 +1586,8 @@ function drawSizedImage(
 
 
 function expandCategoryEntriesWithVariables(
-  entries: string[],
+  entriesRaw: unknown,
+  fallback: string[],
   resolver: VariableResolver,
   context: { blockIndex: number },
 ): string[] {
@@ -1594,13 +1597,19 @@ function expandCategoryEntriesWithVariables(
       return resolved.flatMap((entry) => flattenResolved(entry));
     }
     const parsed = asString(resolved);
-    return parsed ? [parsed] : [];
+    const trimmed = parsed?.trim() ?? "";
+    return trimmed ? [trimmed] : [];
   };
+
+  const entries = Array.isArray(entriesRaw)
+    ? entriesRaw
+    : (typeof entriesRaw === "undefined" || entriesRaw === null ? [] : [entriesRaw]);
+  const seed = entries.length > 0 ? entries : fallback;
   const out: string[] = [];
-  for (const entry of entries) {
+  for (const entry of seed) {
     out.push(...flattenResolved(entry));
   }
-  return out.length > 0 ? out : entries;
+  return out.length > 0 ? out : fallback;
 }
 
 function parseLureLagPasses(value: unknown): number[][] {

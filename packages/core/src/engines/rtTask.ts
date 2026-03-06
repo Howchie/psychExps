@@ -1,5 +1,5 @@
 import { normalizeKey } from "../web/ui";
-import { runTrialTimeline, type TrialTimelineResult } from "../web/trial";
+import { runTrialTimeline, type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "../web/trial";
 
 export interface RtTiming {
   trialDurationMs: number;
@@ -128,22 +128,6 @@ export function computeRtPhaseDurations(timing: RtTiming, options: RtPhaseOption
     stimulusEndMs,
     fixationStartMs: fixationStart,
     fixationEndMs: fixationEnd,
-  };
-}
-
-export interface TrialPhase {
-  id: string;
-  durationMs: number;
-  render?: () => void | string;
-}
-
-export interface RunMultiPhaseTrialArgs {
-  container: HTMLElement;
-  phases: TrialPhase[];
-  response: {
-    allowedKeys: string[];
-    startMs: number;
-    endMs: number;
   };
 }
 

@@ -1,4 +1,5 @@
 import type { JSONObject } from "../api/types";
+import type { VariableResolver } from "./variables";
 /**
  * Manages loading and merging of experiment configurations.
  */
@@ -12,6 +13,10 @@ export declare class ConfigurationManager {
      * base -> taskDefault -> variantOverride -> runtimeOverride
      */
     merge(base: JSONObject, taskDefault: JSONObject, variantOverride: JSONObject, runtimeOverride?: JSONObject | null): JSONObject;
+    /**
+     * Resolves variables in the configuration using the provided resolver.
+     */
+    resolve(config: JSONObject, resolver: VariableResolver): JSONObject;
 }
 /**
  * LEGACY: Standalone function for loading JSON files.

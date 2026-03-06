@@ -1,4 +1,4 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "./autoresponder";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "./autoresponder";
 import { asObject, asString } from "../utils/coerce";
 export function resolvePageBackground(args) {
     const taskUi = asObject(asObject(args.taskConfig)?.ui);
@@ -213,6 +213,17 @@ export function captureTimedResponse(args) {
     const totalDurationMs = Math.max(0, args.totalDurationMs);
     const startMs = Math.max(0, args.startMs ?? 0);
     const endMs = Math.max(startMs, args.endMs ?? totalDurationMs);
+    if (isAutoResponderEnabled()) {
+        const auto = sampleAutoResponse({
+            validResponses: args.allowedKeys,
+            trialDurationMs: totalDurationMs,
+        });
+        const delay = Math.max(startMs, Math.min(endMs, auto?.rtMs ?? 0));
+        return sleep(delay).then(() => ({
+            key: auto?.response ?? null,
+            rtMs: auto?.response ? delay : null,
+        }));
+    }
     return new Promise((resolve) => {
         let active = false;
         let captured = { key: null, rtMs: null };
@@ -304,12 +315,14 @@ export function computeCanvasFrameLayout(options) {
 export function drawCanvasTrialFrame(ctx, layout, options = {}) {
     const cueText = options.cueText ?? "";
     const cueColor = options.cueColor ?? "#0f172a";
-    const frameBackground = options.frameBackground ?? "#000000";
-    const frameBorder = options.frameBorder ?? "2px solid #444";
+    const frameBackground = options.frameBackground ?? "#ffffff";
+    const frameBorder = options.frameBorder ?? "1px solid #ddd";
     const border = parseBorder(frameBorder);
     ctx.clearRect(0, 0, layout.aperturePx, layout.totalHeightPx);
-    ctx.fillStyle = "transparent";
-    ctx.fillRect(0, 0, layout.aperturePx, layout.totalHeightPx);
+    // Fill entire canvas with a neutral background if we want consistency
+    // but for now let's just fill the frame area
+    ctx.fillStyle = frameBackground;
+    ctx.fillRect(0, layout.frameTopPx, layout.aperturePx, layout.aperturePx);
     if (cueText) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -317,12 +330,21 @@ export function drawCanvasTrialFrame(ctx, layout, options = {}) {
         ctx.fillStyle = cueColor;
         ctx.fillText(cueText, layout.aperturePx / 2, layout.paddingYPx + layout.cueHeightPx / 2);
     }
-    ctx.fillStyle = frameBackground;
-    ctx.fillRect(0, layout.frameTopPx, layout.aperturePx, layout.aperturePx);
+    // Draw border using lines to ensure crisp 1px edges on all sides
     ctx.lineWidth = border.widthPx;
     ctx.strokeStyle = border.color;
-    const inset = border.widthPx / 2;
-    ctx.strokeRect(inset, layout.frameTopPx + inset, layout.aperturePx - border.widthPx, layout.aperturePx - border.widthPx);
+    const halfWidth = border.widthPx / 2;
+    const left = Math.round(halfWidth);
+    const right = Math.round(layout.aperturePx - halfWidth);
+    const top = Math.round(layout.frameTopPx + halfWidth);
+    const bottom = Math.round(layout.frameTopPx + layout.aperturePx - halfWidth);
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.lineTo(right, bottom);
+    ctx.lineTo(left, bottom);
+    ctx.closePath();
+    ctx.stroke();
 }
 export function drawCanvasFramedScene(ctx, layout, options, drawContent) {
     drawCanvasTrialFrame(ctx, layout, options);

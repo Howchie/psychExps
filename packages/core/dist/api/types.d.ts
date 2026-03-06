@@ -95,9 +95,11 @@ export interface TaskManifest {
 export interface TaskRegistry {
     tasks: TaskManifest[];
 }
+import type { VariableResolver } from "../infrastructure/variables";
 export interface TaskAdapterContext {
     container: HTMLElement;
     selection: SelectionContext;
     coreConfig: CoreConfig;
     taskConfig: JSONObject;
+    resolver: VariableResolver;
 }

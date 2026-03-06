@@ -47,4 +47,29 @@ export interface BasicRtTrialResult {
     timeline: TrialTimelineResult;
 }
 export declare function computeRtPhaseDurations(timing: RtTiming, options?: RtPhaseOptions): RtPhaseDurations;
+export interface TrialPhase {
+    id: string;
+    durationMs: number;
+    render?: () => void | string;
+}
+export interface RunMultiPhaseTrialArgs {
+    container: HTMLElement;
+    phases: TrialPhase[];
+    response: {
+        allowedKeys: string[];
+        startMs: number;
+        endMs: number;
+    };
+}
+export interface MultiPhaseTrialResult {
+    key: string | null;
+    rtMs: number | null;
+    timeline: TrialTimelineResult;
+}
+export interface RunCustomRtTrialArgs {
+    container: HTMLElement;
+    stages: TrialStage[];
+    response: TrialResponseSpec;
+}
+export declare function runCustomRtTrial(args: RunCustomRtTrialArgs): Promise<MultiPhaseTrialResult>;
 export declare function runBasicRtTrial(args: RunBasicRtTrialArgs): Promise<BasicRtTrialResult>;

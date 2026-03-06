@@ -122,6 +122,7 @@ export function createVariableResolver(args = {}) {
     const variables = isObject(variableDefsRaw) ? variableDefsRaw : {};
     const rng = args.rng ?? makeDefaultRng(args.seedParts ?? ["variables"]);
     const backend = args.samplerBackend;
+    const allowedScopes = args.allowedScopes ? new Set(args.allowedScopes) : null;
     const normalizedDefs = new Map();
     for (const [name, raw] of Object.entries(variables)) {
         normalizedDefs.set(name, normalizeVariableDefinition(name, raw));
@@ -152,6 +153,9 @@ export function createVariableResolver(args = {}) {
         const def = getDef(name);
         if (!def)
             return undefined;
+        if (allowedScopes && !allowedScopes.has(def.scope)) {
+            return undefined;
+        }
         if (def.mode === "value") {
             if (stack.has(name))
                 return def.value;
@@ -175,6 +179,8 @@ export function createVariableResolver(args = {}) {
         const n = Math.max(1, Math.floor(Number(count) || 1));
         const def = getDef(name);
         if (!def)
+            return [];
+        if (allowedScopes && !allowedScopes.has(def.scope))
             return [];
         if (def.mode === "value")
             return Array.from({ length: n }, () => def.value);
@@ -212,6 +218,10 @@ export function createVariableResolver(args = {}) {
         const sampleMatch = text.match(SAMPLE_TOKEN_RE);
         if (sampleMatch) {
             const name = sampleMatch[1];
+            const def = getDef(name);
+            if (def && allowedScopes && !allowedScopes.has(def.scope)) {
+                return token;
+            }
             const count = Number(sampleMatch[2] ?? "1");
             const sampled = sampleVar(name, count, context);
             return sampled.length === 1 && !sampleMatch[2] ? sampled[0] : sampled;
@@ -231,13 +241,14 @@ export function createVariableResolver(args = {}) {
                 if (typeof nested !== "undefined")
                     return nested;
             }
-            return undefined;
+            return token;
         }
         const namespaceMatch = text.match(NAMESPACE_TOKEN_RE);
         if (namespaceMatch) {
             const namespace = namespaceMatch[1];
             const path = namespaceMatch[2];
-            return resolveNamespace(namespace, path, context, stack);
+            const resolved = resolveNamespace(namespace, path, context, stack);
+            return typeof resolved !== "undefined" ? resolved : token;
         }
         return token;
     };

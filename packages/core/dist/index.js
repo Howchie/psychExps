@@ -22,6 +22,7 @@ export * from "./infrastructure/selection";
 export * from "./infrastructure/data";
 export * from "./infrastructure/jatos";
 export * from "./infrastructure/redirect";
+export * from "./infrastructure/spatial";
 // Web
 export * from "./web/parameterTransforms";
 export * from "./web/ui";
@@ -46,6 +47,8 @@ export * from "./web/colors";
 export * from "./web/autoresponder";
 export * from "./web/tracking";
 export * from "./web/trial";
+export * from "./web/scene";
+export * from "./web/sceneRenderer";
 // Utils
 export * from "./utils/coerce";
 export * from "./utils/validation";

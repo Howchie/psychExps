@@ -17,6 +17,7 @@ export interface CreateVariableResolverArgs {
     seedParts?: string[];
     samplerBackend?: SamplerBackend;
     namespaces?: Record<string, Record<string, unknown>>;
+    allowedScopes?: VariableScope[];
 }
 export interface VariableResolver {
     resolveToken(token: unknown, context?: VariableResolverContext): unknown;

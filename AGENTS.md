@@ -54,6 +54,10 @@ Core is the source of truth; tasks should consume core mechanisms rather than re
 6. Documentation as Contract
 - Any behavior change must update docs in `docs/` (and config examples where relevant).
 
+7. Test all changes
+- Any files updated should be typechecked
+- Wherever possible, automated responder tests should be run on all tasks after changes have been made, to determine whether any dependencies were unwittingly disrupted.
+
 ---
 
 ## Mandatory Decision Gate: “Can This Be Core-Level?”
@@ -131,7 +135,7 @@ When unsure, default to core-friendly abstractions and keep task adapters thin.
 For non-trivial changes:
 
 - Run typecheck in each affected package.
-- Run task(s) impacted via local URL variants.
+- Run task(s) impacted via local URL variants with auto responder.
 - Validate config parsing errors remain informative.
 - Verify backward-compatible aliases (if introduced).
 
