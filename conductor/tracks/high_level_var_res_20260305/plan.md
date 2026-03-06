@@ -20,15 +20,15 @@
     - [x] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/nback/src/index.ts`
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Task Adapter Refactoring (Batch 1)' (Protocol in workflow.md)
 
-## Phase 3: Task Adapter Refactoring (Batch 2)
+## Phase 3: Task Adapter Refactoring (Batch 2) [checkpoint: 31fa28a]
 - [x] Task: Refactor remaining task adapters (`bricks`, `stroop`, `tracking`) (fa8f8e3)
     - [x] Remove redundant resolution logic from `tasks/bricks/src/index.ts`
     - [x] Remove redundant resolution logic from `tasks/stroop/src/index.ts`
     - [x] Remove redundant resolution logic from `tasks/tracking/src/index.ts`
-- [~] Task: Conductor - User Manual Verification 'Phase 3: Task Adapter Refactoring (Batch 2)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Task Adapter Refactoring (Batch 2)' (Protocol in workflow.md)
 
 ## Phase 4: Final Validation and Documentation
-- [ ] Task: Verify end-to-end functionality in the unified browser shell
+- [~] Task: Verify end-to-end functionality in the unified browser shell
     - [ ] Confirm `pm modern` correctly resolves and displays stimuli
     - [ ] Verify other tasks load and run correctly with high-level resolution
 - [ ] Task: Update project documentation
