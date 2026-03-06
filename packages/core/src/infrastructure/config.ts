@@ -1,6 +1,10 @@
 import { deepClone, deepMerge } from "../infrastructure/deepMerge";
 import type { JSONObject } from "../api/types";
 
+export interface VariableResolver {
+  resolveInValue<T>(value: T, context?: any): T;
+}
+
 /**
  * Manages loading and merging of experiment configurations.
  */
@@ -37,6 +41,13 @@ export class ConfigurationManager {
       deepMerge(merged, runtimeOverride);
     }
     return merged;
+  }
+
+  /**
+   * Resolves variables in the configuration using the provided resolver.
+   */
+  resolve(config: JSONObject, resolver: VariableResolver): JSONObject {
+    return resolver.resolveInValue(config);
   }
 }
 

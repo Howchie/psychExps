@@ -60,4 +60,45 @@ describe('ConfigurationManager', () => {
       await expect(manager.load('/config.json')).rejects.toThrow('Failed to load config');
     });
   });
+
+  describe('resolve', () => {
+    it('should recursively resolve variables in the configuration', () => {
+      const manager = new ConfigurationManager();
+      const config = {
+        foo: '$var.a',
+        bar: {
+          baz: '$var.b',
+          qux: [1, '$var.c', 3]
+        }
+      };
+
+      const mockResolver = {
+        resolveInValue: vi.fn((val) => {
+          if (val === '$var.a') return 'A';
+          if (val === '$var.b') return 'B';
+          if (val === '$var.c') return 'C';
+          if (typeof val === 'object' && val !== null) {
+            if (Array.isArray(val)) return val.map(mockResolver.resolveInValue);
+            const out: any = {};
+            for (const [k, v] of Object.entries(val)) {
+              out[k] = mockResolver.resolveInValue(v);
+            }
+            return out;
+          }
+          return val;
+        })
+      };
+
+      const resolved = (manager as any).resolve(config, mockResolver);
+
+      expect(resolved).toEqual({
+        foo: 'A',
+        bar: {
+          baz: 'B',
+          qux: [1, 'C', 3]
+        }
+      });
+      expect(mockResolver.resolveInValue).toHaveBeenCalled();
+    });
+  });
 });

@@ -1,4 +1,6 @@
-import type { TaskManifest, TaskAdapterContext } from "./types";
+import { ConfigurationManager } from "../infrastructure/config";
+import { createVariableResolver } from "../infrastructure/variables";
+import type { TaskManifest, TaskAdapterContext, JSONObject } from "./types";
 
 /**
  * A standardized interface for a task adapter.
@@ -42,9 +44,37 @@ export class LifecycleManager {
    * If the adapter only has the legacy 'launch' method, it will use that.
    */
   async run(context: TaskAdapterContext): Promise<unknown> {
+    // Standardize VariableResolver instantiation using SelectionContext
+    const taskConfig = context.taskConfig ?? {};
+    const taskVariables = (taskConfig.task as JSONObject)?.variables as JSONObject;
+    const topVariables = taskConfig.variables as JSONObject;
+    const variables = {
+      ...(taskVariables ?? {}),
+      ...(topVariables ?? {}),
+    };
+
+    const resolver = createVariableResolver({
+      variables,
+      seedParts: [
+        context.selection.participant.participantId,
+        context.selection.participant.sessionId,
+        context.selection.variantId,
+        "high_level_resolution",
+      ],
+    });
+
+    // Resolve configuration variables after merging
+    const configManager = new ConfigurationManager();
+    const resolvedConfig = configManager.resolve(taskConfig, resolver);
+
+    const resolvedContext: TaskAdapterContext = {
+      ...context,
+      taskConfig: resolvedConfig,
+    };
+
     try {
       if (this.adapter.initialize) {
-        await this.adapter.initialize(context);
+        await this.adapter.initialize(resolvedContext);
       }
       
       let result: unknown;
@@ -52,7 +82,7 @@ export class LifecycleManager {
         result = await this.adapter.execute();
       } else if (this.adapter.launch) {
         // Fallback for legacy adapters
-        result = await this.adapter.launch(context);
+        result = await this.adapter.launch(resolvedContext);
       } else {
         throw new Error(`Task adapter for ${this.adapter.manifest.taskId} does not have an execute or launch method.`);
       }
