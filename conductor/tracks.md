@@ -9,5 +9,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: move resolvewithvariables to a higher level to address code review**
+- [x] **Track: move resolvewithvariables to a higher level to address code review**
 *Link: [./tracks/high_level_var_res_20260305/](./tracks/high_level_var_res_20260305/)*
