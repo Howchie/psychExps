@@ -244,8 +244,6 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskModuleRu
   const rng = createMulberry32(seed);
 
   const root = context.container;
-  root.style.maxWidth = "980px";
-  root.style.margin = "0 auto";
   root.style.fontFamily = "system-ui";
 
   const stageShell = document.createElement("div");

@@ -92,8 +92,6 @@ async function runBricksTask(context: TaskAdapterContext, runner: TaskModuleRunn
   const config = context.taskConfig as JSONObject;
 
   const root = context.container;
-  root.style.maxWidth = '1200px';
-  root.style.margin = '0 auto';
 
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId));
   const blockPlan = buildBlockPlan(config, rng, context.selection);
