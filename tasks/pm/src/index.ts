@@ -24,8 +24,6 @@ import {
   resolveTemplate,
   createResponseSemantics,
   computeRtPhaseDurations,
-  createVariableResolver,
-  resolveWithVariables,
   coerceCategoryDrawConfig,
   coerceCsvStimulusConfig,
   coercePoolDrawConfig,
@@ -268,21 +266,25 @@ interface PmRuntimeState {
 }
 
 async function preparePmRuntime(context: TaskAdapterContext): Promise<PmRuntimeState> {
-  const parsed = parsePmConfig(context.taskConfig, context.selection);
-  const variableResolver = createPmVariableResolver(parsed, context);
+  const parsed = parsePmConfig(context.taskConfig, context.selection, context.resolver);
   parsed.stimuliByCategory = await loadCategorizedStimulusPools({
     inlinePools: parsed.stimuliByCategory,
     csvConfig: parsed.stimuliCsv,
-    resolver: variableResolver,
+    resolver: context.resolver,
   });
-  applyPmVariableResolution(parsed, variableResolver);
-  const rng = new SeededRandom(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId));
+  const rng = new SeededRandom(
+    hashSeed(
+      context.selection.participant.participantId,
+      context.selection.participant.sessionId,
+      context.selection.variantId,
+    ),
+  );
   const plan = buildExperimentPlan(parsed, rng);
   const eventLogger = createEventLogger(context.selection);
   return {
     parsed,
     plan,
-    variableResolver,
+    variableResolver: context.resolver,
     eventLogger,
     participantId: context.selection.participant.participantId,
     variantId: context.selection.variantId,
@@ -893,7 +895,11 @@ function getPmResponseRowsFromValues(rows: Array<Record<string, unknown>>, block
   return collectPmRecords(rows, "", "").filter((row) => row.blockIndex === blockIndex);
 }
 
-function parsePmConfig(config: JSONObject, selection?: TaskAdapterContext["selection"]): ParsedPmConfig {
+function parsePmConfig(
+  config: JSONObject,
+  selection: TaskAdapterContext["selection"] | undefined,
+  variableResolver: VariableResolver,
+): ParsedPmConfig {
   const mappingRaw = asObject(config.mapping);
   const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
   const nonTargetKey = normalizeKey(asString(mappingRaw?.nonTargetKey) || "z");
@@ -977,17 +983,7 @@ function parsePmConfig(config: JSONObject, selection?: TaskAdapterContext["selec
     ...(taskVariables ?? {}),
     ...(configVariables ?? {}),
   };
-  const planVariableResolver = createVariableResolver({
-    variables: variableDefinitions,
-    seedParts: selection
-      ? [
-          selection.participant.participantId,
-          selection.participant.sessionId,
-          selection.variantId,
-          "pm_variables",
-        ]
-      : ["pm_variables"],
-  });
+  
   const lureLagPasses = parseLureLagPasses(nbackRuleRaw?.lureLagPasses);
   const maxInsertionAttempts = toPositiveNumber(nbackRuleRaw?.maxInsertionAttempts, 10);
   const planManipulations = createManipulationOverrideMap(plan?.manipulations);
@@ -1012,7 +1008,7 @@ function parsePmConfig(config: JSONObject, selection?: TaskAdapterContext["selec
       ),
       index,
       null,
-      planVariableResolver,
+      variableResolver,
       feedbackDefaults,
     ),
   );
@@ -1021,6 +1017,13 @@ function parsePmConfig(config: JSONObject, selection?: TaskAdapterContext["selec
   if (mergedBlocks.length === 0) throw new Error("Invalid PM plan: plan.blocks is empty.");
 
   const stimuliByCategory = parseStimulusPools(config);
+  const referencedCategories = mergedBlocks.flatMap((block) => [
+    ...block.activePmCategories,
+    ...block.controlSourceCategories,
+    ...block.nbackSourceCategories,
+  ]);
+  ensureStimulusCategories(stimuliByCategory, referencedCategories);
+
   const pmCategories = Array.from(new Set(mergedBlocks.flatMap((b) => b.activePmCategories)));
   const instructionsRaw = asObject(config.instructions);
   const instructionSlots = resolveInstructionPageSlots(instructionsRaw, {
@@ -1059,6 +1062,9 @@ function parsePmConfig(config: JSONObject, selection?: TaskAdapterContext["selec
       mode: "without_replacement",
       shuffle: true,
     }),
+    pmKey,
+    targetKey,
+    nonTargetKey,
     pmCategoryDraw: coerceCategoryDrawConfig(asObject(stimulusPoolsRaw?.pmCategoryDraw), {
       mode: "round_robin",
       shuffle: true,
@@ -1097,42 +1103,55 @@ function parseBlock(
   entry: unknown,
   index: number,
   isPractice: boolean | null,
-  variableResolver?: VariableResolver,
+  variableResolver: VariableResolver,
   feedbackFallback?: TrialFeedbackConfig,
 ): PmBlockConfig {
   const b = asObject(entry);
   if (!b) throw new Error(`Invalid PM plan: block ${index + 1} is not an object.`);
   const scope = { blockIndex: index };
-  const resolvedPhase = variableResolver ? variableResolver.resolveToken(b.phase, scope) : b.phase;
+  const resolvedPhase = variableResolver.resolveToken(b.phase, scope);
   const phaseRaw = (asString(resolvedPhase) || "").toLowerCase();
-  const resolvedIsPractice = variableResolver ? variableResolver.resolveToken(b.isPractice, scope) : b.isPractice;
+  const resolvedIsPractice = variableResolver.resolveToken(b.isPractice, scope);
   const inferredPractice = typeof resolvedIsPractice === "boolean" ? resolvedIsPractice : phaseRaw === "practice";
   const isPracticeResolved = isPractice ?? inferredPractice;
-  const resolvedLabel = variableResolver ? variableResolver.resolveToken(b.label, scope) : b.label;
+  const resolvedLabel = variableResolver.resolveToken(b.label, scope);
   const label = asString(resolvedLabel) || `${isPracticeResolved ? "Practice" : "Block"} ${index + 1}`;
-  const resolvedBlockType = variableResolver ? variableResolver.resolveToken(b.blockType, scope) : b.blockType;
+  const resolvedBlockType = variableResolver.resolveToken(b.blockType, scope);
   const rawType = (asString(resolvedBlockType) || "control").toLowerCase();
-  if (rawType !== "pm" && rawType !== "control") throw new Error(`Invalid PM plan: block '${label}' has invalid blockType.`);
+  if (rawType !== "pm" && rawType !== "control")
+    throw new Error(`Invalid PM plan: block '${label}' has invalid blockType.`);
   const blockType: "PM" | "Control" = rawType === "pm" ? "PM" : "Control";
-  const resolvedTrials = variableResolver ? variableResolver.resolveToken(b.trials, scope) : b.trials;
+  const resolvedTrials = variableResolver.resolveToken(b.trials, scope);
   const trials = toPositiveNumber(resolvedTrials, isPracticeResolved ? 20 : 54);
-  const resolvedNLevel = variableResolver ? variableResolver.resolveToken(b.nLevel, scope) : b.nLevel;
+  const resolvedNLevel = variableResolver.resolveToken(b.nLevel, scope);
   const nLevel = toPositiveNumber(resolvedNLevel, isPracticeResolved ? 2 : 1);
 
-  const activePmCategories = asStringArray(b.activePmCategories, ["pm"]);
-  const nbackSourceCategories = asStringArray(b.nbackSourceCategories, ["other"]);
-  const controlSourceCategories = asStringArray(b.controlSourceCategories, []);
-  const resolvedPmCount = variableResolver ? variableResolver.resolveToken(b.pmCount, scope) : b.pmCount;
-  const resolvedTargetCount = variableResolver ? variableResolver.resolveToken(b.targetCount, scope) : b.targetCount;
-  const resolvedLureCount = variableResolver ? variableResolver.resolveToken(b.lureCount, scope) : b.lureCount;
-  const resolvedMinPmSep = variableResolver ? variableResolver.resolveToken(b.minPmSeparation, scope) : b.minPmSeparation;
-  const resolvedMaxPmSep = variableResolver ? variableResolver.resolveToken(b.maxPmSeparation, scope) : b.maxPmSeparation;
-  const resolvedStimulusVariant = variableResolver ? variableResolver.resolveToken(b.stimulusVariant, scope) : b.stimulusVariant;
-  const resolvedFeedbackRaw = variableResolver ? variableResolver.resolveToken(b.feedback, scope) : b.feedback;
+  const activePmCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.activePmCategories, ["pm"]),
+    variableResolver,
+    scope,
+  );
+  const nbackSourceCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.nbackSourceCategories, ["other"]),
+    variableResolver,
+    scope,
+  );
+  const controlSourceCategories = expandCategoryEntriesWithVariables(
+    asStringArray(b.controlSourceCategories, []),
+    variableResolver,
+    scope,
+  );
+  const resolvedPmCount = variableResolver.resolveToken(b.pmCount, scope);
+  const resolvedTargetCount = variableResolver.resolveToken(b.targetCount, scope);
+  const resolvedLureCount = variableResolver.resolveToken(b.lureCount, scope);
+  const resolvedMinPmSep = variableResolver.resolveToken(b.minPmSeparation, scope);
+  const resolvedMaxPmSep = variableResolver.resolveToken(b.maxPmSeparation, scope);
+  const resolvedStimulusVariant = variableResolver.resolveToken(b.stimulusVariant, scope);
+  const resolvedFeedbackRaw = variableResolver.resolveToken(b.feedback, scope);
   const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
   const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
-  const resolvedBeforeBlockScreens = resolveWithVariables(rawBeforeBlockScreens, variableResolver, scope);
-  const resolvedAfterBlockScreens = resolveWithVariables(rawAfterBlockScreens, variableResolver, scope);
+  const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
+  const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
   const feedback = parseTrialFeedbackConfig(asObject(resolvedFeedbackRaw), feedbackFallback ?? null);
 
   return {
@@ -1567,45 +1586,13 @@ function drawSizedImage(
 
 
 
-function createPmVariableResolver(parsed: ParsedPmConfig, context: TaskAdapterContext): VariableResolver {
-  return createVariableResolver({
-    variables: parsed.variableDefinitions,
-    seedParts: [
-      context.selection.participant.participantId,
-      context.selection.participant.sessionId,
-      context.selection.variantId,
-      "pm_variables",
-    ],
-  });
-}
-
-function applyPmVariableResolution(parsed: ParsedPmConfig, resolver: VariableResolver): void {
-  const blocks = [...parsed.practiceBlocks, ...parsed.mainBlocks];
-
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-    const block = blocks[blockIndex];
-    const scope = { blockIndex };
-    block.activePmCategories = expandCategoryEntriesWithVariables(block.activePmCategories, resolver, scope);
-    block.controlSourceCategories = expandCategoryEntriesWithVariables(block.controlSourceCategories, resolver, scope);
-    block.nbackSourceCategories = expandCategoryEntriesWithVariables(block.nbackSourceCategories, resolver, scope);
-  }
-
-  const referencedCategories = blocks.flatMap((block) => [
-    ...block.activePmCategories,
-    ...block.controlSourceCategories,
-    ...block.nbackSourceCategories,
-  ]);
-  ensureStimulusCategories(parsed.stimuliByCategory, referencedCategories);
-  parsed.pmCategories = Array.from(new Set(blocks.flatMap((block) => block.activePmCategories)));
-}
-
 function expandCategoryEntriesWithVariables(
   entries: string[],
   resolver: VariableResolver,
   context: { blockIndex: number },
 ): string[] {
   const flattenResolved = (value: unknown): string[] => {
-    const resolved = resolveWithVariables(value, resolver, context);
+    const resolved = resolver.resolveInValue(value, context);
     if (Array.isArray(resolved)) {
       return resolved.flatMap((entry) => flattenResolved(entry));
     }
