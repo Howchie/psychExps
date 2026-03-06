@@ -25,6 +25,9 @@
     "lureLagPasses": [[2, 4, 5], [6, 7, 8, 9]],
     "maxInsertionAttempts": 10
   },
+  "stimuli": {
+    "other": ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "N", "P", "Q", "R", "S", "T", "V", "W", "X", "Y", "Z"]
+  },
   "variables": {
     "mainNLevel": {
       "scope": "block",

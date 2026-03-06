@@ -1253,7 +1253,7 @@ function parseNbackConfig(
   const parsedMainBlocks = mergedBlocks.filter((block) => !block.isPractice);
   if (mergedBlocks.length === 0) throw new Error("Invalid NBack plan: plan.blocks is empty.");
 
-  const stimuliByCategory = parseStimulusPools(config);
+  const stimuliByCategory = parseStimulusPools(config, variableResolver);
   const referencedCategories = mergedBlocks.flatMap((block) => [
     ...block.activePmCategories,
     ...block.controlSourceCategories,
@@ -1281,14 +1281,16 @@ function parseNbackConfig(
   const completeRaw = asObject(config.completion);
   const redirectRaw = asObject(completeRaw?.redirect);
 
-  const hasPmResponseTrials = mergedBlocks.some((block) => block.blockType === "PM" && block.pmCount > 0 && Boolean(pmKey));
+  const hasPmResponseTrials = mergedBlocks.some(
+    (block) => block.blockType === "PM" && block.pmCount > 0 && Boolean(pmKey),
+  );
   const taskAllowedKeys = hasPmResponseTrials
     ? responseSemantics.allowedKeys(["target", "non_target", "pm"])
     : responseSemantics.allowedKeys(["target", "non_target"]);
   const drtKeysByBlock = mergedBlocks.filter((block) => block.drt.enabled).map((block) => block.drt.key);
-  const allowedKeys = (drt.enabled || drtKeysByBlock.length > 0)
-    ? Array.from(new Set([...taskAllowedKeys, drt.key, ...drtKeysByBlock]))
-    : taskAllowedKeys;
+  const allowedKeysSet = new Set([...taskAllowedKeys, ...drtKeysByBlock]);
+  if (drt.enabled) allowedKeysSet.add(drt.key);
+  const finalAllowedKeys = Array.from(allowedKeysSet);
 
   return {
     title: asString(taskRaw?.title) || "NBack Task",
@@ -1304,7 +1306,10 @@ function parseNbackConfig(
       filenameTemplate: asString(imageAssetsRaw?.filenameTemplate) || "{id}",
       practiceVariant: toPositiveNumber(imageAssetsRaw?.practiceVariant, 1),
       mainVariants: asPositiveNumberArray(imageAssetsRaw?.mainVariants, [1]),
-      mainMode: (asString(imageAssetsRaw?.mainMode) || "with_replacement").toLowerCase() === "cycle" ? "cycle" : "with_replacement",
+      mainMode:
+        (asString(imageAssetsRaw?.mainMode) || "with_replacement").toLowerCase() === "cycle"
+          ? "cycle"
+          : "with_replacement",
     },
     stimuliCsv: coerceCsvStimulusConfig(stimuliCsvRaw),
     nbackPoolDraw: coercePoolDrawConfig(asObject(stimulusPoolsRaw?.nbackDraw), {
@@ -1322,18 +1327,18 @@ function parseNbackConfig(
     pmCueRules: [],
     pmCategories,
     variableDefinitions,
-    allowedKeys,
+    allowedKeys: finalAllowedKeys,
     instructions: {
       introPages: instructionSlots.intro,
       preBlockPages: instructionSlots.preBlock,
       postBlockPages: instructionSlots.postBlock,
       endPages: instructionSlots.end,
-      blockIntroTemplate:
-        asString(instructionsRaw?.blockIntroTemplate) ||
-        "This is a {nLevel}-back block.",
+      blockIntroTemplate: asString(instructionsRaw?.blockIntroTemplate) || "This is a {nLevel}-back block.",
       blockIntroControlTemplate:
         asString(instructionsRaw?.blockIntroControlTemplate) ||
-        "This is a {nLevel}-back block. There are no PM trials in this block.",
+        (pmKey
+          ? "This is a {nLevel}-back block. There are no PM trials in this block."
+          : "This is a {nLevel}-back block."),
       blockIntroPmTemplate:
         asString(instructionsRaw?.blockIntroPmTemplate) ||
         "This is a {nLevel}-back PM block. Watch for {pmCategoryText}.",
@@ -1475,8 +1480,8 @@ function parseBlock(
   };
 }
 
-function parseStimulusPools(config: JSONObject): Record<string, string[]> {
-  const stimuliRaw = asObject(config.stimuli);
+function parseStimulusPools(config: JSONObject, resolver: VariableResolver): Record<string, string[]> {
+  const stimuliRaw = asObject(resolver.resolveInValue(config.stimuli));
   if (!stimuliRaw) {
     return {
       pm: makeSynthetic("pm", 400),
