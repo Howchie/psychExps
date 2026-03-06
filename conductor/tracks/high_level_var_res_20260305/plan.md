@@ -27,11 +27,11 @@
     - [x] Remove redundant resolution logic from `tasks/tracking/src/index.ts`
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Task Adapter Refactoring (Batch 2)' (Protocol in workflow.md)
 
-## Phase 4: Final Validation and Documentation
-- [~] Task: Verify end-to-end functionality in the unified browser shell
-    - [ ] Confirm `pm modern` correctly resolves and displays stimuli
-    - [ ] Verify other tasks load and run correctly with high-level resolution
-- [ ] Task: Update project documentation
-    - [ ] Update `CORE_API.md` to reflect the new configuration resolution process
-    - [ ] Remove variable resolution sections from `TASK_<NAME>.md` files where applicable
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Final Validation and Documentation' (Protocol in workflow.md)
+## Phase 4: Final Validation and Documentation [checkpoint: c271ab6]
+- [x] Task: Verify end-to-end functionality in the unified browser shell
+    - [x] Confirm `pm modern` correctly resolves and displays stimuli
+    - [x] Verify other tasks load and run correctly with high-level resolution
+- [x] Task: Update project documentation (3c9de83)
+    - [x] Update `CORE_API.md` to reflect the new configuration resolution process
+    - [x] Remove variable resolution sections from `TASK_<NAME>.md` files where applicable
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Final Validation and Documentation' (Protocol in workflow.md)
