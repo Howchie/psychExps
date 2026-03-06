@@ -131,13 +131,58 @@ export function computeRtPhaseDurations(timing: RtTiming, options: RtPhaseOption
   };
 }
 
+export interface TrialPhase {
+  id: string;
+  durationMs: number;
+  render?: () => void | string;
+}
+
+export interface RunMultiPhaseTrialArgs {
+  container: HTMLElement;
+  phases: TrialPhase[];
+  response: {
+    allowedKeys: string[];
+    startMs: number;
+    endMs: number;
+  };
+}
+
+export interface MultiPhaseTrialResult {
+  key: string | null;
+  rtMs: number | null;
+  timeline: TrialTimelineResult;
+}
+
+export async function runMultiPhaseTrial(args: RunMultiPhaseTrialArgs): Promise<MultiPhaseTrialResult> {
+  const timeline = await runTrialTimeline({
+    container: args.container,
+    stages: args.phases.map((p) => ({
+      id: p.id,
+      durationMs: p.durationMs,
+      render: p.render,
+    })),
+    response: {
+      allowedKeys: (args.response.allowedKeys ?? []).map((entry) => normalizeKey(entry)).filter(Boolean),
+      startMs: args.response.startMs,
+      endMs: args.response.endMs,
+    },
+  });
+
+  return {
+    key: timeline.key ? normalizeKey(timeline.key) : null,
+    rtMs: timeline.rtMs,
+    timeline,
+  };
+}
+
 export async function runBasicRtTrial(args: RunBasicRtTrialArgs): Promise<BasicRtTrialResult> {
   const timings = computeRtPhaseDurations(args.timing, {
     responseTerminatesTrial: args.responseTerminatesTrial,
   });
-  const timeline = await runTrialTimeline({
+  
+  const result = await runMultiPhaseTrial({
     container: args.container,
-    stages: [
+    phases: [
       {
         id: "pre_fixation_blank",
         durationMs: timings.preFixationBlankMs,
@@ -166,16 +211,16 @@ export async function runBasicRtTrial(args: RunBasicRtTrialArgs): Promise<BasicR
       },
     ],
     response: {
-      allowedKeys: (args.allowedKeys ?? []).map((entry) => normalizeKey(entry)).filter(Boolean),
+      allowedKeys: args.allowedKeys,
       startMs: timings.responseStartMs,
       endMs: timings.responseEndMs,
     },
   });
 
   return {
-    key: timeline.key ? normalizeKey(timeline.key) : null,
-    rtMs: timeline.rtMs,
+    key: result.key,
+    rtMs: result.rtMs,
     timings,
-    timeline,
+    timeline: result.timeline,
   };
 }
