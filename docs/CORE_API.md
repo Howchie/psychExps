@@ -33,6 +33,23 @@ Orchestrates the execution of a `TaskAdapter`.
 - `run(context: TaskAdapterContext): Promise<unknown>`: Executes the full lifecycle: `initialize` -> `execute` (or legacy `launch`) -> `terminate`.
 - **Note:** `run()` automatically performs high-level variable resolution on `context.taskConfig` before calling `initialize`. Only `participant` scoped variables are resolved at this stage; `block` and `trial` scoped variables remain as tokens for the adapter to handle.
 
+### `runCustomRtTrial(args): Promise<MultiPhaseTrialResult>`
+
+A generalized RT trial runner that supports arbitrary phase sequences. Each phase can have a custom render function.
+
+### `SpatialLayoutManager` (Class)
+
+Provides utilities for generating non-overlapping spatial slots for stimuli.
+- `generateSlots(args): Point[]`: Supports `"circular"`, `"grid"`, and `"random"` templates.
+
+### `SceneRenderer` (Class)
+
+Standardized canvas renderer for `SceneStimulus` models. Handles rendering of shapes and supports slot-based positioning.
+
+### `diffScenes(s1, s2): SceneDiff`
+
+Utility to identify identity changes between two structured scenes.
+
 ## 2. Selection and configuration
 
 ### `ConfigurationManager` (Class)

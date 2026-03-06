@@ -42,3 +42,16 @@ test("stroop completes in auto mode", async ({ page }, testInfo) => {
   const files = await capture.flush();
   expect(files.length).toBeGreaterThan(0);
 });
+
+test("change_detection completes in auto mode", async ({ page }, testInfo) => {
+  const capture = installDownloadCapture(page, testInfo);
+  await page.goto("/?task=change_detection&variant=default&auto=true&participant=auto_e2e_cd");
+  
+  const downloadPromise = page.waitForEvent("download");
+  await expect(page.getByText("Task Complete")).toBeVisible(); 
+  await downloadPromise;
+
+  await page.waitForTimeout(1000);
+  const files = await capture.flush();
+  expect(files.length).toBeGreaterThan(0);
+});
