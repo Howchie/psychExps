@@ -193,7 +193,59 @@ Example:
 
 ---
 
-## 7. Troubleshooting Configuration
+## 7. Variable Resolution
+
+The framework supports dynamic variable resolution and sampling in task configurations via the core `VariableResolver`.
+
+### High-Level Resolution
+
+When a task is launched, the `LifecycleManager` automatically resolves variable tokens in the merged configuration *before* passing it to the task adapter's `initialize` method.
+
+**Important Scope Note:**
+- Only **`participant`** scoped variables are resolved at this high level.
+- **`block`** and **`trial`** scoped variables are left as tokens (e.g., `"$var.myVar"`) so that task adapters can resolve them dynamically during the experiment lifecycle.
+
+### Defining Variables
+
+Variables are defined in the `variables` section of the task configuration.
+
+```json
+{
+  "variables": {
+    "betweenGroup": {
+      "scope": "participant",
+      "sampler": {
+        "type": "list",
+        "values": ["A", "B"]
+      }
+    },
+    "difficulty": {
+      "scope": "block",
+      "sampler": {
+        "type": "list",
+        "values": [1, 2, 3]
+      }
+    }
+  }
+}
+```
+
+### Supported Tokens
+
+- **`$var.name`**: Direct variable reference.
+- **`$sample.name[:count]`**: Samples from a variable (uses the variable's sampler).
+- **`$namespace.path`**: References values from a specific namespace (e.g., `$local.itemId` or `$between.condition`).
+
+### Namespace Support
+
+The framework supports several namespaces:
+- `var`: The default namespace for variables defined in the config.
+- `local`: Local values provided by the task adapter during dynamic resolution (e.g., trial-level data).
+- Custom namespaces: Can be registered by task adapters.
+
+---
+
+## 8. Troubleshooting Configuration
 
 If your config changes aren't taking effect, check the following:
 

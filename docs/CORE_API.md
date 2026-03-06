@@ -15,12 +15,23 @@ All task adapters must implement this interface to be compatible with the unifie
 - `execute(): Promise<unknown>`: (Optional) Called to run the main task logic. Should return the task results.
 - `terminate(): Promise<void>`: (Optional) Called after execution (success or failure) to clean up resources like global listeners or timers.
 
+### `TaskAdapterContext` (Interface)
+
+Context provided to task adapters during initialization and execution.
+
+- `container: HTMLElement`: The root element for the task UI.
+- `selection: SelectionContext`: Metadata about the current task, variant, and participant.
+- `coreConfig: CoreConfig`: The full core framework configuration.
+- `taskConfig: JSONObject`: The task-specific configuration (automatically resolved at participant scope).
+- `resolver: VariableResolver`: A pre-configured resolver for handling block and trial scoped variables.
+
 ### `LifecycleManager` (Class)
 
 Orchestrates the execution of a `TaskAdapter`.
 
 - `constructor(adapter: TaskAdapter)`
-- `run(context: TaskAdapterContext): Promise<unknown>`: Executes the full lifecycle: `initialize` -> `execute` (or legacy `launch`) -> `terminate`. Ensures `terminate` is always called.
+- `run(context: TaskAdapterContext): Promise<unknown>`: Executes the full lifecycle: `initialize` -> `execute` (or legacy `launch`) -> `terminate`.
+- **Note:** `run()` automatically performs high-level variable resolution on `context.taskConfig` before calling `initialize`. Only `participant` scoped variables are resolved at this stage; `block` and `trial` scoped variables remain as tokens for the adapter to handle.
 
 ## 2. Selection and configuration
 
@@ -30,6 +41,7 @@ Manages the loading, merging, and validation of experiment configurations.
 
 - `load(path: string): Promise<JSONObject>`: Fetches and parses a JSON config file.
 - `merge(base, taskDefault, variantOverride, runtimeOverride?): JSONObject`: Sequentially deep-merges configuration levels.
+- `resolve(config: JSONObject, resolver: VariableResolver): JSONObject`: Recursively resolves variable tokens in the configuration using the provided resolver.
 
 ### `resolveSelection(coreConfig: CoreConfig): SelectionContext`
 
