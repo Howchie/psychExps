@@ -1,0 +1,8 @@
+{
+  "track_id": "high_level_var_res_20260305",
+  "type": "refactor",
+  "status": "new",
+  "created_at": "2026-03-05T16:00:00Z",
+  "updated_at": "2026-03-05T16:00:00Z",
+  "description": "move resolvewithvariables to a higher level to address code review"
+}
