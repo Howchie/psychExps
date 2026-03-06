@@ -29,9 +29,9 @@
     - [x] Create basic instructions and feedback screens
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Change Detection Task Implementation' (Protocol in workflow.md)
 
-## Phase 4: Final Validation and Documentation
-- [ ] Task: Verify end-to-end functionality with auto-responder
-    - [ ] Run synthetic sessions to verify data contract and reproducibility
-- [ ] Task: Update project documentation
-    - [ ] Add `TASK_CHANGE_DETECTION.md` and update `CORE_API.md`
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Final Validation and Documentation' (Protocol in workflow.md)
+## Phase 4: Final Validation and Documentation [checkpoint: 186f079]
+- [x] Task: Verify end-to-end functionality with auto-responder
+    - [x] Run synthetic sessions to verify data contract and reproducibility
+- [x] Task: Update project documentation
+    - [x] Add `TASK_CHANGE_DETECTION.md` and update `CORE_API.md`
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Final Validation and Documentation' (Protocol in workflow.md)
