@@ -1,15 +1,15 @@
 # Implementation Plan: Modular Prospective Memory Extraction (Track: modular_pm_split_20260306)
 
-## Phase 1: Core Key Arbitration and TaskModule Enhancement
-- [ ] Task: Implement Key Arbitration in `TaskModuleRunner`
-    - [ ] Write failing tests in `packages/core/src/api/taskModule.test.ts` for multiple modules handling the same key.
-    - [ ] Update `TaskModuleRunner.handleKey` to support a priority-based or registration-based arbitration.
-    - [ ] Verify tests pass.
-- [ ] Task: Add `onKeyHandled` event to `TaskModuleRunner`
-    - [ ] Write tests to ensure an event is emitted when a module handles a key.
-    - [ ] Implement the event emission.
-    - [ ] Verify tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Core Key Arbitration and TaskModule Enhancement' (Protocol in workflow.md)
+## Phase 1: Core Key Arbitration and TaskModule Enhancement [checkpoint: 60d97c8]
+- [x] Task: Implement Key Arbitration in `TaskModuleRunner` 60d97c8
+    - [x] Write failing tests in `packages/core/src/api/taskModule.test.ts` for multiple modules handling the same key. 60d97c8
+    - [x] Update `TaskModuleRunner.handleKey` to support a priority-based or registration-based arbitration. 60d97c8
+    - [x] Verify tests pass. 60d97c8
+- [x] Task: Add `onKeyHandled` event to `TaskModuleRunner` 60d97c8
+    - [x] Write tests to ensure an event is emitted when a module handles a key. 60d97c8
+    - [x] Implement the event emission. 60d97c8
+    - [x] Verify tests pass. 60d97c8
+- [x] Task: Conductor - User Manual Verification 'Core Key Arbitration and TaskModule Enhancement' (Protocol in workflow.md) 60d97c8
 
 ## Phase 2: Extract ProspectiveMemoryModule to Core
 - [ ] Task: Create `ProspectiveMemoryModule` in Core
