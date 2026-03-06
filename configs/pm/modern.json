@@ -22,11 +22,41 @@
     "nonTargetKey": "z",
     "pmKey": "space"
   },
-  "nbackRule": {
-    "lureLagPasses": [[2, 4, 5], [6, 7, 8, 9]],
-    "maxInsertionAttempts": 10
+  "display": {
+    "fixationFontSizePx": 24,
+    "fixationFontWeight": 400,
+    "imageWidthPx": 160,
+    "imageHeightPx": 160,
+    "imageUpscale": false
+  },
+  "stimuliCsv": {
+    "basePath": "/assets/nback-pm-modern",
+    "idColumn": "file",
+    "categories": {
+      "food": "food.csv",
+      "clothing": "clothing.csv",
+      "other": "other.csv"
+    }
   },
   "variables": {
+    "id": {
+      "scope": "trial",
+      "value": "$local.itemId"
+    },
+    "variant": {
+      "scope": "block",
+      "value": "$local.stimulusVariant"
+    },
+    "between": {
+      "scope": "participant",
+      "sampler": {
+        "type": "list",
+        "values": [
+          { "pm": "food", "control": "clothing" },
+          { "pm": "clothing", "control": "food" }
+        ]
+      }
+    },
     "mainBlockType": {
       "scope": "block",
       "sampler": {
@@ -44,6 +74,18 @@
       }
     }
   },
+  "imageAssets": {
+    "enabled": true,
+    "basePath": "/assets/nback-pm-modern/images",
+    "filenameTemplate": "{id}{variant}-photo-colour.png",
+    "practiceVariant": 3,
+    "mainVariants": [1, 2],
+    "mainMode": "with_replacement"
+  },
+  "nbackRule": {
+    "lureLagPasses": [[2, 4, 5], [6, 7, 8, 9]],
+    "maxInsertionAttempts": 10
+  },
   "plan": {
     "manipulations": [
       { "id": "pm_block", "overrides": { "blockType": "pm" } },
@@ -52,7 +94,13 @@
       { "id": "nlevel_2", "overrides": { "nLevel": 2 } },
       { "id": "nlevel_3", "overrides": { "nLevel": 3 } },
       {
-        "id": "main_sampled",
+        "id": "category_assignment",
+        "overrides": {
+          "activePmCategories": ["$between.pm"],
+          "controlSourceCategories": ["$between.control"]
+        }
+      },
+      { "id": "main",
         "overrides": {
           "blockType": "$var.mainBlockType",
           "nLevel": "$var.mainNLevel"
@@ -60,13 +108,13 @@
       }
     ],
     "blocks": [
-      { "phase": "practice", "label": "Practice 2-back", "manipulations": ["control_block", "nlevel_2"], "trials": 20 },
-      { "phase": "practice", "label": "Practice 1-back PM", "manipulations": ["pm_block", "nlevel_1"], "trials": 20 },
-      { "phase": "practice", "label": "Practice 3-back", "manipulations": ["control_block", "nlevel_3"], "trials": 20 },
-      { "phase": "main", "label": "Main 1", "manipulation": "main_sampled", "trials": 54 },
-      { "phase": "main", "label": "Main 2", "manipulation": "main_sampled", "trials": 54 },
-      { "phase": "main", "label": "Main 3", "manipulation": "main_sampled", "trials": 54 },
-      { "phase": "main", "label": "Main 4", "manipulation": "main_sampled", "trials": 54 }
+      { "phase": "practice", "label": "Practice 2-back", "manipulations": ["control_block", "nlevel_2", "category_assignment"], "trials": 20, "feedback": { "enabled": true } },
+      { "phase": "practice", "label": "Practice 1-back PM", "manipulations": ["pm_block", "nlevel_1", "category_assignment"], "trials": 20, "feedback": { "enabled": true } },
+      { "phase": "practice", "label": "Practice 3-back", "manipulations": ["control_block", "nlevel_3", "category_assignment"], "trials": 20, "feedback": { "enabled": true } },
+      { "phase": "main", "label": "Main 1", "manipulation": "main", "manipulations": ["category_assignment"], "trials": 54 },
+      { "phase": "main", "label": "Main 2", "manipulation": "main", "manipulations": ["category_assignment"], "trials": 54 },
+      { "phase": "main", "label": "Main 3", "manipulation": "main", "manipulations": ["category_assignment"], "trials": 54 },
+      { "phase": "main", "label": "Main 4", "manipulation": "main", "manipulations": ["category_assignment"], "trials": 54 }
     ]
   }
 }
