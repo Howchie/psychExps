@@ -53,7 +53,7 @@ export class LifecycleManager {
       ...(topVariables ?? {}),
     };
 
-    const resolver = createVariableResolver({
+    const commonResolverArgs = {
       variables,
       seedParts: [
         context.selection.participant.participantId,
@@ -61,15 +61,25 @@ export class LifecycleManager {
         context.selection.variantId,
         "high_level_resolution",
       ],
+    };
+
+    // 1. High-level resolver: restricted to participant scope to prevent over-resolution
+    const highLevelResolver = createVariableResolver({
+      ...commonResolverArgs,
+      allowedScopes: ["participant"],
     });
 
-    // Resolve configuration variables after merging
+    // 2. Full resolver: for the task adapter to handle block and trial scopes
+    const taskResolver = createVariableResolver(commonResolverArgs);
+
+    // Resolve configuration variables after merging (static parts only)
     const configManager = new ConfigurationManager();
-    const resolvedConfig = configManager.resolve(taskConfig, resolver);
+    const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
 
     const resolvedContext: TaskAdapterContext = {
       ...context,
       taskConfig: resolvedConfig,
+      resolver: taskResolver,
     };
 
     try {

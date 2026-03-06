@@ -25,7 +25,8 @@ describe('LifecycleManager', () => {
     const result = await manager.run(context);
 
     expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: {}
+      taskConfig: {},
+      resolver: expect.anything()
     }));
     expect(mockAdapter.execute).toHaveBeenCalled();
     expect(mockAdapter.terminate).toHaveBeenCalled();
