@@ -137,13 +137,20 @@ export class TaskModuleRunner {
   }
 
   handleKey(key: string, now: number): boolean {
-    let handled = false;
-    for (const entry of this.active.values()) {
+    const entries = Array.from(this.active.values()).reverse();
+    for (const entry of entries) {
       if (entry.handle.handleKey?.(key, now)) {
-        handled = true;
+        this.options.onEvent?.({
+          type: "module_key_handled",
+          moduleId: entry.moduleId,
+          address: entry.address,
+          key,
+          timestamp: now,
+        });
+        return true;
       }
     }
-    return handled;
+    return false;
   }
 
   getResults(): TaskModuleResult[] {
