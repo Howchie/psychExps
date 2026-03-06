@@ -18,16 +18,16 @@
     - [x] Implement canvas rendering hooks for `SceneStimulus`
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Core Trial Flow Enhancement' (Protocol in workflow.md)
 
-## Phase 3: Change Detection Task Implementation
-- [ ] Task: Scaffold `tasks/change_detection` package
-    - [ ] Create package structure and configuration schema
-- [ ] Task: Implement Change Detection trial planner
-    - [ ] Write unit tests for change/no-change proportions and set-size distribution
-    - [ ] Implement planner logic using core RNG and sampling helpers
-- [ ] Task: Implement task adapter logic and UI
-    - [ ] Implement `initialize`, `execute`, and `terminate` methods using core enhancements
-    - [ ] Create basic instructions and feedback screens
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Change Detection Task Implementation' (Protocol in workflow.md)
+## Phase 3: Change Detection Task Implementation [checkpoint: 3c7afe5]
+- [x] Task: Scaffold `tasks/change_detection` package
+    - [x] Create package structure and configuration schema
+- [x] Task: Implement Change Detection trial planner
+    - [x] Write unit tests for change/no-change proportions and set-size distribution
+    - [x] Implement planner logic using core RNG and sampling helpers
+- [x] Task: Implement task adapter logic and UI
+    - [x] Implement `initialize`, `execute`, and `terminate` methods using core enhancements
+    - [x] Create basic instructions and feedback screens
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Change Detection Task Implementation' (Protocol in workflow.md)
 
 ## Phase 4: Final Validation and Documentation
 - [ ] Task: Verify end-to-end functionality with auto-responder
