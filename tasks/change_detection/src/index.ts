@@ -26,6 +26,12 @@ import {
   mountCanvasElement,
   drawCanvasFramedScene,
   drawCanvasTrialFrame,
+  finalizeTaskRun,
+  runTaskSession,
+  runTaskIntroFlow,
+  runTaskEndFlow,
+  runBlockStartFlow,
+  recordsToCsv,
 } from "@experiments/core";
 import { buildTrialPlan, type TrialPlanItem } from "./planner";
 
@@ -53,48 +59,91 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
       hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId)
     );
     
-    // 1. Instructions
-    await waitForContinue(container, "<h1>Change Detection</h1><p>In this task, you will see a set of colored shapes. Memorize them.</p><p>After a short delay, you will see the shapes again. One of them might have changed.</p><p>Press 'S' if they have CHANGED, and 'D' if they are the SAME.</p>");
+    const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
 
     const trialPlan = buildTrialPlan(taskConfig, rng);
-    const results: any[] = [];
+    const blocks = asArray(asObject(taskConfig.plan)?.blocks);
 
-    // Use a square canvas to match core layout expectations
     const { canvas, ctx } = mountCanvasElement({
       container,
       width: 600,
       height: 600,
     });
-
     const sceneRenderer = new SceneRenderer(canvas);
-    const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null, {
-      style: {
-        canvasBackground: "#ffffff",
-        canvasBorder: "1px solid #ddd",
-      }
-    });
     const layout = computeCanvasFrameLayout({ aperturePx: 560 });
 
-    for (const trial of trialPlan) {
-      const result = await this.runTrial(trial, taskConfig, sceneRenderer, canvas, ctx, container, layout, rng);
-      results.push(result);
-      
-      // Feedback using core utilities
-      if (feedbackConfig.enabled) {
-        const view = resolveTrialFeedbackView({
-          feedback: feedbackConfig,
-          responseCategory: result.responseCorrect === 1 ? "correct" : "incorrect",
-          correct: result.responseCorrect,
-        });
+    const sessionResult = await runTaskSession({
+      blocks: blocks,
+      getTrials: ({ blockIndex }) => trialPlan.filter(t => t.blockIndex === blockIndex),
+      runTrial: async ({ trial, trialIndex }) => {
+        const result = await this.runTrial(trial, taskConfig, sceneRenderer, canvas, ctx, container, layout, rng);
         
-        container.innerHTML = "";
-        container.appendChild(canvas.parentElement || canvas);
-        drawTrialFeedbackOnCanvas(ctx, layout, feedbackConfig, view);
-        await sleep(feedbackConfig.durationMs);
-      }
-    }
+        // Feedback
+        if (feedbackConfig.enabled) {
+          const view = resolveTrialFeedbackView({
+            feedback: feedbackConfig,
+            responseCategory: result.responseCorrect === 1 ? "correct" : "incorrect",
+            correct: result.responseCorrect,
+          });
 
-    return { success: true, results };
+          drawTrialFeedbackOnCanvas(ctx, layout, feedbackConfig, view);
+          await sleep(feedbackConfig.durationMs);
+
+          // Blank after feedback
+          drawCanvasTrialFrame(ctx, layout, { frameBackground: "#ffffff", frameBorder: "1px solid #ddd" });
+          await sleep(100);
+        }
+        return result;
+      },
+      hooks: {
+        onTaskStart: async () => {
+          await runTaskIntroFlow({
+            container,
+            title: asString(asObject(taskConfig.task)?.title) || "Change Detection",
+            participantId: selection.participant.participantId,
+            introPages: [
+              "In this task, you will see a set of colored shapes. Memorize them.",
+              "After a short delay, you will see the shapes again. One of them might have changed.",
+              "Press 'S' if they have CHANGED, and 'D' if they are the SAME."
+            ],
+            buttonIdPrefix: "cd-intro"
+          });
+        },
+        onBlockStart: async ({ block, blockIndex }) => {
+          await runBlockStartFlow({
+            container,
+            blockLabel: asString(asObject(block)?.label) || `Block ${blockIndex + 1}`,
+            blockIndex,
+            buttonIdPrefix: "cd-block-start",
+          });
+        },
+        onTaskEnd: async () => {
+          await runTaskEndFlow({
+            container,
+            endPages: ["Thank you for participating."],
+            buttonIdPrefix: "cd-end"
+          });
+        }
+      }
+    });
+
+    const flatResults = sessionResult.blocks.flatMap(b => b.trialResults);
+    const csv = recordsToCsv(flatResults.map(r => ({
+      participantId: selection.participant.participantId,
+      variantId: selection.variantId,
+      ...r,
+      // Flatten diff for CSV
+      changedIndices: r.diff.changedIndices.join("|")
+    })));
+
+    await finalizeTaskRun({
+      coreConfig: this.context.coreConfig,
+      selection: this.context.selection,
+      payload: sessionResult,
+      csv: { contents: csv, suffix: "trials" }
+    });
+
+    return sessionResult;
   }
 
   private async runTrial(
@@ -117,9 +166,9 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
       template: (asString(layoutConfig?.type) as any) || "circular",
       count: trial.setSize,
       radius: toPositiveNumber(layoutConfig?.radius, 200),
-      centerX: 280, // Half of aperture 560
-      centerY: 280,
-      bounds: { width: 560, height: 560 },
+      centerX: layout.aperturePx / 2, 
+      centerY: layout.aperturePx / 2,
+      bounds: { width: layout.aperturePx, height: layout.aperturePx },
       slotSize: { width: 50, height: 50 },
       padding: toNonNegativeNumber(layoutConfig?.padding, 20),
       rng,
@@ -161,15 +210,13 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
       frameBorder: "1px solid #ddd",
     };
 
-    const trialResult = await runCustomRtTrial({
+    const result = await runCustomRtTrial({
       container,
       stages: [
         { 
           id: "fixation", 
           durationMs: toPositiveNumber(timingConfig?.fixationMs, 500), 
           render: () => {
-            container.innerHTML = "";
-            container.appendChild(canvas.parentElement || canvas);
             drawCanvasFramedScene(ctx, layout, frameOptions, (args) => {
               args.ctx.fillStyle = "black";
               args.ctx.font = "40px Arial";
@@ -186,7 +233,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
             drawCanvasFramedScene(ctx, layout, frameOptions, (args) => {
               ctx.save();
               ctx.translate(args.frameLeft, args.frameTop);
-              renderer.render(encodingScene, slots);
+              renderer.render(encodingScene, slots, { clear: false });
               ctx.restore();
             });
           }
@@ -205,7 +252,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
             drawCanvasFramedScene(ctx, layout, frameOptions, (args) => {
               ctx.save();
               ctx.translate(args.frameLeft, args.frameTop);
-              renderer.render(probeScene, slots);
+              renderer.render(probeScene, slots, { clear: false });
               ctx.restore();
             });
           } 
@@ -221,12 +268,12 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     });
 
     const isCorrect = trial.isChange 
-      ? trialResult.key === diffKey 
-      : trialResult.key === sameKey;
+      ? result.key === diffKey 
+      : result.key === sameKey;
 
     return {
       ...trial,
-      ...trialResult,
+      ...result,
       responseCorrect: isCorrect ? 1 : 0,
       diff: diffScenes(encodingScene, probeScene),
     };

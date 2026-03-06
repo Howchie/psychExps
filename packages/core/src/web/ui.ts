@@ -1,4 +1,4 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "./autoresponder";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "./autoresponder";
 import { asObject, asString } from "../utils/coerce";
 import type { CoreConfig, JSONObject } from "../api/types";
 
@@ -331,6 +331,18 @@ export function captureTimedResponse(args: CaptureTimedResponseArgs): Promise<Ti
   const totalDurationMs = Math.max(0, args.totalDurationMs);
   const startMs = Math.max(0, args.startMs ?? 0);
   const endMs = Math.max(startMs, args.endMs ?? totalDurationMs);
+
+  if (isAutoResponderEnabled()) {
+    const auto = sampleAutoResponse({
+      validResponses: args.allowedKeys,
+      trialDurationMs: totalDurationMs,
+    });
+    const delay = Math.max(startMs, Math.min(endMs, auto?.rtMs ?? 0));
+    return sleep(delay).then(() => ({
+      key: auto?.response ?? null,
+      rtMs: auto?.response ? delay : null,
+    }));
+  }
 
   return new Promise((resolve) => {
     let active = false;

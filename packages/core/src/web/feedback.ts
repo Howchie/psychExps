@@ -89,8 +89,8 @@ const DEFAULT_FEEDBACK: TrialFeedbackConfig = {
     byResponseCategoryColors: {},
     fontSizePx: 28,
     fontWeight: 700,
-    canvasBackground: "#000000",
-    canvasBorder: "2px solid #444",
+    canvasBackground: "#ffffff",
+    canvasBorder: "2px solid #ddd",
   },
 };
 

@@ -19,7 +19,7 @@
         "minMs": 250,
         "maxMs": 750
       },
-      "responseTerminatesTrial": false,
+      "responseTerminatesTrial": true,
       "postResponseContent": "stimulus",
       "feedbackPhase": "post_response"
     }

@@ -9,10 +9,12 @@ export class SceneRenderer {
   }
 
   /**
-   * Clears the canvas and renders the scene into the provided slots.
+   * Renders the scene into the provided slots.
    */
-  render(scene: SceneStimulus, slots: Point[]): void {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  render(scene: SceneStimulus, slots: Point[], options: { clear?: boolean } = {}): void {
+    if (options.clear !== false) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
     for (let i = 0; i < scene.items.length; i++) {
       const item = scene.items[i];

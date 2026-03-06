@@ -1062,9 +1062,6 @@ function parsePmConfig(
       mode: "without_replacement",
       shuffle: true,
     }),
-    pmKey,
-    targetKey,
-    nonTargetKey,
     pmCategoryDraw: coerceCategoryDrawConfig(asObject(stimulusPoolsRaw?.pmCategoryDraw), {
       mode: "round_robin",
       shuffle: true,

@@ -2,7 +2,27 @@
   "task": {
     "implementation": "jspsych_sft",
     "runner": "jspsych",
-    "title": "SFT jsPsych"
+    "title": "SFT jsPsych",
+    "rtTask": {
+      "enabled": true,
+      "timing": {
+        "trialDurationMs": 3666,
+        "fixationOnsetMs": 0,
+        "fixationDurationMs": 500,
+        "stimulusOnsetMs": 566,
+        "stimulusDurationMs": 100,
+        "responseWindowStartMs": 566,
+        "responseWindowEndMs": 3566
+      },
+      "fixationJitter": {
+        "enabled": true,
+        "minMs": 250,
+        "maxMs": 750
+      },
+      "responseTerminatesTrial": true,
+      "postResponseContent": "stimulus",
+      "feedbackPhase": "post_response"
+    }
   },
   "display": {
     "canvas_background": "#000000",
@@ -43,5 +63,12 @@
   },
   "stimulus": {
       "condition_codes": ["HH", "Hx", "xH", "xx"]
+  },
+  "surveys": {
+    "betweenTrial": [
+      {
+        "preset": "nasa_tlx"
+      }
+    ]
   }
 }
