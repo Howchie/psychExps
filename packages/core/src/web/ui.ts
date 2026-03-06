@@ -444,13 +444,16 @@ export function drawCanvasTrialFrame(
 ): void {
   const cueText = options.cueText ?? "";
   const cueColor = options.cueColor ?? "#0f172a";
-  const frameBackground = options.frameBackground ?? "#000000";
-  const frameBorder = options.frameBorder ?? "2px solid #444";
+  const frameBackground = options.frameBackground ?? "#ffffff";
+  const frameBorder = options.frameBorder ?? "1px solid #ddd";
   const border = parseBorder(frameBorder);
 
   ctx.clearRect(0, 0, layout.aperturePx, layout.totalHeightPx);
-  ctx.fillStyle = "transparent";
-  ctx.fillRect(0, 0, layout.aperturePx, layout.totalHeightPx);
+  
+  // Fill entire canvas with a neutral background if we want consistency
+  // but for now let's just fill the frame area
+  ctx.fillStyle = frameBackground;
+  ctx.fillRect(0, layout.frameTopPx, layout.aperturePx, layout.aperturePx);
 
   if (cueText) {
     ctx.textAlign = "center";
@@ -460,13 +463,23 @@ export function drawCanvasTrialFrame(
     ctx.fillText(cueText, layout.aperturePx / 2, layout.paddingYPx + layout.cueHeightPx / 2);
   }
 
-  ctx.fillStyle = frameBackground;
-  ctx.fillRect(0, layout.frameTopPx, layout.aperturePx, layout.aperturePx);
-
+  // Draw border using lines to ensure crisp 1px edges on all sides
   ctx.lineWidth = border.widthPx;
   ctx.strokeStyle = border.color;
-  const inset = border.widthPx / 2;
-  ctx.strokeRect(inset, layout.frameTopPx + inset, layout.aperturePx - border.widthPx, layout.aperturePx - border.widthPx);
+  
+  const halfWidth = border.widthPx / 2;
+  const left = Math.round(halfWidth);
+  const right = Math.round(layout.aperturePx - halfWidth);
+  const top = Math.round(layout.frameTopPx + halfWidth);
+  const bottom = Math.round(layout.frameTopPx + layout.aperturePx - halfWidth);
+
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+  ctx.lineTo(right, top);
+  ctx.lineTo(right, bottom);
+  ctx.lineTo(left, bottom);
+  ctx.closePath();
+  ctx.stroke();
 }
 
 export function drawCanvasFramedScene(

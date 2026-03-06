@@ -60,39 +60,52 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     );
     
     const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
+    const layout = computeCanvasFrameLayout({ 
+      aperturePx: toPositiveNumber(asObject(taskConfig.display)?.aperturePx, 560) 
+    });
 
     const trialPlan = buildTrialPlan(taskConfig, rng);
     const blocks = asArray(asObject(taskConfig.plan)?.blocks);
 
+    // Mount canvas with correct height for the layout
     const { canvas, ctx } = mountCanvasElement({
       container,
-      width: 600,
-      height: 600,
+      width: layout.aperturePx,
+      height: layout.totalHeightPx,
     });
     const sceneRenderer = new SceneRenderer(canvas);
-    const layout = computeCanvasFrameLayout({ aperturePx: 560 });
 
     const sessionResult = await runTaskSession({
       blocks: blocks,
       getTrials: ({ blockIndex }) => trialPlan.filter(t => t.blockIndex === blockIndex),
       runTrial: async ({ trial, trialIndex }) => {
-        const result = await this.runTrial(trial, taskConfig, sceneRenderer, canvas, ctx, container, layout, rng);
+        // Ensure canvas is mounted at start of every trial
+        container.innerHTML = "";
+        container.appendChild(canvas.parentElement || canvas);
+
+        const result = await this.runTrial(trial, taskConfig, sceneRenderer, canvas, ctx, container, layout, feedbackConfig, rng);
         
         // Feedback
         if (feedbackConfig.enabled) {
+          const responseCategory = result.key === null ? "timeout" : (result.responseCorrect === 1 ? "correct" : "incorrect");
           const view = resolveTrialFeedbackView({
             feedback: feedbackConfig,
-            responseCategory: result.responseCorrect === 1 ? "correct" : "incorrect",
+            responseCategory,
             correct: result.responseCorrect,
           });
-
+          
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           drawTrialFeedbackOnCanvas(ctx, layout, feedbackConfig, view);
           await sleep(feedbackConfig.durationMs);
-
+          
           // Blank after feedback
-          drawCanvasTrialFrame(ctx, layout, { frameBackground: "#ffffff", frameBorder: "1px solid #ddd" });
+          drawCanvasTrialFrame(ctx, layout, { 
+            frameBackground: "#ffffff", 
+            frameBorder: feedbackConfig.style.canvasBorder 
+          });
           await sleep(100);
         }
+        
         return result;
       },
       hooks: {
@@ -154,6 +167,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
     ctx: CanvasRenderingContext2D,
     container: HTMLElement,
     layout: any,
+    feedbackConfig: any,
     rng: SeededRandom
   ): Promise<any> {
     const stimulusConfig = asObject(config.stimulus);
@@ -207,7 +221,7 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
 
     const frameOptions = {
       frameBackground: "#ffffff",
-      frameBorder: "1px solid #ddd",
+      frameBorder: feedbackConfig.style.canvasBorder,
     };
 
     const result = await runCustomRtTrial({
