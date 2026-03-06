@@ -2,21 +2,17 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from "vitest";
-import { runMultiPhaseTrial } from "./rtTask";
+import { runCustomRtTrial } from "./rtTask";
 
-describe("runMultiPhaseTrial", () => {
-  it("should execute a sequence of phases and capture response", async () => {
+describe("runCustomRtTrial", () => {
+  it("should execute a sequence of stages and capture response", async () => {
     const container = document.createElement("div");
     const render1 = vi.fn().mockReturnValue("P1");
     const render2 = vi.fn().mockReturnValue("P2");
 
-    // Mock timer/animation frame if needed, but runTrialTimeline 
-    // uses standard setTimeout which vitest handles.
-    // However, runTrialTimeline is async.
-
-    const resultPromise = runMultiPhaseTrial({
+    const resultPromise = runCustomRtTrial({
       container,
-      phases: [
+      stages: [
         { id: "p1", durationMs: 100, render: render1 },
         { id: "p2", durationMs: 100, render: render2 },
       ],

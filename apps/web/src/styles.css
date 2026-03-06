@@ -104,6 +104,20 @@ code {
   position: relative;
 }
 
+.exp-canvas-stage-shell {
+  margin: 0 auto;
+  position: relative;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.exp-canvas-container {
+  position: relative;
+}
+
 .trial-start-overlay {
   position: absolute;
   top: 50%;

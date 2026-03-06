@@ -1,7 +1,23 @@
 import { asObject, asString, toNonNegativeNumber, toPositiveNumber } from "../utils/coerce";
 import { resolveTemplatedString } from "../web/stimulus";
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
-import { drawCenteredCanvasMessage, type CanvasFrameLayout } from "./ui";
+import { drawCenteredCanvasMessage, type CanvasFrameLayout, sleep } from "./ui";
+
+// ... (existing interfaces)
+
+export async function runSimpleTrialFeedback(
+  container: HTMLElement,
+  args: { correct: number; rtMs: number | null; durationMs?: number },
+): Promise<void> {
+  const isCorrect = args.correct === 1;
+  const text = isCorrect ? "Correct" : "Incorrect";
+  const color = isCorrect ? "#22c55e" : "#ef4444";
+  const duration = args.durationMs ?? 1000;
+
+  container.innerHTML = `<div style="display:flex; justify-content:center; align-items:center; height:100dvh; font-size:48px; font-weight:bold; color:${color}">${text}</div>`;
+  await sleep(duration);
+  container.innerHTML = "";
+}
 
 export interface TrialFeedbackMessages {
   correct: string;

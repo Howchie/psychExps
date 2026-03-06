@@ -153,14 +153,16 @@ export interface MultiPhaseTrialResult {
   timeline: TrialTimelineResult;
 }
 
-export async function runMultiPhaseTrial(args: RunMultiPhaseTrialArgs): Promise<MultiPhaseTrialResult> {
+export interface RunCustomRtTrialArgs {
+  container: HTMLElement;
+  stages: TrialStage[];
+  response: TrialResponseSpec;
+}
+
+export async function runCustomRtTrial(args: RunCustomRtTrialArgs): Promise<MultiPhaseTrialResult> {
   const timeline = await runTrialTimeline({
     container: args.container,
-    stages: args.phases.map((p) => ({
-      id: p.id,
-      durationMs: p.durationMs,
-      render: p.render,
-    })),
+    stages: args.stages,
     response: {
       allowedKeys: (args.response.allowedKeys ?? []).map((entry) => normalizeKey(entry)).filter(Boolean),
       startMs: args.response.startMs,
@@ -180,9 +182,9 @@ export async function runBasicRtTrial(args: RunBasicRtTrialArgs): Promise<BasicR
     responseTerminatesTrial: args.responseTerminatesTrial,
   });
   
-  const result = await runMultiPhaseTrial({
+  const result = await runCustomRtTrial({
     container: args.container,
-    phases: [
+    stages: [
       {
         id: "pre_fixation_blank",
         durationMs: timings.preFixationBlankMs,

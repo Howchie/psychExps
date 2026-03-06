@@ -11,6 +11,7 @@ export const taskDefaults: Record<string, JSONObject> = {
   bricks: {},
   stroop: {},
   tracking: {},
+  change_detection: {},
 };
 
 export const taskConfigsByPath: Record<string, JSONObject> = Object.fromEntries(
