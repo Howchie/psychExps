@@ -8,7 +8,7 @@
     - [x] Standardize `VariableResolver` instantiation using `SelectionContext`
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Core Framework Enhancement' (Protocol in workflow.md)
 
-## Phase 2: Task Adapter Refactoring (Batch 1)
+## Phase 2: Task Adapter Refactoring (Batch 1) [checkpoint: 294095a]
 - [x] Task: Refactor `pm` task adapter to remove local variable resolution (2fca233)
     - [x] Write unit tests for `pm` adapter config parsing without local resolver
     - [x] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/pm/src/index.ts`
@@ -18,10 +18,10 @@
 - [x] Task: Refactor `nback` task adapter to remove local variable resolution (117049a)
     - [x] Write unit tests for `nback` adapter config parsing without local resolver
     - [x] Remove `VariableResolver` and `resolveWithVariables` calls from `tasks/nback/src/index.ts`
-- [~] Task: Conductor - User Manual Verification 'Phase 2: Task Adapter Refactoring (Batch 1)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Task Adapter Refactoring (Batch 1)' (Protocol in workflow.md)
 
 ## Phase 3: Task Adapter Refactoring (Batch 2)
-- [ ] Task: Refactor remaining task adapters (`bricks`, `stroop`, `tracking`)
+- [~] Task: Refactor remaining task adapters (`bricks`, `stroop`, `tracking`)
     - [ ] Remove redundant resolution logic from `tasks/bricks/src/index.ts`
     - [ ] Remove redundant resolution logic from `tasks/stroop/src/index.ts`
     - [ ] Remove redundant resolution logic from `tasks/tracking/src/index.ts`
