@@ -255,6 +255,7 @@ interface ParsedNbackConfig {
   pmItemPoolDraw: PoolDrawConfig;
   pmCategoryDraw: CategoryDrawConfig;
   pmCueRules: ProspectiveMemoryCueRule[];
+  pmCategories: string[];
   variableDefinitions: Record<string, unknown>;
   allowedKeys: string[];
   instructions: {
@@ -431,12 +432,14 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
     buttonIdPrefix: "nback-continue-intro_page",
     data: (index) => ({ introIndex: index }),
   });
-  if (parsed.instructions.pmTemplate) {
+  if (parsed.instructions.pmTemplate && parsed.pmCategories.length > 0) {
     pushJsPsychContinueScreen(
       timeline,
       CallFunctionPlugin,
       root,
-      `<p>${escapeHtml(parsed.instructions.pmTemplate)}</p>`,
+      `<p>${escapeHtml(
+        parsed.instructions.pmTemplate.replace("{pmCategoryText}", parsed.pmCategories.join(", ")),
+      )}</p>`,
       "intro_pm_template",
       "nback-continue-intro_pm_template",
     );
@@ -1251,6 +1254,14 @@ function parseNbackConfig(
   if (mergedBlocks.length === 0) throw new Error("Invalid NBack plan: plan.blocks is empty.");
 
   const stimuliByCategory = parseStimulusPools(config);
+  const referencedCategories = mergedBlocks.flatMap((block) => [
+    ...block.activePmCategories,
+    ...block.controlSourceCategories,
+    ...block.nbackSourceCategories,
+  ]);
+  ensureStimulusCategories(stimuliByCategory, referencedCategories);
+
+  const pmCategories = Array.from(new Set(mergedBlocks.flatMap((b) => b.activePmCategories)));
   const instructionsRaw = asObject(config.instructions);
   const instructionSlots = resolveInstructionFlowPages({
     title: asString(taskRaw?.title) || "NBack Task",
@@ -1309,6 +1320,7 @@ function parseNbackConfig(
       shuffle: true,
     }),
     pmCueRules: [],
+    pmCategories,
     variableDefinitions,
     allowedKeys,
     instructions: {
