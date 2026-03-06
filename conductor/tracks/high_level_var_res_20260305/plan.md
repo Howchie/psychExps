@@ -21,11 +21,11 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Task Adapter Refactoring (Batch 1)' (Protocol in workflow.md)
 
 ## Phase 3: Task Adapter Refactoring (Batch 2)
-- [~] Task: Refactor remaining task adapters (`bricks`, `stroop`, `tracking`)
-    - [ ] Remove redundant resolution logic from `tasks/bricks/src/index.ts`
-    - [ ] Remove redundant resolution logic from `tasks/stroop/src/index.ts`
-    - [ ] Remove redundant resolution logic from `tasks/tracking/src/index.ts`
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Task Adapter Refactoring (Batch 2)' (Protocol in workflow.md)
+- [x] Task: Refactor remaining task adapters (`bricks`, `stroop`, `tracking`) (fa8f8e3)
+    - [x] Remove redundant resolution logic from `tasks/bricks/src/index.ts`
+    - [x] Remove redundant resolution logic from `tasks/stroop/src/index.ts`
+    - [x] Remove redundant resolution logic from `tasks/tracking/src/index.ts`
+- [~] Task: Conductor - User Manual Verification 'Phase 3: Task Adapter Refactoring (Batch 2)' (Protocol in workflow.md)
 
 ## Phase 4: Final Validation and Documentation
 - [ ] Task: Verify end-to-end functionality in the unified browser shell
