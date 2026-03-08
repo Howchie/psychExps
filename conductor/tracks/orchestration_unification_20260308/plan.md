@@ -21,8 +21,8 @@
     - [x] Verify `bricks` functionality and parity. 11102a7
 - [x] Task: Conductor - User Manual Verification 'Bricks Refactor' (Protocol in workflow.md) 11102a7
 
-## Phase 4: Final Unification & Cleanup
-- [ ] Task: Standardize data finalization in `TaskOrchestrator`
-    - [ ] Move `finalizeTaskRun` logic into the orchestrator's completion phase.
-    - [ ] Ensure all modular data is automatically captured in the final payload.
-- [ ] Task: Conductor - User Manual Verification 'Final Unification & Cleanup' (Protocol in workflow.md)
+## Phase 4: Final Unification & Cleanup [checkpoint: 96d71b6]
+- [x] Task: Standardize data finalization in `TaskOrchestrator` 96d71b6
+    - [x] Move `finalizeTaskRun` logic into the orchestrator's completion phase. 96d71b6
+    - [x] Ensure all modular data is automatically captured in the final payload. 96d71b6
+- [x] Task: Conductor - User Manual Verification 'Final Unification & Cleanup' (Protocol in workflow.md) 96d71b6
