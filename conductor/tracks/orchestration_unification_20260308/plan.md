@@ -1,11 +1,11 @@
 # Implementation Plan: Task Orchestration Unification (Track: orchestration_unification_20260308)
 
-## Phase 1: Core Orchestrator Design & Implementation
-- [ ] Task: Design and implement `TaskOrchestrator` in `packages/core`
-    - [ ] Define `TaskOrchestrator` interface and options.
-    - [ ] Implement the automated block/trial loop with integrated module hooks.
-    - [ ] Add unit tests for the orchestrator flow.
-- [ ] Task: Conductor - User Manual Verification 'Core Orchestrator Design & Implementation' (Protocol in workflow.md)
+## Phase 1: Core Orchestrator Design & Implementation [checkpoint: 9edfd47]
+- [x] Task: Design and implement `TaskOrchestrator` in `packages/core` 9edfd47
+    - [x] Define `TaskOrchestrator` interface and options. 9edfd47
+    - [x] Implement the automated block/trial loop with integrated module hooks. 9edfd47
+    - [x] Add unit tests for the orchestrator flow. 9edfd47
+- [x] Task: Conductor - User Manual Verification 'Core Orchestrator Design & Implementation' (Protocol in workflow.md) 9edfd47
 
 ## Phase 2: NBack Refactor
 - [ ] Task: Refactor `nback` to use `TaskOrchestrator`
