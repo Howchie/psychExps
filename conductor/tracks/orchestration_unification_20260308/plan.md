@@ -7,12 +7,12 @@
     - [x] Add unit tests for the orchestrator flow. 9edfd47
 - [x] Task: Conductor - User Manual Verification 'Core Orchestrator Design & Implementation' (Protocol in workflow.md) 9edfd47
 
-## Phase 2: NBack Refactor
-- [ ] Task: Refactor `nback` to use `TaskOrchestrator`
-    - [ ] Remove manual timeline building and module start/stop hooks.
-    - [ ] Migrate `nback` trial execution to the orchestrator's trial hook.
-    - [ ] Verify `nback` functionality and parity.
-- [ ] Task: Conductor - User Manual Verification 'NBack Refactor' (Protocol in workflow.md)
+## Phase 2: NBack Refactor [checkpoint: d3e652d]
+- [x] Task: Refactor `nback` to use `TaskOrchestrator` d3e652d
+    - [x] Remove manual timeline building and module start/stop hooks. d3e652d
+    - [x] Migrate `nback` trial execution to the orchestrator's trial hook. d3e652d
+    - [x] Verify `nback` functionality and parity. d3e652d
+- [x] Task: Conductor - User Manual Verification 'NBack Refactor' (Protocol in workflow.md) d3e652d
 
 ## Phase 3: Bricks Refactor
 - [ ] Task: Refactor `bricks` to use `TaskOrchestrator`
