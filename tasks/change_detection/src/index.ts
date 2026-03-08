@@ -32,6 +32,8 @@ import {
   runTaskEndFlow,
   runBlockStartFlow,
   recordsToCsv,
+  isStimulusExportOnly,
+  exportStimulusRows,
 } from "@experiments/core";
 import { buildTrialPlan, type TrialPlanItem } from "./planner";
 
@@ -66,6 +68,25 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
 
     const trialPlan = buildTrialPlan(taskConfig, rng);
     const blocks = asArray(asObject(taskConfig.plan)?.blocks) as JSONObject[];
+
+    if (isStimulusExportOnly(taskConfig)) {
+      const rows = trialPlan.map((trial) => {
+        const block = asObject(blocks[trial.blockIndex]);
+        return {
+          block_index: trial.blockIndex,
+          block_label: asString(block?.label) || `Block ${trial.blockIndex + 1}`,
+          trial_index: trial.trialIndex,
+          set_size: trial.setSize,
+          is_change: trial.isChange,
+          trial_code: trial.isChange ? "change" : "no_change",
+        };
+      });
+      return exportStimulusRows({
+        context: this.context,
+        rows,
+        suffix: "change_detection_stimulus_list",
+      });
+    }
 
     // Mount canvas with correct height for the layout
     const { canvas, ctx } = mountCanvasElement({

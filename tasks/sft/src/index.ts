@@ -44,6 +44,8 @@ import {
   toNumberArray,
   toStringScreens,
   runSurvey,
+  isStimulusExportOnly,
+  exportStimulusRows,
   createResponseSemantics,
   type RtTiming,
   type ResponseSemantics,
@@ -272,6 +274,31 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
   const root = context.container;
+  const plan = buildBlockPlan(parsed, rng);
+
+  if (isStimulusExportOnly(context.taskConfig)) {
+    const rows = plan.flatMap((block, blockIndex) =>
+      block.trials.map((trial) => ({
+        block_index: blockIndex,
+        block_id: block.id,
+        block_label: block.label,
+        block_rule: block.rule,
+        trial_index: trial.trialIndex,
+        trial_id: trial.id,
+        rule: trial.rule,
+        layout: trial.layout,
+        stim_code: trial.stimCode,
+        trial_code: trial.stimCode.toLowerCase(),
+        stim_category: trial.stimCategory,
+        show_rule_cue: trial.showRuleCue,
+      })),
+    );
+    return exportStimulusRows({
+      context,
+      rows,
+      suffix: "sft_stimulus_list",
+    });
+  }
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -324,7 +351,6 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     });
   }
 
-  const plan = buildBlockPlan(parsed, rng);
   appendBlockTimeline({
     timeline,
     container: root,

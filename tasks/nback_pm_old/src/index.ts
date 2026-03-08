@@ -56,6 +56,8 @@ import {
   type CsvStimulusConfig,
   type PoolDrawConfig,
   type CategoryDrawConfig,
+  isStimulusExportOnly,
+  exportStimulusRows,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
@@ -105,10 +107,6 @@ class PmTaskAdapter implements TaskAdapter {
 export const nbackPmOldAdapter = new PmTaskAdapter();
 export const pmAdapter = nbackPmOldAdapter;
 
-function isStimulusExportOnly(config: JSONObject): boolean {
-  return asObject(config.task)?.exportStimuliOnly === true;
-}
-
 function toTrialCode(trialType: string): string {
   if (trialType === "PM") return "pm";
   if (trialType === "N") return "target";
@@ -133,18 +131,11 @@ async function exportPmStimulusList(context: TaskAdapterContext, runtime: PmRunt
       correct_response: trial.correctResponse,
     })),
   );
-  await finalizeTaskRun({
-    coreConfig: context.coreConfig,
-    selection: context.selection,
-    payload: { selection: context.selection, records: rows, exportOnly: true, rows: rows.length },
-    csv: { contents: recordsToCsv(rows), suffix: "stimulus_list" },
-    completionStatus: "complete",
+  return exportStimulusRows({
+    context,
+    rows,
+    suffix: "nback_pm_old_stimulus_list",
   });
-  context.container.innerHTML = renderCenteredNotice({
-    title: "Stimulus List Exported",
-    message: `Exported ${rows.length} planned trials. No task run was executed.`,
-  });
-  return { exported: true, rows: rows.length };
 }
 
 function shouldHideCursorForPhase(phase: unknown): boolean {

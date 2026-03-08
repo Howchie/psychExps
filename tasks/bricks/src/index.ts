@@ -20,6 +20,8 @@ import {
   runTaskSession,
   runSurvey,
   waitForContinue,
+  isStimulusExportOnly,
+  exportStimulusRows,
   type InstructionScreenSpec,
   type JSONObject,
   type SelectionContext,
@@ -116,6 +118,13 @@ async function runBricksTask(context: TaskAdapterContext, runner: TaskAdapterCon
 
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId));
   const blockPlan = buildBlockPlan(config, rng, context.selection);
+  if (isStimulusExportOnly(context.taskConfig)) {
+    return exportStimulusRows({
+      context,
+      rows: buildBricksStimulusRows(blockPlan),
+      suffix: "bricks_stimulus_list",
+    });
+  }
   const records: ConveyorTrialData[] = [];
   const eventLogger = createEventLogger(context.selection);
   
@@ -535,6 +544,29 @@ function buildBlockPlan(
 
     return { index, label, trials, manipulationId, trialConfigs };
   });
+}
+
+function buildBricksStimulusRows(
+  blockPlan: BlockPlanItem[],
+): Array<Record<string, string | number | boolean | null>> {
+  return blockPlan.flatMap((block) =>
+    block.trialConfigs.map((trialConfig, trialIndex) => {
+      const trialNode = asRecord(trialConfig.trial);
+      const drt = resolveBricksDrtConfig(resolveBricksDrtOverride(trialConfig));
+      const planVariantId = typeof trialNode?.planVariantId === "string" ? trialNode.planVariantId : null;
+      return {
+        block_index: block.index,
+        block_label: block.label,
+        trial_index: trialIndex,
+        manipulation_id: block.manipulationId,
+        plan_variant_id: planVariantId,
+        plan_variant_label: typeof trialNode?.planVariantLabel === "string" ? trialNode.planVariantLabel : null,
+        trial_code: planVariantId ?? "default",
+        drt_enabled: drt.enabled,
+        drt_scope: drt.enabled ? drt.scope : null,
+      };
+    }),
+  );
 }
 
 function normalizeVariants(input: unknown): Array<Record<string, unknown>> {

@@ -23,6 +23,8 @@ import {
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
+  isStimulusExportOnly,
+  exportStimulusRows,
   type DrtEvent,
   type ScopedDrtConfig,
   type TaskAdapter,
@@ -235,6 +237,13 @@ type TrackingTrialRuntimeResult = PursuitTrialRuntimeResult | MotTrialRuntimeRes
 
 async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterContext["moduleRunner"]): Promise<unknown> {
   const parsed = parseTrackingConfig(context.taskConfig);
+  if (isStimulusExportOnly(context.taskConfig)) {
+    return exportStimulusRows({
+      context,
+      rows: buildTrackingStimulusRows(parsed),
+      suffix: "tracking_stimulus_list",
+    });
+  }
   const participantId = context.selection.participant.participantId;
   const variantId = context.selection.variantId;
   const eventLogger = createEventLogger(context.selection);
@@ -541,6 +550,32 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
   });
   
   return payload;
+}
+
+function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<string, string | number | boolean | null>> {
+  const rows: Array<Record<string, string | number | boolean | null>> = [];
+  parsed.blocks.forEach((block, blockIndex) => {
+    for (let trialIndex = 0; trialIndex < block.trials; trialIndex += 1) {
+      rows.push({
+        block_index: blockIndex,
+        block_label: block.label,
+        trial_index: trialIndex,
+        phase: block.phase,
+        trial_mode: block.trialTemplate.mode,
+        trial_code: block.trialTemplate.mode,
+        duration_ms: block.trialTemplate.durationMs,
+        sample_interval_ms: block.trialTemplate.sampleIntervalMs,
+        bin_ms: block.trialTemplate.binMs,
+        motion_mode: block.trialTemplate.motion.mode,
+        motion_speed_px_per_sec: Number(block.trialTemplate.motion.speedPxPerSec),
+        target_shape: block.trialTemplate.target.shape,
+        target_size_px: block.trialTemplate.target.sizePx,
+        mot_object_count: block.trialTemplate.mot.objectCount,
+        mot_target_count: block.trialTemplate.mot.targetCount,
+      });
+    }
+  });
+  return rows;
 }
 
 async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrialRuntimeResult> {

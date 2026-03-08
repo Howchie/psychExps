@@ -38,6 +38,8 @@ import {
   toStringScreens,
   waitForContinue,
   ensureJsPsychCanvasCentered,
+  isStimulusExportOnly,
+  exportStimulusRows,
   type JSONObject,
   type RtTiming,
   type TaskAdapter,
@@ -199,6 +201,29 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   const records: TrialRecord[] = [];
   const root = context.container;
   const eventLogger = createEventLogger(selection);
+  const plannedBlocks = buildStroopPlan(parsed, baseRng);
+
+  if (isStimulusExportOnly(context.taskConfig)) {
+    const rows = plannedBlocks.flatMap((block, blockIndex) =>
+      block.trials.map((trial) => ({
+        block_index: blockIndex,
+        block_id: block.id,
+        block_label: block.label,
+        trial_index: trial.trialIndex,
+        trial_id: trial.id,
+        word: trial.word,
+        font_color_token: trial.fontColorToken,
+        condition_label: trial.conditionLabel,
+        trial_code: trial.conditionLabel,
+        correct_response: trial.correctResponse,
+      })),
+    );
+    return exportStimulusRows({
+      context,
+      rows,
+      suffix: "stroop_stimulus_list",
+    });
+  }
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -210,8 +235,6 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
     stroopAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
   }
   
-  const plannedBlocks = buildStroopPlan(parsed, baseRng);
-
   eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
 
   const timeline: any[] = [];
