@@ -49,6 +49,7 @@ export * from "./web/tracking";
 export * from "./web/trial";
 export * from "./web/scene";
 export * from "./web/sceneRenderer";
+export * from "./web/moduleScopes";
 // Utils
 export * from "./utils/coerce";
 export * from "./utils/validation";

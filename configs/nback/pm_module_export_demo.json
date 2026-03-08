@@ -1,0 +1,55 @@
+{
+  "task": {
+    "implementation": "jspsych_nback",
+    "runner": "jspsych",
+    "title": "NBack + PM Module Export Demo",
+    "modules": {
+      "pm": {
+        "enabled": true,
+        "eligibleTrialTypes": ["F"],
+        "schedule": {
+          "count": 2,
+          "minSeparation": 4,
+          "maxSeparation": 8
+        },
+        "rules": [
+          {
+            "type": "category_in",
+            "categories": ["animals"],
+            "responseKey": "space"
+          }
+        ]
+      }
+    }
+  },
+  "mapping": {
+    "targetKey": "m",
+    "nonTargetKey": "z"
+  },
+  "instructions": {
+    "introPages": [
+      "Export-only demo for NBack + PM module."
+    ]
+  },
+  "nbackRule": {
+    "lureLagPasses": [[2]],
+    "maxInsertionAttempts": 10
+  },
+  "stimuli": {
+    "animals": ["cat", "dog", "horse", "mouse", "otter", "goat"],
+    "other": ["amber", "brook", "cedar", "dune", "ember", "fjord", "gale", "haven", "islet", "jetty", "knoll", "lagoon", "mesa", "nimbus", "oasis", "prairie", "quartz", "ridge", "shore", "tundra", "upland", "valley", "willow", "xylem", "yarrow", "zephyr"]
+  },
+  "plan": {
+    "blocks": [
+      {
+        "phase": "main",
+        "label": "Main 2-back PM Export",
+        "nLevel": 2,
+        "trials": 36,
+        "targetCount": 8,
+        "lureCount": 4,
+        "nbackSourceCategories": ["other"]
+      }
+    ]
+  }
+}

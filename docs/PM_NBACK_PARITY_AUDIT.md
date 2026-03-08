@@ -1,73 +1,124 @@
-# PM vs NBack Parity Audit (Pre-Extraction)
+# PM vs NBack+Module Parity Audit (Current State)
 
-Date: 2026-03-05
+Date: 2026-03-06
 
 ## Scope
 
-This audit compares:
-- Current integrated PM task: `tasks/pm/src/index.ts`
-- Standalone NBack task: `tasks/nback/src/index.ts`
+Compared code paths:
+- Standalone PM task: `tasks/nback_pm_old/src/index.ts`
+- Canonical PM-integration target: NBack + core PM module
+  - `tasks/nback/src/index.ts`
+  - `packages/core/src/engines/prospectiveMemory.ts`
 
-Goal: identify parity gaps before extracting and integrating a reusable PM module path into NBack, while leaving the existing PM task unchanged.
+Intent:
+- Standalone PM is parity harness/deprecation path.
+- NBack + core PM module is the canonical integration direction.
 
-## PM capabilities present in current PM task
+## Parity Summary
 
-1. Block-level PM mode (`blockType: PM|Control`).
-2. Dedicated PM response key (`mapping.pmKey`) with distinct key mapping checks.
-3. PM slot scheduling with separation constraints (`pmCount`, `minPmSeparation`, `maxPmSeparation`).
-4. Category-driven PM stimuli selection with independent PM item/category draw controls.
-5. Control-slot remapping behavior for control blocks.
-6. PM-aware integrity checks (PM vs n-back match constraints).
-7. PM-specific instruction templates (`pmTemplate`, PM/control block intro templates, ordering flags).
-8. Block-level allowed key policy (PM blocks allow PM key; control blocks do not).
+1. Core scaffolding parity: partial
+- NBack now runs PM via core module orchestration (`startScopedModules`/`stopScopedModules`).
+- PM task remains standalone task-local planner/runtime.
 
-## NBack gaps before this extraction pass
+2. Behavioral parity: partial
+- PM-slot insertion exists in both paths.
+- Critical semantics differ in scheduling, key policy, and output format (details below).
 
-1. No PM key/mapping category.
-2. No PM slot generation/separation logic.
-3. No PM category draws for PM trials.
-4. No PM/control block semantics in planner.
-5. No PM-aware integrity checks.
-6. No PM/control intro template support.
-7. No PM block-level key gating.
-8. No PM metadata in finalized payload.
+3. Output parity: improved, still partial
+- Standalone PM exports PM trial records directly.
+- NBack now includes PM trials in primary records/CSV, reducing split-output friction.
+- Remaining difference: standalone PM and NBack still differ in some field-level semantics/labels and PM-block metadata conventions.
 
-## Changes implemented in this pass
+## Detailed Findings
 
-1. Added shared core PM utilities:
-   - `packages/core/src/prospectiveMemory.ts`
-   - Includes PM slot scheduling (`generateProspectiveMemoryPositions`) and generic cue-rule matching primitives.
+### A. PM slot scheduling semantics differ (high impact)
 
-2. Extended NBack planning/runtime for PM-module behavior (additive, backward-compatible):
-   - Optional `mapping.pmKey`.
-   - Block fields: `blockType`, `activePmCategories`, `controlSourceCategories`, `pmCount`, `minPmSeparation`, `maxPmSeparation`.
-   - PM slot generation and insertion in planner.
-   - PM/control remap behavior.
-   - PM-aware block validation.
-   - PM/control block intro templates and intro ordering flags.
-   - Block-level allowed-key policy including PM key only in PM blocks.
-   - Trial/event records now include `blockType`.
+Standalone PM:
+- Uses explicit block PM controls (`pmCount`, `minPmSeparation`, `maxPmSeparation`) with hard guarantees.
+- See `generatePmPositions` and validation in:
+  - `tasks/nback_pm_old/src/index.ts` (block plan build + integrity checks).
 
-3. Added NBack PM demo variant:
-   - `configs/nback/pm_module_demo.json`
-   - registered as `pm_module_demo` in NBack manifest.
+NBack + module:
+- Uses core module `generateProspectiveMemoryPositions`.
+- PM positions are generated across all trials, then filtered by `eligibleTrialTypes`.
+- This can reduce effective PM count and weaken spacing guarantees after filtering.
+- See:
+  - `packages/core/src/engines/prospectiveMemory.ts` (`transformBlockPlan`).
 
-## Non-goals in this pass
+### B. PM key gating differs (high impact)
 
-1. No modifications to `tasks/pm/src/index.ts` behavior.
-2. No migration of deployed PM task runtime to the extracted module path.
-3. No removal of PM task code.
+Standalone PM:
+- PM blocks allow PM key; control blocks disallow PM key.
+- Implemented via block-type aware key resolution.
 
-## Remaining parity checks (manual runtime verification)
+NBack + module:
+- NBack task-level allowed keys are target/non-target (+ DRT), not PM-key aware by block.
+- PM module captures keys via module handle, but no explicit block intro + key policy contract equivalent to standalone PM.
 
-1. PM key only accepted in PM blocks (not control blocks).
-2. PM slot spacing honors min/max separation over full blocks.
-3. PM slots never overlap with n-back targets/lures after integrity checks.
-4. Control-slot remap behavior matches PM task expectations.
-5. Instructions order/wording parity for PM/control blocks in target configs.
-6. Output-level parity for analyses that currently consume PM task records.
+### C. Trial typing/plan semantics differ (medium impact)
 
-## Next step toward full PM modularization
+Standalone PM:
+- Explicit `blockType: PM|Control`.
+- Explicit control-block remap behavior and PM-aware validation.
 
-Core utility extraction has now started in `packages/core/src/prospectiveMemory.ts`, and NBack consumes that path in the PM demo variant flow.
-After validating `nback/pm_module_demo` behavior, continue lifting remaining PM-specific planner/evaluator pieces into that shared module path so NBack and future tasks consume a single PM runtime surface.
+NBack + module:
+- PM module rewrites trials to `trialType: "PM"` where selected.
+- No built-in notion of PM-vs-control block semantics in module itself.
+- Control-remap semantics are config/task-level, not module-level parity.
+
+### D. Record/output schema differs (medium impact)
+
+Standalone PM:
+- CSV rows are PM-native (`phase === "pm_response_window"`).
+- PM trials are first-class in exported records.
+
+NBack + module:
+- PM trials are now first-class in primary NBack records/CSV.
+- DRT scope payload is isolated to DRT module results only (no PM-module leakage under DRT keys).
+- Remaining differences are schema-level naming/semantics, not a hard PM-vs-main output split.
+
+### E. Instruction parity differs (medium impact)
+
+Standalone PM:
+- PM-specific intros/block templates are first-class and task-owned.
+
+NBack + module:
+- Shared instruction helpers are used.
+- PM intro affordances are available in NBack config, but standalone PM wording/ordering is not guaranteed 1:1.
+
+## What Is Already Converged
+
+1. Module lifecycle ownership is core-owned in NBack (`TaskModuleRunner` scoped start/stop).
+2. PM transform hook surface is reusable through the shared PM module API.
+3. Canonical integration path no longer depends on standalone PM runtime internals.
+
+## Remaining Work To Reach Practical Parity
+
+1. Module scheduler guarantees
+- Make PM placement honor requested count/separation after `eligibleTrialTypes` filtering.
+
+2. PM response policy contract
+- Define block-level PM key policy contract for NBack+module parity mode.
+
+3. Output adapter
+- Add optional PM-parity export mode from NBack payload:
+  - PM trial rows aligned with standalone PM schema, or
+  - documented converter utility from `jsPsychData + moduleResults`.
+
+4. Config contract normalization
+- Decide canonical PM config surface:
+  - keep rule-based module config only, or
+  - provide compatibility mapping from PM task-style fields.
+
+5. Parity test harness
+- Add deterministic parity fixtures comparing:
+  - PM slot indices
+  - response correctness classification
+  - exported row-level PM metrics
+
+## Recommendation
+
+Treat NBack+module as canonical, but keep standalone PM unchanged as parity harness until:
+1. scheduling guarantee parity and
+2. output schema parity (or documented migration converter)
+are both in place and verified.

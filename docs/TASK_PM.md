@@ -1,6 +1,11 @@
 # Task: PM (N-Back) Implementation & Config
 
-This document describes the current PM adapter at `tasks/pm/src/index.ts`.
+This document describes the current PM adapter at `tasks/nback_pm_old/src/index.ts`.
+
+Status note (2026-03-06):
+- Standalone PM is maintained as a parity harness/deprecation path.
+- Canonical PM integration direction is NBack + core PM module.
+- Standalone PM should receive stability fixes only, not net-new feature work.
 
 ## 1. Implementation Details
 
@@ -15,6 +20,21 @@ The PM task is implemented using the standardized `TaskAdapter` interface.
 ## 2. Runners and selection
 
 PM supports the `jspsych` runner via the `LifecycleManager`. Selection is controlled by core `resolveSelection` and the unified web shell.
+Current task id is `nback_pm_old` (legacy `pm` URLs are aliased by the web shell).
+
+## 2.1 Stimulus Export (No Full Run)
+
+For parity workflows, the legacy PM task can export planned stimulus lists without executing trials.
+
+Launch with:
+- `?task=nback_pm_old&variant=<variant>&exportStimuli=true`
+
+Behavior:
+- Skips timeline execution.
+- Saves a CSV with planned rows including:
+  - `trial_type`
+  - `trial_code` (`pm`, `lure_<n>`, `target`, `non_target`)
+  - item/category and block/trial indices.
 
 ## 2. Config schema currently parsed
 

@@ -161,7 +161,7 @@ export function coerceCsvStimulusConfig(value) {
     };
 }
 export async function loadCategorizedStimulusPools(args) {
-    const inline = normalizePoolRecord(args.inlinePools);
+    const inline = normalizePoolRecord(args.inlinePools ?? {});
     if (!args.csvConfig)
         return inline;
     const loaded = await loadStimuliPoolsFromCsv(args.csvConfig, args.resolver, args.context);

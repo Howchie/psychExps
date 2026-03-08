@@ -42,4 +42,73 @@ export class SeededRandom {
         return items;
     }
 }
+function sampleNormal(nextFloat, mu = 0, sigma = 1) {
+    if (sigma <= 0) {
+        throw new Error(`RNG.nextNormal expects sigma > 0 (got ${sigma})`);
+    }
+    let u1 = 0;
+    while (u1 === 0) {
+        u1 = nextFloat();
+    }
+    const u2 = nextFloat();
+    const mag = Math.sqrt(-2.0 * Math.log(u1));
+    const z0 = mag * Math.cos(2.0 * Math.PI * u2);
+    return mu + sigma * z0;
+}
+function parseSeed(value) {
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (!normalized || normalized === "random" || normalized === "auto")
+            return null;
+        if (/^\d+$/.test(normalized))
+            return Number(normalized) >>> 0;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? (numeric >>> 0) : null;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric))
+        return null;
+    return numeric >>> 0;
+}
+class SeededCoreRng {
+    random;
+    constructor(seed) {
+        this.random = new SeededRandom(seed >>> 0);
+    }
+    next() {
+        return Math.floor(this.random.next() * 0x100000000) >>> 0;
+    }
+    nextFloat() {
+        return this.random.next();
+    }
+    nextRange(min, max) {
+        if (max <= min) {
+            throw new Error(`RNG.nextRange expects max > min (got ${min}, ${max})`);
+        }
+        return min + (max - min) * this.nextFloat();
+    }
+    nextNormal(mu = 0, sigma = 1) {
+        return sampleNormal(() => this.nextFloat(), mu, sigma);
+    }
+}
+function createUnseededCoreRng() {
+    const nextFloat = () => Math.random();
+    return {
+        next: () => Math.floor(nextFloat() * 0x100000000) >>> 0,
+        nextFloat,
+        nextRange: (min, max) => {
+            if (max <= min) {
+                throw new Error(`RNG.nextRange expects max > min (got ${min}, ${max})`);
+            }
+            return min + (max - min) * nextFloat();
+        },
+        nextNormal: (mu = 0, sigma = 1) => sampleNormal(nextFloat, mu, sigma),
+    };
+}
+export function createCoreRng(seed) {
+    const parsedSeed = parseSeed(seed);
+    if (parsedSeed == null)
+        return createUnseededCoreRng();
+    return new SeededCoreRng(parsedSeed);
+}
 //# sourceMappingURL=random.js.map

@@ -258,6 +258,229 @@ const BUILTIN_END_FURNACE_STYLES = {
         sideRivets: true,
     },
 };
+const BUILTIN_WAREHOUSE_TEXTURE_STYLES = {
+    concrete_checker: {
+        tileSizePx: 240,
+        paverWidthPx: 82,
+        paverHeightPx: 82,
+        groutPx: 3,
+        layout: 'grid',
+        rowOffsetPx: 0,
+        pattern: 'checker_alternating',
+        alternationStrength: 0.07,
+        variation: 0.12,
+        edgeShadingAlpha: 0,
+        noiseCount: 20,
+        seamDashCount: 8,
+        baseColor: '#8f959c',
+        groutColor: '#6e757e',
+        seamDarkColor: '#4b545f',
+        seamLightColor: '#b4bac1',
+        scratchColor: '#5a616b',
+    },
+    cold_blueprint: {
+        tileSizePx: 228,
+        paverWidthPx: 76,
+        paverHeightPx: 76,
+        groutPx: 2,
+        layout: 'grid',
+        pattern: 'checker_alternating',
+        alternationStrength: 0.06,
+        variation: 0.08,
+        edgeShadingAlpha: 0,
+        noiseCount: 18,
+        seamDashCount: 8,
+        baseColor: '#96acbf',
+        groutColor: '#72889b',
+        seamDarkColor: '#526678',
+        seamLightColor: '#c9d7e3',
+        scratchColor: '#5f7387',
+    },
+    lab_metal_rivet: {
+        tileSizePx: 220,
+        paverWidthPx: 72,
+        paverHeightPx: 72,
+        groutPx: 2,
+        layout: 'grid',
+        pattern: 'checker_alternating',
+        alternationStrength: 0.05,
+        variation: 0.07,
+        edgeShadingAlpha: 0.06,
+        noiseCount: 14,
+        seamDashCount: 8,
+        rivetCount: 36,
+        dentCount: 6,
+        baseColor: '#8ea0ad',
+        groutColor: '#617380',
+        seamDarkColor: '#465560',
+        seamLightColor: '#c6d3de',
+        scratchColor: '#51606b',
+        rivetColor: '#dbe8f2',
+    },
+    wood_corrugation: {
+        tileSizePx: 246,
+        paverWidthPx: 92,
+        paverHeightPx: 76,
+        groutPx: 2,
+        layout: 'staggered',
+        rowOffsetPx: 46,
+        pattern: 'none',
+        variation: 0.12,
+        edgeShadingAlpha: 0.15,
+        noiseCount: 20,
+        seamDashCount: 12,
+        baseColor: '#9a8266',
+        groutColor: '#715c47',
+        seamDarkColor: '#5a4736',
+        seamLightColor: '#c3ae92',
+        scratchColor: '#5b4939',
+    },
+    damaged_salvage: {
+        tileSizePx: 232,
+        paverWidthPx: 84,
+        paverHeightPx: 84,
+        groutPx: 2,
+        layout: 'grid',
+        pattern: 'checker_alternating',
+        alternationStrength: 0.08,
+        variation: 0.11,
+        edgeShadingAlpha: 0.08,
+        noiseCount: 22,
+        seamDashCount: 14,
+        rivetCount: 18,
+        dentCount: 12,
+        crackCount: 14,
+        baseColor: '#7a838e',
+        groutColor: '#545c66',
+        seamDarkColor: '#3d434c',
+        seamLightColor: '#9ea7b2',
+        scratchColor: '#474e57',
+        rivetColor: '#cbd5e1',
+    },
+    salvage_rivet: {
+        tileSizePx: 224,
+        paverWidthPx: 74,
+        paverHeightPx: 74,
+        groutPx: 2,
+        layout: 'grid',
+        pattern: 'checker_alternating',
+        alternationStrength: 0.06,
+        variation: 0.08,
+        edgeShadingAlpha: 0.06,
+        noiseCount: 16,
+        seamDashCount: 10,
+        rivetCount: 28,
+        dentCount: 8,
+        baseColor: '#7f8b97',
+        groutColor: '#596572',
+        seamDarkColor: '#414b55',
+        seamLightColor: '#bac7d4',
+        scratchColor: '#49545f',
+        rivetColor: '#d8e3ee',
+    },
+};
+const BUILTIN_BELT_TEXTURE_STYLES = {
+    industrial_ribbed: {
+        tileSizePx: 120,
+        ribStepPx: 12,
+        ribWidthPx: 8,
+        sideBandPx: 18,
+        sideCleatStepPx: 16,
+        sideCleatLengthPx: 12,
+        shadeAlpha: 0.55,
+        baseColor: '#2a323b',
+        shadeColor: '#202730',
+        ribColor: '#4d5863',
+        grooveColor: '#2b333c',
+        sideCleatColor: '#6b7280',
+        sideLineDarkColor: '#111827',
+        sideLineLightColor: '#9ca3af',
+    },
+    cold_blueprint_belt: {
+        tileSizePx: 126,
+        ribStepPx: 13,
+        ribWidthPx: 8,
+        sideBandPx: 18,
+        sideCleatStepPx: 16,
+        sideCleatLengthPx: 11,
+        shadeAlpha: 0.5,
+        baseColor: '#3a5166',
+        shadeColor: '#23384a',
+        ribColor: '#69859e',
+        grooveColor: '#2b3f51',
+        sideCleatColor: '#8aa4bc',
+        sideLineDarkColor: '#0f172a',
+        sideLineLightColor: '#dbeafe',
+    },
+    lab_ribbed: {
+        tileSizePx: 122,
+        ribStepPx: 12,
+        ribWidthPx: 8,
+        sideBandPx: 18,
+        sideCleatStepPx: 16,
+        sideCleatLengthPx: 12,
+        shadeAlpha: 0.56,
+        baseColor: '#3a4c5c',
+        shadeColor: '#223544',
+        ribColor: '#617b90',
+        grooveColor: '#2a3b49',
+        sideCleatColor: '#8ca1b4',
+        sideLineDarkColor: '#0f172a',
+        sideLineLightColor: '#dbeafe',
+        scuffCount: 8,
+    },
+    wood_corrugation_belt: {
+        tileSizePx: 116,
+        ribStepPx: 10,
+        ribWidthPx: 7,
+        sideBandPx: 16,
+        sideCleatStepPx: 14,
+        sideCleatLengthPx: 10,
+        shadeAlpha: 0.58,
+        baseColor: '#4a3929',
+        shadeColor: '#2e2419',
+        ribColor: '#70583f',
+        grooveColor: '#3b2d21',
+        sideCleatColor: '#8a7359',
+        sideLineDarkColor: '#1a130d',
+        sideLineLightColor: '#d1bfa7',
+    },
+    damaged_patched_belt: {
+        tileSizePx: 118,
+        ribStepPx: 11,
+        ribWidthPx: 7,
+        sideBandPx: 17,
+        sideCleatStepPx: 15,
+        sideCleatLengthPx: 10,
+        shadeAlpha: 0.62,
+        baseColor: '#38414a',
+        shadeColor: '#212a33',
+        ribColor: '#55606b',
+        grooveColor: '#2a323b',
+        sideCleatColor: '#68727d',
+        sideLineDarkColor: '#0b1120',
+        sideLineLightColor: '#b7c2ce',
+        scuffCount: 18,
+        patchCount: 8,
+    },
+    salvage_shredder_belt: {
+        tileSizePx: 114,
+        ribStepPx: 11,
+        ribWidthPx: 7,
+        sideBandPx: 17,
+        sideCleatStepPx: 15,
+        sideCleatLengthPx: 10,
+        shadeAlpha: 0.6,
+        baseColor: '#343d46',
+        shadeColor: '#1f2730',
+        ribColor: '#515d69',
+        grooveColor: '#2a333c',
+        sideCleatColor: '#738190',
+        sideLineDarkColor: '#060b14',
+        sideLineLightColor: '#d6e0ea',
+        scuffCount: 10,
+    },
+};
 /**
  * ConveyorRenderer
  * -----------------
@@ -288,6 +511,8 @@ export class ConveyorRenderer {
         this.brickSprites = new Map();
         this.hudElements = {};
         this.hudBackground = null;
+        this._lastHudText = '';
+        this._lastHudPanelSignature = '';
         this.drtGraphics = null;
         this.backgroundTexture = null;
         this.backgroundTextureOwned = false;
@@ -315,6 +540,15 @@ export class ConveyorRenderer {
         this.pointerDebugLines = [];
         this.pointerDebugText = null;
         this.pointerDebugSeq = 0;
+        this.pixelSnapBricks = false;
+        this._spriteSyncEpoch = 0;
+        this._lastSpotlightSignature = '';
+        this.perfStats = {
+            effectDropsSkipped: 0,
+            effectsDestroyed: 0,
+            peakActiveEffects: 0,
+            peakBrickSprites: 0
+        };
         this.seed = Number.isFinite(Number(seed)) ? (Number(seed) >>> 0) : 0x9e3779b9;
         this._rngState = this.seed || 0x9e3779b9;
     }
@@ -333,15 +567,17 @@ export class ConveyorRenderer {
         }
         this.root = container;
         const perfCfg = this.config?.display?.performance || {};
-        const configuredMaxDpr = Number(perfCfg.maxDevicePixelRatio ?? 2);
+        const configuredMaxDpr = Number(perfCfg.maxDevicePixelRatio ?? 1.5);
         const maxDpr = Number.isFinite(configuredMaxDpr) ? Math.max(1, configuredMaxDpr) : 2;
         const resolution = Math.max(1, Math.min(window.devicePixelRatio || 1, maxDpr));
+        const antialias = perfCfg.antialias === true;
+        this.pixelSnapBricks = perfCfg.pixelSnapBricks === true;
         // Initialize Pixi Application (v7 pattern)
         this.app = new PIXI.Application({
             width: this.config.display.canvasWidth,
             height: this.config.display.canvasHeight,
             backgroundColor: toPixiColor(this.config.display.backgroundColor),
-            antialias: true,
+            antialias,
             autoDensity: true,
             resolution,
         });
@@ -349,6 +585,13 @@ export class ConveyorRenderer {
         const view = this.app.view || this.app.canvas || null;
         if (view) {
             container.appendChild(view);
+            const imageRendering = String(perfCfg.imageRendering ?? 'crisp-edges').trim();
+            if (imageRendering) {
+                view.style.imageRendering = imageRendering;
+            }
+        }
+        if (this.app?.renderer) {
+            this.app.renderer.roundPixels = this.pixelSnapBricks;
         }
         this.beltLayer = new PIXI.Container();
         this.interactionLayer = new PIXI.Container();
@@ -430,6 +673,30 @@ export class ConveyorRenderer {
             : ['pointer debug armed; waiting for events...'];
         this.pointerDebugText.text = `POINTER DEBUG\n${lines.join('\n')}`;
     }
+    _resolveBeltProceduralStyleConfig(texCfg) {
+        const styleId = normalizeTextureStyleId(texCfg?.style ?? '');
+        const builtin = BUILTIN_BELT_TEXTURE_STYLES?.[styleId];
+        const base = (builtin && typeof builtin === 'object') ? builtin : {};
+        const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
+        const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
+        const customObj = (custom && typeof custom === 'object') ? custom : {};
+        const procedural = (texCfg?.proceduralTopdown && typeof texCfg.proceduralTopdown === 'object')
+            ? texCfg.proceduralTopdown
+            : {};
+        return { ...base, ...customObj, ...procedural };
+    }
+    _resolveWarehouseProceduralStyleConfig(texCfg) {
+        const styleId = normalizeTextureStyleId(texCfg?.style ?? '');
+        const builtin = BUILTIN_WAREHOUSE_TEXTURE_STYLES?.[styleId];
+        const base = (builtin && typeof builtin === 'object') ? builtin : {};
+        const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
+        const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
+        const customObj = (custom && typeof custom === 'object') ? custom : {};
+        const procedural = (texCfg?.proceduralWarehouse && typeof texCfg.proceduralWarehouse === 'object')
+            ? texCfg.proceduralWarehouse
+            : {};
+        return { ...base, ...customObj, ...procedural };
+    }
     async _prepareBeltTexture() {
         try {
             const texCfg = this.config?.display?.beltTexture || {};
@@ -440,8 +707,9 @@ export class ConveyorRenderer {
             }
             const renderMode = String(texCfg.renderMode ?? 'image').toLowerCase();
             if (renderMode === 'procedural_topdown') {
-                const key = makeMaterialKey('belt:procedural_topdown', texCfg.proceduralTopdown || {}, (this.seed ^ 0x7f4a7c15) >>> 0);
-                this.beltTexture = getOrCreateProceduralTexture(this.app?.renderer, key, () => this._buildProceduralTopdownBeltTexture(texCfg.proceduralTopdown || {}));
+                const styleCfg = this._resolveBeltProceduralStyleConfig(texCfg);
+                const key = makeMaterialKey('belt:procedural_topdown', styleCfg, (this.seed ^ 0x7f4a7c15) >>> 0);
+                this.beltTexture = getOrCreateProceduralTexture(this.app?.renderer, key, () => this._buildProceduralTopdownBeltTexture(styleCfg));
                 this.beltTextureOwned = false;
                 return;
             }
@@ -824,7 +1092,20 @@ export class ConveyorRenderer {
     }
     _getConveyorTargetBrickId(conveyorId) {
         const entries = this.bricksByConveyor.get(String(conveyorId)) || [];
-        return entries.length ? entries[0].id : null;
+        if (!entries.length) {
+            return null;
+        }
+        let selected = null;
+        let selectedEdge = -Infinity;
+        for (let i = 0; i < entries.length; i += 1) {
+            const brick = entries[i];
+            const edge = Number(brick?.x ?? 0) + Number(brick?.width ?? 0);
+            if (edge > selectedEdge) {
+                selected = brick;
+                selectedEdge = edge;
+            }
+        }
+        return selected?.id ?? null;
     }
     _drawConveyorZone(conveyorId, beltY, beltLength, beltHeight) {
         if (!this.interactionLayer || !this._isConveyorHitAreaEnabled()) {
@@ -1245,9 +1526,10 @@ export class ConveyorRenderer {
         const markerFlashMs = Math.max(50, Number(missCfg.markerFlashMs ?? 120));
         const markerColor = toPixiColor(missCfg.flashColor ?? '#ef4444');
         const perfCfg = this.config?.display?.performance || {};
-        const maxEffects = Math.max(0, Number(perfCfg.maxActiveEffects ?? 240));
+        const maxEffects = Math.max(0, Number(perfCfg.maxActiveEffects ?? 180));
         dropEvents.forEach((drop) => {
             if (this.effectVisuals.length >= maxEffects) {
+                this.perfStats.effectDropsSkipped += 1;
                 return;
             }
             const width = Math.max(1, Number(drop.width ?? 1));
@@ -1433,17 +1715,19 @@ export class ConveyorRenderer {
                 });
             }
         });
+        this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
     }
     updateEffects(dtMs) {
         if (!this.effectVisuals.length) {
             return;
         }
         const dt = Math.max(0, Number(dtMs) || 0);
-        const survivors = [];
-        this.effectVisuals.forEach((effect) => {
+        let writeIndex = 0;
+        for (let readIndex = 0; readIndex < this.effectVisuals.length; readIndex += 1) {
+            const effect = this.effectVisuals[readIndex];
             const node = effect.node;
             if (!node) {
-                return;
+                continue;
             }
             effect.elapsedMs += dt;
             const t = Math.max(0, Math.min(1, effect.elapsedMs / Math.max(1, effect.durationMs)));
@@ -1483,13 +1767,16 @@ export class ConveyorRenderer {
                 node.alpha = Math.max(0, 0.95 * (1 - t));
             }
             if (t < 1) {
-                survivors.push(effect);
+                this.effectVisuals[writeIndex] = effect;
+                writeIndex += 1;
             }
             else {
                 node.destroy();
+                this.perfStats.effectsDestroyed += 1;
             }
-        });
-        this.effectVisuals = survivors;
+        }
+        this.effectVisuals.length = writeIndex;
+        this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
     }
     _setupHUD() {
         if (!this.config.display.ui?.showHUD) {
@@ -1525,6 +1812,8 @@ export class ConveyorRenderer {
      * Synchronises PIXI sprites with the logical bricks array.
      */
     syncBricks(bricks, completionMode, completionParams, focusState = null) {
+        this._spriteSyncEpoch += 1;
+        const syncEpoch = this._spriteSyncEpoch;
         const conveyorWideHitArea = this._isConveyorHitAreaEnabled();
         this.bricksByConveyor.clear();
         bricks.forEach((brick) => {
@@ -1534,12 +1823,8 @@ export class ConveyorRenderer {
             }
             this.bricksByConveyor.get(cid).push(brick);
         });
-        this.bricksByConveyor.forEach((list) => {
-            list.sort((a, b) => ((b.x + b.width) - (a.x + a.width)) || (a.x - b.x));
-        });
         const focusEnabled = Boolean(focusState?.enabled);
         this.activeBrickId = focusEnabled ? focusState?.activeBrickId ?? null : null;
-        const seen = new Set();
         bricks.forEach((brick) => {
             let sprite = this.brickSprites.get(brick.id);
             if (!sprite) {
@@ -1565,7 +1850,9 @@ export class ConveyorRenderer {
                 this._drawBrickGraphics(sprite, brick, completionMode);
             }
             this._updateBrickProgressVisual(sprite, brick, completionMode);
-            sprite.position.set(brick.x, brick.y);
+            const x = this.pixelSnapBricks ? Math.round(brick.x) : brick.x;
+            const y = this.pixelSnapBricks ? Math.round(brick.y) : brick.y;
+            sprite.position.set(x, y);
             const isFocused = !focusEnabled || brick.id === this.activeBrickId;
             if (conveyorWideHitArea) {
                 sprite.eventMode = 'none';
@@ -1587,18 +1874,16 @@ export class ConveyorRenderer {
                 sprite.alpha = isFocused ? 1 : 0.95;
                 sprite.tint = 0xffffff;
             }
-            seen.add(brick.id);
+            sprite._syncEpoch = syncEpoch;
         });
         // Remove stale sprites.
-        Array.from(this.brickSprites.keys()).forEach((id) => {
-            if (!seen.has(id)) {
-                const sprite = this.brickSprites.get(id);
-                if (sprite) {
-                    sprite.destroy();
-                }
+        this.brickSprites.forEach((sprite, id) => {
+            if (sprite?._syncEpoch !== syncEpoch) {
+                sprite?.destroy?.();
                 this.brickSprites.delete(id);
             }
         });
+        this.perfStats.peakBrickSprites = Math.max(this.perfStats.peakBrickSprites, this.brickSprites.size);
         if (conveyorWideHitArea && completionMode === 'hover_to_clear') {
             this.conveyorHovered.forEach((cid) => {
                 const next = this._getConveyorTargetBrickId(cid);
@@ -1629,6 +1914,7 @@ export class ConveyorRenderer {
         sprite.progressMask = null;
         sprite.usesProgressMask = false;
         sprite.progressMaxWidth = 0;
+        sprite.progressMaskWidth = -1;
     }
     _drawBrickBody(target, { brick, shape, width, height, cornerRadius, fillColor, fillAlpha = 1, borderColor, borderAlpha = 0.5, borderWidth = 1.25, withTextureOverlay = true, }) {
         target.beginFill(fillColor, fillAlpha);
@@ -1865,6 +2151,7 @@ export class ConveyorRenderer {
         sprite.brickWidth = brick.width;
         sprite.brickHeight = brick.height;
         sprite.progressValue = brick.clearProgress;
+        sprite.progressMaskWidth = -1;
     }
     _updateBrickProgressVisual(sprite, brick, completionMode) {
         sprite.progressValue = brick.clearProgress;
@@ -1875,12 +2162,18 @@ export class ConveyorRenderer {
         const maxWidth = Math.max(1, Number(sprite.progressMaxWidth ?? brick.width) || 1);
         const width = Math.max(0, Math.min(maxWidth, remainingWidth));
         const h = Math.max(1, Number(brick.height) || 1);
+        const renderedWidth = this.pixelSnapBricks ? Math.round(width) : Math.round(width * 1000) / 1000;
+        const previousWidth = Number(sprite.progressMaskWidth ?? -1);
+        if (renderedWidth === previousWidth) {
+            return;
+        }
+        sprite.progressMaskWidth = renderedWidth;
         sprite.progressMask.clear();
         if (width <= 0) {
             return;
         }
         sprite.progressMask.beginFill(0xffffff, 1);
-        sprite.progressMask.drawRect(0, 0, width, h);
+        sprite.progressMask.drawRect(0, 0, renderedWidth, h);
         sprite.progressMask.endFill();
     }
     _resolveBrickTextureOverlayConfig(brick) {
@@ -2162,6 +2455,7 @@ export class ConveyorRenderer {
             if (this.spotlightRing) {
                 this.spotlightRing.clear();
             }
+            this._lastSpotlightSignature = '';
             return;
         }
         if (!this.spotlightGraphics) {
@@ -2186,6 +2480,19 @@ export class ConveyorRenderer {
         const holeH = sprite.brickHeight + pad * 2;
         const canvasW = this.config.display.canvasWidth;
         const canvasH = this.config.display.canvasHeight;
+        const signature = [
+            Math.round(holeX),
+            Math.round(holeY),
+            Math.round(holeW),
+            Math.round(holeH),
+            Math.round(dimAlpha * 1000),
+            canvasW,
+            canvasH
+        ].join('|');
+        if (signature === this._lastSpotlightSignature) {
+            return;
+        }
+        this._lastSpotlightSignature = signature;
         this.spotlightGraphics.clear();
         this.spotlightGraphics.beginFill(0x000000, dimAlpha);
         this.spotlightGraphics.drawRect(0, 0, canvasW, Math.max(0, holeY));
@@ -2211,7 +2518,11 @@ export class ConveyorRenderer {
             uiConfig: this.config?.display?.ui || {},
             drtEnabled: Boolean(blockInfo?.drtEnabled)
         });
-        text.text = lines.join('\n');
+        const nextText = lines.join('\n');
+        if (nextText !== this._lastHudText) {
+            text.text = nextText;
+            this._lastHudText = nextText;
+        }
         const uiCfg = this.config?.display?.ui || {};
         if (this.hudBackground) {
             const padX = Math.max(2, Number(uiCfg.hudPanelPaddingX ?? 10));
@@ -2219,10 +2530,16 @@ export class ConveyorRenderer {
             const bgAlpha = Math.max(0, Math.min(1, Number(uiCfg.hudPanelAlpha ?? 0.42)));
             const bgColor = toPixiColor(uiCfg.hudPanelColor ?? '#0f172a');
             const radius = Math.max(0, Number(uiCfg.hudPanelRadius ?? 8));
-            this.hudBackground.clear();
-            this.hudBackground.beginFill(bgColor, bgAlpha);
-            this.hudBackground.drawRoundedRect(-padX, -padY, Math.max(8, text.width + padX * 2), Math.max(8, text.height + padY * 2), radius);
-            this.hudBackground.endFill();
+            const panelW = Math.max(8, text.width + padX * 2);
+            const panelH = Math.max(8, text.height + padY * 2);
+            const panelSignature = `${padX}|${padY}|${bgAlpha}|${bgColor}|${radius}|${panelW}|${panelH}`;
+            if (panelSignature !== this._lastHudPanelSignature) {
+                this.hudBackground.clear();
+                this.hudBackground.beginFill(bgColor, bgAlpha);
+                this.hudBackground.drawRoundedRect(-padX, -padY, panelW, panelH, radius);
+                this.hudBackground.endFill();
+                this._lastHudPanelSignature = panelSignature;
+            }
         }
     }
     /**
@@ -2260,8 +2577,9 @@ export class ConveyorRenderer {
             }
             const renderMode = String(texCfg.renderMode ?? 'image').toLowerCase();
             if (renderMode === 'procedural_warehouse') {
-                const key = makeMaterialKey('background:procedural_warehouse', texCfg.proceduralWarehouse || {}, (this.seed ^ 0x1f123bb5) >>> 0);
-                this.backgroundTexture = getOrCreateProceduralTexture(this.app?.renderer, key, () => this._buildProceduralWarehouseTexture(texCfg.proceduralWarehouse || {}));
+                const styleCfg = this._resolveWarehouseProceduralStyleConfig(texCfg);
+                const key = makeMaterialKey('background:procedural_warehouse', styleCfg, (this.seed ^ 0x1f123bb5) >>> 0);
+                this.backgroundTexture = getOrCreateProceduralTexture(this.app?.renderer, key, () => this._buildProceduralWarehouseTexture(styleCfg));
                 this.backgroundTextureOwned = false;
                 return;
             }
@@ -2348,6 +2666,13 @@ export class ConveyorRenderer {
         this.backgroundTextureOwned = false;
         this.beltTexture = null;
         this.beltTextureOwned = false;
+    }
+    getPerformanceSnapshot() {
+        return {
+            ...this.perfStats,
+            activeEffects: this.effectVisuals.length,
+            activeBrickSprites: this.brickSprites.size
+        };
     }
 }
 //# sourceMappingURL=renderer_pixi.js.map

@@ -2,7 +2,28 @@
   "task": {
     "implementation": "native_bricks",
     "runner": "native",
-    "title": "Bricks DRT Block Scope Demo"
+    "title": "Bricks DRT Block Scope Demo",
+    "modules": {
+      "drt": {
+        "enabled": true,
+        "key": " ",
+        "scope": "block",
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 32,
+          "leftPx": 600,
+          "topPx": 30
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        },
+        "responseDeadlineMs": 2500
+      }
+    }
   },
   "display": {
     "canvasWidth": 1200,
@@ -58,9 +79,9 @@
       ]
     },
     "performance": {
-      "maxDevicePixelRatio": 2,
+      "maxDevicePixelRatio": 1.5,
       "maxFrameDtMs": 50,
-      "maxActiveEffects": 240
+      "maxActiveEffects": 180
     }
   },
   "conveyors": {
@@ -153,25 +174,6 @@
       "maxActivePerConveyor": 1
     }
   },
-  "drt": {
-    "enable": true,
-    "stim_type": "visual",
-    "stim_visual_config": {
-      "shape": "square",
-      "color": "#dc2626",
-      "size_px": 32,
-      "x": 600,
-      "y": 30
-    },
-    "key": " ",
-    "isi_sampler": {
-      "type": "uniform",
-      "min": 3000,
-      "max": 5000
-    },
-    "response_deadline_ms": 2500,
-    "scope": "block"
-  },
   "trial": {
     "mode": "fixed_time",
     "maxTimeSec": 40,
@@ -216,6 +218,8 @@
     "postTrial": [
       {
         "preset": "atwit",
+        "showQuestionNumbers": false,
+        "showRequiredAsterisk": false,
         "prompt": "ATWIT: Rate your overall workload during the just-completed trial (1-10)."
       }
     ]

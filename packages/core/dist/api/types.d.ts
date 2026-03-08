@@ -50,6 +50,7 @@ export interface CoreCompletionConfig {
 export interface CoreDataConfig {
     localSave: boolean;
     filePrefix: string;
+    localSaveFormat?: "csv" | "json" | "both";
 }
 export interface AutoResponderRangeConfig {
     minMs?: number;
@@ -96,10 +97,13 @@ export interface TaskRegistry {
     tasks: TaskManifest[];
 }
 import type { VariableResolver } from "../infrastructure/variables";
+import type { TaskModuleRunner } from "./taskModule";
 export interface TaskAdapterContext {
     container: HTMLElement;
     selection: SelectionContext;
     coreConfig: CoreConfig;
     taskConfig: JSONObject;
+    rawTaskConfig: JSONObject;
     resolver: VariableResolver;
+    moduleRunner: TaskModuleRunner;
 }

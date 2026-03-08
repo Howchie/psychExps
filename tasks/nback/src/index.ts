@@ -1,6 +1,5 @@
 import {
   SeededRandom,
-  DrtController,
   OnlineParameterTransformRunner,
   createEventLogger,
   drawTrialFeedbackOnCanvas,
@@ -26,7 +25,9 @@ import {
   resolveTemplate,
   createResponseSemantics,
   computeRtPhaseDurations,
-  appendJsPsychContinuePages,
+  appendJsPsychTaskIntroScreen,
+  appendJsPsychBlockIntroScreen,
+  appendJsPsychInstructionScreens,
   coerceCsvStimulusConfig,
   coerceCategoryDrawConfig,
   coercePoolDrawConfig,
@@ -52,7 +53,6 @@ import {
   toPositiveNumber,
   toNonNegativeNumber,
   parseTrialFeedbackConfig,
-  ProspectiveMemoryModule,
   type TrialFeedbackConfig,
   type RtTiming,
   type DrtEvent,
@@ -66,6 +66,8 @@ import {
   type PoolDrawConfig,
   type CategoryDrawConfig,
   type TaskModuleAddress,
+  startDrtModuleScope,
+  stopModuleScope,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
@@ -79,6 +81,7 @@ class NbackTaskAdapter implements TaskAdapter {
       { id: "default", label: "NBack Default", configPath: "nback/default" },
       { id: "drt_block_demo", label: "NBack DRT Block Demo", configPath: "nback/drt_block_demo" },
       { id: "pm_module_demo", label: "NBack PM Module Demo", configPath: "nback/pm_module_demo" },
+      { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
       { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
     ],
   };
@@ -95,6 +98,9 @@ class NbackTaskAdapter implements TaskAdapter {
   async execute(): Promise<unknown> {
     if (!this.context || !this.runtime) {
       throw new Error("NBack Task not initialized");
+    }
+    if (isStimulusExportOnly(this.context.taskConfig)) {
+      return exportNbackStimulusList(this.context, this.runtime);
     }
     const result = await runNbackJsPsychTask(this.context, this.runtime);
     return result;
@@ -114,6 +120,47 @@ class NbackTaskAdapter implements TaskAdapter {
 }
 
 export const nbackAdapter = new NbackTaskAdapter();
+
+function isStimulusExportOnly(config: JSONObject): boolean {
+  return asObject(config.task)?.exportStimuliOnly === true;
+}
+
+function toTrialCode(trialType: string): string {
+  if (trialType === "PM") return "pm";
+  if (trialType === "N") return "target";
+  if (trialType === "F") return "non_target";
+  if (/^L\d+$/i.test(trialType)) return `lure_${trialType.slice(1)}`;
+  return trialType.toLowerCase();
+}
+
+async function exportNbackStimulusList(context: TaskAdapterContext, runtime: NbackRuntimeState): Promise<unknown> {
+  const rows = runtime.plan.flatMap((block) =>
+    block.trials.map((trial) => ({
+      block_label: block.label,
+      block_index: block.blockIndex,
+      n_level: block.nLevel,
+      trial_index: trial.trialIndex,
+      trial_type: trial.trialType,
+      trial_code: toTrialCode(trial.trialType),
+      item: trial.item,
+      source_category: trial.sourceCategory,
+      item_category: trial.itemCategory,
+      correct_response: trial.correctResponse,
+    })),
+  );
+  await finalizeTaskRun({
+    coreConfig: context.coreConfig,
+    selection: context.selection,
+    payload: { selection: context.selection, records: rows, exportOnly: true, rows: rows.length },
+    csv: { contents: recordsToCsv(rows), suffix: "stimulus_list" },
+    completionStatus: "complete",
+  });
+  context.container.innerHTML = renderCenteredNotice({
+    title: "Stimulus List Exported",
+    message: `Exported ${rows.length} planned trials. No task run was executed.`,
+  });
+  return { exported: true, rows: rows.length };
+}
 
 function shouldHideCursorForPhase(phase: unknown): boolean {
   if (typeof phase !== "string") return false;
@@ -136,6 +183,14 @@ function resolveNbackDrtConfig(
   overrideRaw: Record<string, unknown> | null,
 ): NbackDrtConfig {
   return coerceScopedDrtConfig(base, overrideRaw);
+}
+
+function resolveNbackDrtOverride(raw: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  const source = asObject(raw);
+  if (!source) return null;
+  const taskModules = asObject(asObject(source.task)?.modules);
+  const localModules = asObject(source.modules);
+  return asObject(localModules?.drt) ?? asObject(taskModules?.drt) ?? null;
 }
 
 interface NbackMapping {
@@ -197,6 +252,7 @@ interface PlannedTrial {
 interface PlannedBlock {
   blockIndex: number;
   label: string;
+  blockType: string;
   isPractice: boolean;
   nLevel: number;
   stimulusVariant: number | null;
@@ -253,11 +309,13 @@ interface ParsedNbackConfig {
     postBlockPages: string[];
     endPages: string[];
     blockIntroTemplate: string;
+    pmTemplate: string | null;
     showBlockLabel: boolean;
     preBlockBeforeBlockIntro: boolean;
   };
   practiceBlocks: NbackBlockConfig[];
   mainBlocks: NbackBlockConfig[];
+  pmCategories: string[];
   stimuliByCategory: Record<string, string[]>;
   nbackRule: NbackRuleConfig;
   feedbackDefaults: TrialFeedbackConfig;
@@ -295,6 +353,7 @@ interface NbackRuntimeState {
   plan: PlannedBlock[];
   variableResolver: VariableResolver;
   moduleRunner: TaskModuleRunner;
+  moduleConfigs: Record<string, any>;
   eventLogger: ReturnType<typeof createEventLogger>;
   participantId: string;
   variantId: string;
@@ -302,8 +361,9 @@ interface NbackRuntimeState {
 
 async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRuntimeState> {
   const config = context.taskConfig;
+  const resolvedInlinePools = asObject(context.resolver.resolveInValue(config.stimuli));
   const stimuliByCategory = await loadCategorizedStimulusPools({
-    inlinePools: asObject(context.resolver.resolveInValue(config.stimuli)),
+    inlinePools: coerceInlinePools(resolvedInlinePools),
     csvConfig: coerceCsvStimulusConfig(asObject(context.resolver.resolveInValue(config.stimuliCsv))),
     resolver: context.resolver,
   });
@@ -317,7 +377,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     ),
   );
   
-  const moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules);
+  const moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
   let plan = buildExperimentPlan(parsed, rng, context.moduleRunner, moduleConfigs, context.resolver);
 
   const eventLogger = createEventLogger(context.selection);
@@ -326,6 +386,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     plan,
     variableResolver: context.resolver,
     moduleRunner: context.moduleRunner,
+    moduleConfigs,
     eventLogger,
     participantId: context.selection.participant.participantId,
     variantId: context.selection.variantId,
@@ -374,47 +435,47 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
   });
 
   const startDrtScope = (drtConfig: NbackDrtConfig, scope: "block" | "trial", blockIndex: number, trialIndex: number | null): void => {
-    if (!drtConfig.enabled) return;
-    runner.start({
-      module: DrtController.asTaskModule({
-        ...drtConfig,
-        seed: hashSeed(
-          context.selection.participant.participantId,
-          context.selection.participant.sessionId,
-          context.selection.variantId,
-          "nback_drt",
-          `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`
-        )
-      }),
-      address: { scope, blockIndex, trialIndex },
-      config: drtConfig,
+    startDrtModuleScope({
+      runner,
+      drtConfig,
+      scope,
+      blockIndex,
+      trialIndex,
+      participantId: context.selection.participant.participantId,
+      sessionId: context.selection.participant.sessionId,
+      variantId: context.selection.variantId,
+      taskSeedKey: "nback_drt",
       context: {
         displayElement: root,
         borderTargetElement: root,
         borderTargetRect: resolveNbackStimulusFrameRect,
-      }
+      },
     });
   };
 
   const stopDrtScope = (scope: "block" | "trial", blockIndex: number, trialIndex: number | null): void => {
-    runner.stop({ scope, blockIndex, trialIndex });
+    stopModuleScope({ runner, scope, blockIndex, trialIndex });
   };
 
-  const startPmScope = (blockIndex: number): void => {
-    const taskModules = asObject(asObject(context.taskConfig.task)?.modules);
-    const pmConfig = asObject(taskModules?.pm);
-    if (!pmConfig || pmConfig.enabled === false) return;
-
-    runner.start({
-      module: new ProspectiveMemoryModule(),
-      address: { scope: "block", blockIndex, trialIndex: null },
-      config: pmConfig,
-      context: {}
+  const startPmScope = (block: PlannedBlock): void => {
+    const pmConfig = runtime.moduleConfigs.pm;
+    if (!pmConfig) return;
+    runner.startScopedModules({
+      scope: "block",
+      blockIndex: block.blockIndex,
+      trialIndex: null,
+      moduleConfigs: { pm: pmConfig },
+      context: {
+        block,
+        blockIndex: block.blockIndex,
+        resolver: runtime.variableResolver,
+        locals: block.variables,
+      },
     });
   };
 
   const stopPmScope = (blockIndex: number): void => {
-    runner.stop({ scope: "block", blockIndex, trialIndex: null });
+    runner.stopScopedModules({ scope: "block", blockIndex, trialIndex: null });
   };
 
   const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
@@ -430,36 +491,38 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
   eventLogger.emit("task_start", { task: "nback", runner: "jspsych" });
 
   const timeline: any[] = [];
-  pushJsPsychContinueScreen(
+  let lastBlockIntroSignature: string | null = null;
+  appendJsPsychTaskIntroScreen({
     timeline,
-    CallFunctionPlugin,
-    root,
-    `<h2>${escapeHtml(parsed.title)}</h2><p>Participant: <code>${escapeHtml(runtime.participantId)}</code></p>`,
-    "intro_start",
-    "nback-continue-intro_start",
-  );
-  appendJsPsychContinuePages({
+    plugin: CallFunctionPlugin,
+    container: root,
+    title: parsed.title,
+    participantId: runtime.participantId,
+    phase: "intro_start",
+    buttonId: "nback-continue-intro_start",
+  });
+  appendJsPsychInstructionScreens({
     timeline,
     plugin: CallFunctionPlugin,
     container: root,
     pages: parsed.instructions.introPages,
-    phase: "intro_page",
+    section: "intro",
     buttonIdPrefix: "nback-continue-intro_page",
-    data: (index) => ({ introIndex: index }),
+    phase: "intro_page",
+    data: (ctx) => ({ introIndex: ctx.pageIndex }),
   });
   if (parsed.instructions.pmTemplate && parsed.pmCategories.length > 0) {
-    pushJsPsychContinueScreen(
+    appendJsPsychInstructionScreens({
       timeline,
-      CallFunctionPlugin,
-      root,
-      `<p>${escapeHtml(
-        parsed.instructions.pmTemplate.replace("{pmCategoryText}", parsed.pmCategories.join(", ")),
-      )}</p>`,
-      "intro_pm_template",
-      "nback-continue-intro_pm_template",
-    );
+      plugin: CallFunctionPlugin,
+      container: root,
+      pages: [parsed.instructions.pmTemplate.replace("{pmCategoryText}", parsed.pmCategories.join(", "))],
+      section: "intro",
+      buttonIdPrefix: "nback-continue-intro_pm_template",
+      phase: "intro_pm_template",
+      data: (ctx) => ({ introIndex: ctx.pageIndex }),
+    });
   }
-
   await runTaskSession<PlannedBlock, PlannedTrial, null>({
     blocks: plan,
     getTrials: ({ block }) => block.trials,
@@ -515,38 +578,41 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
           data: { phase: "block_start_hook", blockIndex: block.blockIndex },
           func: () => {
             eventLogger.emit("block_start", { label: block.label, nLevel: block.nLevel }, { blockIndex: block.blockIndex });
-            startPmScope(block.blockIndex);
+            startPmScope(block);
           },
         });
 
         const introText = parsed.instructions.blockIntroTemplate.replace("{nLevel}", String(block.nLevel));
-        const blockScreenHtml = (text: string): string =>
-          parsed.instructions.showBlockLabel
-            ? `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(text)}</p>`
-            : `<p>${escapeHtml(text)}</p>`;
+        const blockIntroLabel = parsed.instructions.showBlockLabel ? block.label : "";
         const preBlockScreens = [...parsed.instructions.preBlockPages, ...block.beforeBlockScreens];
         const pushPreBlockScreens = () => {
-          appendJsPsychContinuePages({
+          appendJsPsychInstructionScreens({
             timeline,
             plugin: CallFunctionPlugin,
             container: root,
             pages: preBlockScreens,
-            phase: "block_pre_instruction",
+            section: "preBlock",
             buttonIdPrefix: `nback-continue-block_pre_instruction-${block.blockIndex}`,
-            html: (page) => blockScreenHtml(page),
-            data: (index) => ({ blockIndex: block.blockIndex, instructionIndex: index }),
+            phase: "block_pre_instruction",
+            blockLabel: parsed.instructions.showBlockLabel ? block.label : null,
+            data: (ctx) => ({ blockIndex: block.blockIndex, instructionIndex: ctx.pageIndex }),
           });
         };
         const pushBlockIntro = () => {
-          pushJsPsychContinueScreen(
-            timeline,
-            CallFunctionPlugin,
-            root,
-            blockScreenHtml(introText),
-            "block_start",
-            `nback-continue-block_start-${block.blockIndex}`,
-            { blockIndex: block.blockIndex },
-          );
+          const blockIntroSignature = `${blockIntroLabel}::${introText}`;
+          if (blockIntroSignature !== lastBlockIntroSignature) {
+            appendJsPsychBlockIntroScreen({
+              timeline,
+              plugin: CallFunctionPlugin,
+              container: root,
+              blockLabel: blockIntroLabel,
+              introText,
+              phase: "block_start",
+              buttonId: `nback-continue-block_start-${block.blockIndex}`,
+              data: { blockIndex: block.blockIndex },
+            });
+            lastBlockIntroSignature = blockIntroSignature;
+          }
         };
         if (parsed.instructions.preBlockBeforeBlockIntro) {
           pushPreBlockScreens();
@@ -613,30 +679,29 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
         });
 
         const postBlockScreens = [...parsed.instructions.postBlockPages, ...block.afterBlockScreens];
-        appendJsPsychContinuePages({
+        appendJsPsychInstructionScreens({
           timeline,
           plugin: CallFunctionPlugin,
           container: root,
           pages: postBlockScreens,
-          phase: "block_post_instruction",
+          section: "postBlock",
           buttonIdPrefix: `nback-continue-block_post_instruction-${block.blockIndex}`,
-          html: (page) =>
-            parsed.instructions.showBlockLabel
-              ? `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(page)}</p>`
-              : `<p>${escapeHtml(page)}</p>`,
-          data: (index) => ({ blockIndex: block.blockIndex, instructionIndex: index }),
+          phase: "block_post_instruction",
+          blockLabel: parsed.instructions.showBlockLabel ? block.label : null,
+          data: (ctx) => ({ blockIndex: block.blockIndex, instructionIndex: ctx.pageIndex }),
         });
       },
     },
   });
-  appendJsPsychContinuePages({
+  appendJsPsychInstructionScreens({
     timeline,
     plugin: CallFunctionPlugin,
     container: root,
     pages: parsed.instructions.endPages,
-    phase: "end_page",
+    section: "end",
     buttonIdPrefix: "nback-continue-end_page",
-    data: (index) => ({ endIndex: index }),
+    phase: "end_page",
+    data: (ctx) => ({ endIndex: ctx.pageIndex }),
   });
 
   try {
@@ -664,13 +729,9 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
   await finalizeNbackRun(context, runtime, records, {
     runner: "jspsych",
     jsPsychData: jsPsychRef.data.get().values(),
-    pm: {
-      enabled: runner.getResults().some((res) => res.moduleId === "pm"),
-      moduleResults: runner.getResults().filter((res) => res.moduleId === "pm"),
-    },
     drt: {
       config: parsed.drt,
-      scopeRecords: runner.getResults().map((res: any) => ({
+      scopeRecords: runner.getResults().filter((res: any) => res.moduleId === "drt").map((res: any) => ({
         address: res.address ?? { scope: res.scope, blockIndex: res.blockIndex, trialIndex: res.trialIndex },
         data: res.data,
         responseRows: res.data?.responseRows,
@@ -881,21 +942,6 @@ function appendJsPsychNbackTrial(args: {
             capturedKey = key;
             capturedRt = rt;
             captured = true;
-          } else {
-            // Check if TaskModuleRunner captured a response for this trial scope
-            const activeData = runner.getActiveData({ 
-              moduleId: "pm",
-              blockIndex: block.blockIndex 
-            });
-            const pmResult = activeData[0];
-            if (pmResult && pmResult.data.responses.length > 0) {
-              const lastResp = pmResult.data.responses[pmResult.data.responses.length - 1];
-              // check if it happened recently (within trial window)
-              // For now, if there is ANY response in the PM results, we consider it.
-              capturedKey = lastResp.key;
-              capturedRt = lastResp.timestamp; // Approximation
-              captured = true;
-            }
           }
         }
 
@@ -1051,6 +1097,20 @@ function evaluateNbackOutcome(
   expectedCategory: string;
   rtMs: number;
 } {
+  if (trial.trialType === "PM") {
+    const normalizedExpected = normalizeKey(trial.correctResponse);
+    const normalizedResponse = responseKey ? normalizeKey(responseKey) : null;
+    const responded = normalizedResponse ? 1 : 0;
+    const correct = normalizedResponse === normalizedExpected ? 1 : 0;
+    return {
+      correct,
+      responded,
+      responseCategory: correct ? "pm" : responded ? "other" : "timeout",
+      expectedCategory: "pm",
+      rtMs: rtMs ?? -1,
+    };
+  }
+
   const responseCategory = parsed.responseSemantics.responseCategoryFromKey(responseKey);
   const expectedCategory = parsed.responseSemantics.expectedCategoryFromSpec(trial.correctResponse, "timeout");
   const outcome = evaluateTrialOutcome({
@@ -1071,15 +1131,19 @@ function evaluateNbackOutcome(
   };
 }
 
-function resolveAllowedKeysForNback(semantics: ResponseSemantics, _block: PlannedBlock): string[] {
-  return semantics.allowedKeys(["target", "non_target"]);
+function resolveAllowedKeysForNback(semantics: ResponseSemantics, block: PlannedBlock): string[] {
+  const base = semantics.allowedKeys(["target", "non_target"]);
+  const pmKeys = block.trials
+    .filter((trial) => trial.trialType === "PM")
+    .map((trial) => normalizeKey(trial.correctResponse))
+    .filter((key) => key.length > 0);
+  return Array.from(new Set([...base, ...pmKeys]));
 }
 
 function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId: string, variantId: string): TrialRecord[] {
   const output: TrialRecord[] = [];
   for (const row of rows) {
     if (row.phase !== "nback_response_window") continue;
-    if (asString(row.trialType) === "PM") continue; // Exclude PM from main nback records for accuracy
     output.push({
       participantId: asString(row.participantId) || participantId,
       variantId: asString(row.variantId) || variantId,
@@ -1155,7 +1219,7 @@ function parseNbackConfig(
     timing: rtTaskTiming,
     responseTerminatesTrial: rtTaskRaw ? rtTaskRaw.responseTerminatesTrial === true : false,
   };
-  const drtRaw = asObject(taskRaw?.drt);
+  const drtRaw = resolveNbackDrtOverride(taskRaw);
   const drt = resolveNbackDrtConfig(
     {
       enabled: false,
@@ -1232,6 +1296,7 @@ function parseNbackConfig(
     ...(taskVariables ?? {}),
     ...(configVariables ?? {}),
   };
+  const pmCategoriesResolved = variableResolver.resolveInValue(configVariables?.pmCategories);
   
   const lureLagPasses = parseLureLagPasses(nbackRuleRaw?.lureLagPasses);
   const maxInsertionAttempts = toPositiveNumber(nbackRuleRaw?.maxInsertionAttempts, 10);
@@ -1324,11 +1389,13 @@ function parseNbackConfig(
       postBlockPages: instructionSlots.postBlock,
       endPages: instructionSlots.end,
       blockIntroTemplate: asString(instructionsRaw?.blockIntroTemplate) || "This is a {nLevel}-back block.",
+      pmTemplate: asString(instructionsRaw?.pmTemplate) || null,
       showBlockLabel: instructionsRaw?.showBlockLabel !== false,
       preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
     },
     practiceBlocks: parsedPracticeBlocks,
     mainBlocks: parsedMainBlocks,
+    pmCategories: asStringArray(pmCategoriesResolved, []),
     stimuliByCategory,
     nbackRule: {
       lureLagPasses,
@@ -1373,7 +1440,7 @@ function parseBlock(
   const resolvedFeedbackRaw = variableResolver.resolveToken(b.feedback, scope);
   const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
   const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
-  const rawDrt = b.drt ?? b.drtOverride;
+  const rawDrt = resolveNbackDrtOverride(b);
   const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
   const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
   const resolvedDrt = variableResolver.resolveToken(rawDrt, scope);
@@ -1433,8 +1500,18 @@ function parseBlock(
     beforeBlockScreens: toStringScreens(resolvedBeforeBlockScreens),
     afterBlockScreens: toStringScreens(resolvedAfterBlockScreens),
     drt,
-    variables: asObject(b.variables),
+    variables: asObject(b.variables) ?? {},
   };
+}
+
+function coerceInlinePools(source: Record<string, unknown> | null): Record<string, string[]> {
+  if (!source) return {};
+  const pools: Record<string, string[]> = {};
+  for (const [category, entries] of Object.entries(source)) {
+    const normalized = asStringArray(entries, []).map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+    if (normalized.length > 0) pools[category] = normalized;
+  }
+  return pools;
 }
 
 function makeSynthetic(
@@ -1551,6 +1628,7 @@ function buildBlockPlanAttempt(
   const planned: PlannedBlock = {
     blockIndex,
     label: block.label,
+    blockType: block.isPractice ? "practice" : "main",
     isPractice: block.isPractice,
     nLevel: block.nLevel,
     stimulusVariant,

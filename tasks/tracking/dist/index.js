@@ -1,4 +1,4 @@
-import { DrtController, TaskModuleRunner, TrackingBinSummarizer, TrackingMotionController, asArray, asObject, asString, coerceScopedDrtConfig, computeTrackingDistance, createEventLogger, createMulberry32, finalizeTaskRun, hashSeed, normalizeKey, recordsToCsv, resolveInstructionFlowPages, runBlockEndFlow, runBlockStartFlow, runTaskEndFlow, runTaskIntroFlow, runTaskSession, runTrialWithEnvelope, setCursorHidden, toNonNegativeNumber, toPositiveNumber, toStringScreens, } from "@experiments/core";
+import { TrackingBinSummarizer, TrackingMotionController, asArray, asObject, asString, coerceScopedDrtConfig, computeTrackingDistance, createEventLogger, createMulberry32, finalizeTaskRun, hashSeed, normalizeKey, recordsToCsv, resolveInstructionFlowPages, runBlockEndFlow, runBlockStartFlow, runTaskEndFlow, runTaskIntroFlow, runTaskSession, runTrialWithEnvelope, setCursorHidden, toNonNegativeNumber, toPositiveNumber, toStringScreens, startDrtModuleScope, stopModuleScope, } from "@experiments/core";
 import { createTrackingRenderer } from "./renderer";
 class TrackingTaskAdapter {
     manifest = {
@@ -11,18 +11,16 @@ class TrackingTaskAdapter {
         ],
     };
     context = null;
-    runner = new TaskModuleRunner([]);
     async initialize(context) {
         this.context = context;
     }
     async execute() {
         if (!this.context)
             throw new Error("Tracking Task not initialized");
-        const result = await runTrackingTask(this.context, this.runner);
+        const result = await runTrackingTask(this.context, this.context.moduleRunner);
         return result;
     }
     async terminate() {
-        this.runner.stopAll();
         setCursorHidden(false);
     }
 }
@@ -35,8 +33,6 @@ async function runTrackingTask(context, runner) {
     const seed = hashSeed(participantId, context.selection.participant.sessionId, variantId, "tracking");
     const rng = createMulberry32(seed);
     const root = context.container;
-    root.style.maxWidth = "980px";
-    root.style.margin = "0 auto";
     root.style.fontFamily = "system-ui";
     const stageShell = document.createElement("div");
     stageShell.style.display = "flex";
@@ -68,24 +64,25 @@ async function runTrackingTask(context, runner) {
         }
     });
     const startDrtScope = (drtConfig, scope, blockIndex, trialIndex) => {
-        if (!drtConfig.enabled)
-            return;
-        runner.start({
-            module: DrtController.asTaskModule({
-                ...drtConfig,
-                seed: hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId, "tracking_drt", `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`)
-            }),
-            address: { scope, blockIndex, trialIndex },
-            config: drtConfig,
+        startDrtModuleScope({
+            runner,
+            drtConfig,
+            scope,
+            blockIndex,
+            trialIndex,
+            participantId: context.selection.participant.participantId,
+            sessionId: context.selection.participant.sessionId,
+            variantId: context.selection.variantId,
+            taskSeedKey: "tracking_drt",
             context: {
                 displayElement: stageShell,
                 borderTargetElement: stageShell,
                 borderTargetRect: resolveTrackingDisplayFrameRect,
-            }
+            },
         });
     };
     const stopDrtScope = (scope, blockIndex, trialIndex) => {
-        runner.stop({ scope, blockIndex, trialIndex });
+        stopModuleScope({ runner, scope, blockIndex, trialIndex });
     };
     eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
     await runTaskIntroFlow({

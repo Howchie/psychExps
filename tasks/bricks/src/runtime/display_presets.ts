@@ -39,6 +39,76 @@ const hashUint32 = (seed, trialIndex) => {
   return x >>> 0;
 };
 
+const COMPLETE_WAREHOUSE_PROCEDURAL_DEFAULTS = {
+  tileSizePx: 240,
+  paverWidthPx: 80,
+  paverHeightPx: 80,
+  groutPx: 2,
+  layout: 'grid',
+  rowOffsetPx: 0,
+  pattern: 'none',
+  alternationStrength: 0,
+  variation: 0,
+  edgeShadingAlpha: 0,
+  noiseCount: 0,
+  seamDashCount: 0,
+  rivetCount: 0,
+  dentCount: 0,
+  crackCount: 0,
+  baseColor: '#8f959c',
+  groutColor: '#8f959c',
+  seamDarkColor: '#8f959c',
+  seamLightColor: '#8f959c',
+  scratchColor: '#8f959c',
+  rivetColor: '#dbe8f2',
+};
+
+const COMPLETE_BELT_PROCEDURAL_DEFAULTS = {
+  tileSizePx: 120,
+  ribStepPx: 12,
+  ribWidthPx: 8,
+  sideBandPx: 18,
+  sideCleatStepPx: 16,
+  sideCleatLengthPx: 12,
+  shadeAlpha: 0.55,
+  baseColor: '#2a323b',
+  shadeColor: '#202730',
+  ribColor: '#4d5863',
+  grooveColor: '#2b333c',
+  sideCleatColor: '#6b7280',
+  sideLineDarkColor: '#111827',
+  sideLineLightColor: '#9ca3af',
+  scuffCount: 0,
+  patchCount: 0,
+  scuffColor: '#cbd5e1',
+  patchColor: '#111827',
+};
+
+const materializeCompletePreset = (preset) => {
+  const out = deepClone(preset || {});
+  const bg = out?.backgroundTexture;
+  if (isObject(bg) && String(bg.renderMode ?? '').toLowerCase() === 'procedural_warehouse') {
+    out.backgroundTexture = {
+      ...bg,
+      proceduralWarehouse: deepMerge(
+        COMPLETE_WAREHOUSE_PROCEDURAL_DEFAULTS,
+        isObject(bg.proceduralWarehouse) ? bg.proceduralWarehouse : {}
+      ),
+    };
+  }
+  const belt = out?.beltTexture;
+  if (isObject(belt) && String(belt.renderMode ?? '').toLowerCase() === 'procedural_topdown') {
+    out.beltTexture = {
+      ...belt,
+      proceduralTopdown: deepMerge(
+        COMPLETE_BELT_PROCEDURAL_DEFAULTS,
+        isObject(belt.proceduralTopdown) ? belt.proceduralTopdown : {}
+      ),
+    };
+  }
+  return out;
+};
+
 export const BUILTIN_DISPLAY_PRESETS = {
   warehouse_concrete_checker: {
     backgroundColor: '#7f858a',
@@ -945,7 +1015,7 @@ export const applyDisplayPreset = (config, presetId) => {
   if (!preset) {
     return cloned;
   }
-  const mergedDisplay = deepMerge(cloned?.display || {}, preset);
+  const mergedDisplay = deepMerge(cloned?.display || {}, materializeCompletePreset(preset));
   const presetCfg = isObject(cloned?.display?.preset) ? cloned.display.preset : {};
   const perPresetOverrides = isObject(presetCfg?.presetOverrides) ? presetCfg.presetOverrides[id] : null;
   const displayWithOverrides = isObject(perPresetOverrides)

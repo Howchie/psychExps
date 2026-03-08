@@ -148,17 +148,23 @@ function syncSliderValueLabel(container, questionId) {
 function buildSurveyHtml(survey, buttonId, rootClass) {
     const title = survey.title ? `<h2 style="margin:0 0 0.75rem 0;">${escapeHtml(survey.title)}</h2>` : "";
     const description = survey.description ? `<p style="margin:0 0 1rem 0;">${escapeHtml(survey.description)}</p>` : "";
-    const questionsHtml = survey.questions.map((question, index) => renderQuestion(question, index + 1)).join("");
+    const showQuestionNumbers = survey.showQuestionNumbers !== false;
+    const showRequiredAsterisk = survey.showRequiredAsterisk !== false;
+    const questionsHtml = survey.questions
+        .map((question, index) => renderQuestion(question, index + 1, showQuestionNumbers, showRequiredAsterisk))
+        .join("");
     const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
     return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div style="width:min(900px,96vw);padding:1rem 1.25rem;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1rem 0 0 0;"><button id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
-function renderQuestion(question, index) {
+function renderQuestion(question, index, showQuestionNumbers, showRequiredAsterisk) {
     const required = question.required !== false;
-    const star = required ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
-    const prompt = `<p style="margin:0 0 0.5rem 0;font-weight:600;">${index}. ${escapeHtml(question.prompt)}${star}</p>`;
+    const star = required && showRequiredAsterisk ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
+    const promptPrefix = showQuestionNumbers ? `${index}. ` : "";
+    const prompt = `<p style="margin:0 0 0.5rem 0;font-weight:600;">${promptPrefix}${escapeHtml(question.prompt)}${star}</p>`;
     const help = question.helpText ? `<p style="margin:0 0 0.6rem 0;color:#374151;">${escapeHtml(question.helpText)}</p>` : "";
     const inner = question.type === "single_choice" ? renderSingleChoice(question) : renderSlider(question);
-    return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;"><legend style="padding:0 0.3rem;">Q${index}</legend>${prompt}${help}${inner}</fieldset>`;
+    const legend = showQuestionNumbers ? `<legend style="padding:0 0.3rem;">Q${index}</legend>` : "";
+    return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;">${legend}${prompt}${help}${inner}</fieldset>`;
 }
 function renderSingleChoice(question) {
     const isHorizontal = question.layout !== "vertical";
@@ -263,6 +269,8 @@ export function createAtwitSurvey(options = {}) {
     return {
         id: options.id ?? "atwit",
         title: options.title ?? "Workload Rating",
+        showQuestionNumbers: options.showQuestionNumbers,
+        showRequiredAsterisk: options.showRequiredAsterisk,
         questions: [
             {
                 id: questionId,
@@ -295,6 +303,8 @@ export function createNasaTlxSurvey(options = {}) {
         id: options.id ?? "nasa_tlx",
         title: options.title ?? "NASA TLX",
         description: options.description,
+        showQuestionNumbers: options.showQuestionNumbers,
+        showRequiredAsterisk: options.showRequiredAsterisk,
         questions: selectedSubscales.map((subscale) => ({
             id: subscale.id,
             type: "slider",

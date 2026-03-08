@@ -144,9 +144,12 @@ Shape aliases accepted:
 
 ```ts
 {
-  maxDevicePixelRatio?: number;  // default 2
+  maxDevicePixelRatio?: number;  // default 1.5
   maxFrameDtMs?: number;         // default 50
-  maxActiveEffects?: number;     // default 240
+  maxActiveEffects?: number;     // default 180
+  antialias?: boolean;           // default false (sharper edges)
+  pixelSnapBricks?: boolean;     // default false (smoother moving bricks)
+  imageRendering?: string;       // default "crisp-edges"
 }
 ```
 
@@ -202,6 +205,8 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
   enable?: boolean;
   src?: string;                        // image mode
   renderMode?: "image" | "procedural_warehouse";
+  style?: string;                      // built-in or custom style id
+  styles?: Record<string, object>;     // optional style map by id
   alpha?: number;
   scale?: number;
   scrollFactor?: number;
@@ -238,6 +243,8 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
   enable?: boolean;
   src?: string;                        // image mode
   renderMode?: "image" | "procedural_topdown";
+  style?: string;                      // built-in or custom style id
+  styles?: Record<string, object>;     // optional style map by id
   alpha?: number;
   scale?: number;
   scrollFactor?: number;
@@ -364,6 +371,24 @@ Built-in brick texture style IDs (global, usable without presets):
 - `parcel_label`
 - `parcel_damaged`
 - `chest`
+
+Built-in warehouse floor procedural style IDs (`display.backgroundTexture.style`):
+
+- `concrete_checker`
+- `cold_blueprint`
+- `lab_metal_rivet`
+- `wood_corrugation`
+- `damaged_salvage`
+- `salvage_rivet`
+
+Built-in conveyor procedural style IDs (`display.beltTexture.style`):
+
+- `industrial_ribbed`
+- `cold_blueprint_belt`
+- `lab_ribbed`
+- `wood_corrugation_belt`
+- `damaged_patched_belt`
+- `salvage_shredder_belt`
 
 ## 4.2 `conveyors`
 
@@ -514,6 +539,8 @@ Each field can be:
   seed?: number | string | "random" | "auto";
   mode?: "fixed_time" | "max_bricks";
   maxTimeSec?: number | null;          // used in fixed_time
+  endDelayMs?: number;                 // global post-end delay (ms), default 0
+  brickQuotaEndDelayMs?: number;       // post-end delay for "brick_quota_met" (ms), default 3000
   forcedOrder?: {
     enable?: boolean;
     switchMode?: "on_clear" | "interval" | "interval_or_clear";
@@ -554,6 +581,8 @@ Each field can be:
   pointerOverlay?: boolean;
   pointerConsole?: boolean;
   holdConsole?: boolean;
+  performanceConsole?: boolean;       // if true, logs trial performance summary to console
+  performanceFrameBudgetMs?: number;  // frame budget threshold used for overrun metrics (default 16.67)
   saveTrialLog?: boolean;
   printTrialLog?: boolean;
   trialLogPrefix?: string;
@@ -576,8 +605,17 @@ Used by trial difficulty estimator:
 
 ## 4.9 `selfReport` and `instructions`
 
-- `selfReport` and `instructions` are allowed and preserved in config snapshots.
-- In current Bricks adapter/runtime, these sections are not used to render instruction pages or post-trial questionnaires directly.
+- `selfReport` is allowed and preserved in config snapshots.
+- `instructions` is consumed by Bricks UI flow:
+  - `pages`/`introPages`/`intro`/`screens`: task intro pages
+  - `preBlockPages`/`beforeBlockPages`/`beforeBlockScreens`: shown before each block starts
+  - `postBlockPages`/`afterBlockPages`/`afterBlockScreens`: shown after each block ends
+  - `endPages`/`outroPages`/`end`/`outro`: shown after all blocks
+- Instruction pages can be plain strings or objects like `{ title, text }` / `{ title, html }`.
+- Page `title`, `text`, and `html` support `{dot.path}` interpolation against merged Bricks config values (and resolver-backed values), e.g. `{bricks.completionParams.target_hold_ms}`.
+- Post-trial survey presets (`surveys.postTrial`) support display toggles:
+  - `showQuestionNumbers?: boolean` (set `false` to hide `Q1` / `1.`)
+  - `showRequiredAsterisk?: boolean` (set `false` to hide required `*` marker)
 
 ## 5. SamplerSpec grammar
 

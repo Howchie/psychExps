@@ -48,6 +48,7 @@ describe('NbackTaskAdapter', () => {
     // Verify that blocks were parsed
     const runtime = (nbackAdapter as any).runtime;
     expect(runtime.parsed.mainBlocks[0].nLevel).toBe(1);
+    expect(runtime.moduleRunner).toBe(mockModuleRunner);
     expect(mockModuleRunner.transformBlockPlan).toHaveBeenCalled();
   });
 });

@@ -58,6 +58,7 @@ export interface CoreCompletionConfig {
 export interface CoreDataConfig {
   localSave: boolean;
   filePrefix: string;
+  localSaveFormat?: "csv" | "json" | "both";
 }
 
 export interface AutoResponderRangeConfig {
@@ -123,5 +124,4 @@ export interface TaskAdapterContext {
   resolver: VariableResolver;
   moduleRunner: TaskModuleRunner;
 }
-
 

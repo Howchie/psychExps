@@ -1,4 +1,4 @@
-import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createSurveyFromPreset, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, finalizeTaskRun, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, computeRtPhaseDurations, toJsPsychChoices, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, runSurvey, createResponseSemantics, } from "@experiments/core";
+import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createSurveyFromPreset, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, finalizeTaskRun, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, appendJsPsychInstructionScreens, appendJsPsychTaskIntroScreen, appendJsPsychBlockIntroScreen, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, computeRtPhaseDurations, toJsPsychChoices, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, runSurvey, createResponseSemantics, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
@@ -57,8 +57,26 @@ async function runSftTask(context) {
     }
     eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
     const timeline = [];
-    pushJsPsychContinueScreen(timeline, CallFunctionPlugin, root, `<h2>${escapeHtml(parsed.title)}</h2><p>Participant: <code>${escapeHtml(context.selection.participant.participantId)}</code></p>`, "intro_start", "sft-continue-intro_start");
-    pushJsPsychContinueScreen(timeline, CallFunctionPlugin, root, `<p>${escapeHtml(parsed.instructions)}</p>${renderKeySummary(parsed.responses)}`, "intro_instructions", "sft-continue-intro_instructions");
+    appendJsPsychTaskIntroScreen({
+        timeline,
+        plugin: CallFunctionPlugin,
+        container: root,
+        title: parsed.title,
+        participantId: context.selection.participant.participantId,
+        phase: "intro_start",
+        buttonId: "sft-continue-intro_start",
+    });
+    appendJsPsychInstructionScreens({
+        timeline,
+        plugin: CallFunctionPlugin,
+        container: root,
+        pages: [parsed.instructions],
+        section: "intro",
+        buttonIdPrefix: "sft-continue-intro_instructions",
+        phase: "intro_instructions",
+        renderHtml: (ctx) => `<p>${escapeHtml(ctx.pageText)}</p>${renderKeySummary(parsed.responses)}`,
+        data: (ctx) => ({ introIndex: ctx.pageIndex }),
+    });
     applyGlobalSalience(parsed, parsed.salience);
     if (parsed.staircase?.enabled) {
         appendStaircaseTimeline({
@@ -229,6 +247,7 @@ function appendStaircaseTimeline(args) {
 function appendBlockTimeline(args) {
     const { timeline, container, blocks, config, rng, allowedKeys, participantId, eventLogger } = args;
     const blockStatsMap = new Map();
+    let lastBlockIntroSignature = null;
     for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
         const block = blocks[blockIndex];
         blockStatsMap.set(block.id, { correct: 0, total: 0, accuracy: 0 });
@@ -239,11 +258,32 @@ function appendBlockTimeline(args) {
                 eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
             },
         });
-        pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>Rule: <b>${escapeHtml(block.rule)}</b></p><p>Trials: ${block.trials.length}</p>`, "block_start", `sft-continue-block_start-${block.id}`, { blockId: block.id });
-        for (let instructionIndex = 0; instructionIndex < block.beforeBlockScreens.length; instructionIndex += 1) {
-            const instruction = block.beforeBlockScreens[instructionIndex];
-            pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`, "block_pre_instruction", `sft-continue-block_pre_instruction-${block.id}-${instructionIndex}`, { blockId: block.id, instructionIndex });
+        const blockIntroText = `Rule: ${block.rule}. Trials: ${block.trials.length}.`;
+        const blockIntroSignature = `${block.label}::${blockIntroText}`;
+        if (blockIntroSignature !== lastBlockIntroSignature) {
+            appendJsPsychBlockIntroScreen({
+                timeline,
+                plugin: CallFunctionPlugin,
+                container,
+                blockLabel: block.label,
+                introText: blockIntroText,
+                phase: "block_start",
+                buttonId: `sft-continue-block_start-${block.id}`,
+                data: { blockId: block.id },
+            });
+            lastBlockIntroSignature = blockIntroSignature;
         }
+        appendJsPsychInstructionScreens({
+            timeline,
+            plugin: CallFunctionPlugin,
+            container,
+            pages: block.beforeBlockScreens,
+            section: "preBlock",
+            buttonIdPrefix: `sft-continue-block_pre_instruction-${block.id}`,
+            phase: "block_pre_instruction",
+            renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
+            data: (ctx) => ({ blockId: block.id, instructionIndex: ctx.pageIndex }),
+        });
         for (let trialIndex = 0; trialIndex < block.trials.length; trialIndex += 1) {
             const trial = block.trials[trialIndex];
             let feedbackView = null;
@@ -391,10 +431,17 @@ function appendBlockTimeline(args) {
                 void waitForContinue(host, `<h3>End of ${escapeHtml(block.label)}</h3><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`, { buttonId: `sft-end-${block.id}` }).then(done);
             },
         });
-        for (let instructionIndex = 0; instructionIndex < block.afterBlockScreens.length; instructionIndex += 1) {
-            const instruction = block.afterBlockScreens[instructionIndex];
-            pushJsPsychContinueScreen(timeline, CallFunctionPlugin, container, `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`, "block_post_instruction", `sft-continue-block_post_instruction-${block.id}-${instructionIndex}`, { blockId: block.id, instructionIndex });
-        }
+        appendJsPsychInstructionScreens({
+            timeline,
+            plugin: CallFunctionPlugin,
+            container,
+            pages: block.afterBlockScreens,
+            section: "postBlock",
+            buttonIdPrefix: `sft-continue-block_post_instruction-${block.id}`,
+            phase: "block_post_instruction",
+            renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
+            data: (ctx) => ({ blockId: block.id, instructionIndex: ctx.pageIndex }),
+        });
     }
 }
 function appendDotTrialTimeline(args) {

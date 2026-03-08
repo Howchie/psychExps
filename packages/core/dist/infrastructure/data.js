@@ -40,4 +40,33 @@ export function recordsToCsv(records) {
     const rows = records.map((record) => columns.map((column) => csvCell(record[String(column)])).join(","));
     return [header, ...rows].join("\n");
 }
+function isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function asRecordArray(value) {
+    if (!Array.isArray(value))
+        return null;
+    if (!value.every((entry) => isRecord(entry)))
+        return null;
+    return value;
+}
+export function inferCsvFromPayload(payload) {
+    const directRows = asRecordArray(payload);
+    if (directRows)
+        return recordsToCsv(directRows);
+    if (!isRecord(payload))
+        return null;
+    const preferredKeys = ["records", "trials", "rows", "results", "data"];
+    for (const key of preferredKeys) {
+        const rows = asRecordArray(payload[key]);
+        if (rows)
+            return recordsToCsv(rows);
+    }
+    for (const value of Object.values(payload)) {
+        const rows = asRecordArray(value);
+        if (rows)
+            return recordsToCsv(rows);
+    }
+    return recordsToCsv([payload]);
+}
 //# sourceMappingURL=data.js.map

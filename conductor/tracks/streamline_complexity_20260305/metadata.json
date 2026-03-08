@@ -1,8 +1,8 @@
 {
   "track_id": "streamline_complexity_20260305",
   "type": "feature",
-  "status": "new",
+  "status": "archived",
   "created_at": "2026-03-05T10:00:00Z",
-  "updated_at": "2026-03-05T10:00:00Z",
-  "description": "We have a plan to refactor the code to streamline and reduce complexity throughout"
+  "updated_at": "2026-03-08T00:58:23Z",
+  "description": "Superseded by core_adoption_unification_20260306 and module_unification_20260306."
 }

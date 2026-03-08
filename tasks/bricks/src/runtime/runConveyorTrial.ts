@@ -38,6 +38,7 @@ export interface ConveyorTrialData {
   game: unknown;
   drt: unknown;
   timeline_events: Array<Record<string, unknown>>;
+  performance?: Record<string, unknown>;
 }
 
 export interface ConveyorTrialDrtRuntimeBindings {
@@ -98,6 +99,19 @@ const downloadJson = (filename: string, data: unknown) => {
   }
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const resolveBricksDrtOverride = (raw: Record<string, unknown> | null | undefined): Record<string, unknown> | null => {
+  const source = asRecord(raw);
+  if (!source) return null;
+  const localModules = asRecord(source.modules);
+  const taskModules = asRecord(asRecord(source.task)?.modules);
+  return asRecord(localModules?.drt) ?? asRecord(taskModules?.drt) ?? null;
+};
+
 export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<ConveyorTrialData> {
   const trial = args;
   const display_element = args.displayElement;
@@ -109,8 +123,13 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   });
   const resolvedCfg = applyDisplayPreset(cfg, resolvedDisplayPresetId);
   const injectedDrtRuntime = args.drtRuntime ?? null;
+  const legacyDrtRaw = resolveBricksDrtOverride(resolvedCfg) ?? {};
   const resolvedDrtConfig =
-    injectedDrtRuntime?.config ?? resolveBricksDrtConfig((resolvedCfg.drt || {}) as Record<string, unknown>);
+    injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
+  const drtController = injectedDrtRuntime?.controller ?? null;
+  if (resolvedDrtConfig.enabled && !drtController) {
+    throw new Error('Bricks DRT is enabled but no module-scoped DRT runtime was injected.');
+  }
 
   const host = createScaledCanvasHost({
     displayElement: display_element,
@@ -121,6 +140,19 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   const container = host.container;
 
   const debugCfg = (resolvedCfg?.debug || {}) as Record<string, unknown>;
+  const perfDebugCfg = (resolvedCfg?.display?.performance || {}) as Record<string, unknown>;
+  const frameBudgetMs = Math.max(1, Number(debugCfg.performanceFrameBudgetMs ?? perfDebugCfg.frameBudgetMs ?? 16.67));
+  const frameStats = {
+    frames: 0,
+    rawDtSumMs: 0,
+    rawDtMinMs: Number.POSITIVE_INFINITY,
+    rawDtMaxMs: 0,
+    clampedFrames: 0,
+    budgetOverrunFrames: 0,
+    severeFrames: 0,
+    tickCostSumMs: 0,
+    tickCostMaxMs: 0
+  };
   const timelineEvents: Array<Record<string, unknown>> = [];
   const logEvent = (event: Record<string, unknown>) => {
     timelineEvents.push(event);
@@ -138,12 +170,28 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   const trialMode = resolvedCfg.trial?.mode ?? 'fixed_time';
   const brickQuota = Number.isFinite(resolvedCfg.bricks?.maxBricksPerTrial) ? resolvedCfg.bricks.maxBricksPerTrial : null;
   const enforceBrickQuota = trialMode === 'max_bricks' && brickQuota !== null;
+  const drtEnabled = resolvedDrtConfig.enabled === true;
+  const drtStatsSnapshot = {
+    presented: 0,
+    hits: 0,
+    misses: 0,
+    falseAlarms: 0,
+  };
+  const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
+  let lastHudSignature = '';
   const autoProfile = getAutoResponderProfile();
   const autoEnabled = isAutoResponderEnabled();
   const maxTimeSecRaw = resolvedCfg.trial?.maxTimeSec;
   const configuredMaxDuration =
     Number.isFinite(maxTimeSecRaw) && maxTimeSecRaw !== null ? Math.max(0, Math.floor(maxTimeSecRaw * 1000)) : null;
   const maxDuration = configuredMaxDuration ?? (autoEnabled ? Math.max(5_000, Number(autoProfile?.maxTrialDurationMs ?? 90_000)) : null);
+  const trialCfg = (resolvedCfg?.trial || {}) as Record<string, unknown>;
+  const globalEndDelayMsRaw = Number(trialCfg.endDelayMs);
+  const globalEndDelayMs = Number.isFinite(globalEndDelayMsRaw) ? Math.max(0, Math.floor(globalEndDelayMsRaw)) : 0;
+  const brickQuotaEndDelayMsRaw = Number(trialCfg.brickQuotaEndDelayMs);
+  const brickQuotaEndDelayMs = Number.isFinite(brickQuotaEndDelayMsRaw)
+    ? Math.max(0, Math.floor(brickQuotaEndDelayMsRaw))
+    : (globalEndDelayMs > 0 ? globalEndDelayMs : 3000);
 
   const renderer = new ConveyorRenderer(resolvedCfg, {
     onBrickClick: (brickId: string, x: number, y: number) => {
@@ -166,29 +214,10 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   });
 
   await renderer.init(container);
-  renderer.toggleVisualDRT(false, resolvedCfg.drt?.stim_visual_config);
+  renderer.toggleVisualDRT(false, legacyDrtRaw?.stim_visual_config);
 
   let drtPresentation: ReturnType<typeof createDrtPresentationBridge> | null = null;
-  const drtController =
-    injectedDrtRuntime?.controller ??
-    new DrtController(
-      {
-        ...resolvedDrtConfig,
-        seed: ((baseSeed >>> 0) + (trial.trialIndex + 1)) >>> 0,
-      },
-      {
-        onEvent: (event: Record<string, unknown>) => {
-          event.time = gameState.elapsed;
-          logEvent(event);
-        },
-        onStimStart: (stimulus) => drtPresentation?.onStimStart(stimulus),
-        onStimEnd: (stimulus) => drtPresentation?.onStimEnd(stimulus),
-      },
-      {
-        displayElement: container,
-        borderTargetElement: container,
-      },
-    );
+  let activeStimulusId: string | null = null;
 
   let animationFrameId: number | null = null;
   let ended = false;
@@ -213,7 +242,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   }
 
   const playDRTAudio = () => {
-    const url = resolvedCfg.drt?.stim_file_audio;
+    const url = legacyDrtRaw?.stim_file_audio;
     if (!url) return;
     const audio = new Audio(url);
     audio.preload = 'auto';
@@ -228,8 +257,8 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     });
   };
   drtPresentation = createDrtPresentationBridge(resolvedDrtConfig, {
-    showVisual: () => renderer.toggleVisualDRT(true, resolvedCfg.drt?.stim_visual_config),
-    hideVisual: () => renderer.toggleVisualDRT(false, resolvedCfg.drt?.stim_visual_config),
+    showVisual: () => renderer.toggleVisualDRT(true, legacyDrtRaw?.stim_visual_config),
+    hideVisual: () => renderer.toggleVisualDRT(false, legacyDrtRaw?.stim_visual_config),
     playAuditory: () => playDRTAudio(),
   });
   injectedDrtRuntime?.attachBindings?.({
@@ -238,6 +267,32 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     onEvent: (event) => {
       event.time = gameState.elapsed;
       logEvent(event);
+      if (drtEnabled) {
+        const type = String(event.type ?? '');
+        if (type === 'drt_stimulus_presented') {
+          drtStatsSnapshot.presented += 1;
+          const stimId = typeof event.stim_id === 'string' ? event.stim_id : `drt_${gameState.elapsed}`;
+          activeStimulusId = stimId;
+          drtPresentation?.onStimStart({ id: stimId, start: gameState.elapsed, responded: false });
+        } else if (type === 'drt_hit') {
+          drtStatsSnapshot.hits += 1;
+          drtPresentation?.onResponseHandled();
+          const stimId = typeof event.stim_id === 'string' ? event.stim_id : activeStimulusId ?? `drt_${gameState.elapsed}`;
+          drtPresentation?.onStimEnd({ id: stimId, start: gameState.elapsed, responded: true });
+          activeStimulusId = null;
+        } else if (type === 'drt_miss') {
+          drtStatsSnapshot.misses += 1;
+          const stimId = typeof event.stim_id === 'string' ? event.stim_id : activeStimulusId ?? `drt_${gameState.elapsed}`;
+          drtPresentation?.onStimEnd({ id: stimId, start: gameState.elapsed, responded: false });
+          activeStimulusId = null;
+        } else if (type === 'drt_false_alarm') {
+          drtStatsSnapshot.falseAlarms += 1;
+        } else if (type === 'drt_forced_end') {
+          const stimId = typeof event.stim_id === 'string' ? event.stim_id : activeStimulusId ?? `drt_${gameState.elapsed}`;
+          drtPresentation?.onStimEnd({ id: stimId, start: gameState.elapsed, responded: false });
+          activeStimulusId = null;
+        }
+      }
     },
     onStimStart: (stimulus) => drtPresentation?.onStimStart(stimulus),
     onStimEnd: (stimulus) => drtPresentation?.onStimEnd(stimulus),
@@ -246,6 +301,11 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   let lastFrame: number | null = null;
   let nextAutoActionAt = 0;
   let finalizedDrtData: unknown | null = null;
+  const emptyDrtData = {
+    enabled: false,
+    stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 },
+    events: [],
+  };
 
   const cleanup = (keyHandler: (e: KeyboardEvent) => void) => {
     ended = true;
@@ -255,10 +315,14 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       animationFrameId = null;
     }
     if (finalizedDrtData === null) {
-      if (injectedDrtRuntime?.stopOnCleanup === false) {
-        finalizedDrtData = drtController.exportData();
+      if (drtController) {
+        if (injectedDrtRuntime?.stopOnCleanup === false) {
+          finalizedDrtData = drtController.exportData();
+        } else {
+          finalizedDrtData = drtController.stop();
+        }
       } else {
-        finalizedDrtData = drtController.stop();
+        finalizedDrtData = emptyDrtData;
       }
     }
     injectedDrtRuntime?.detachBindings?.();
@@ -270,11 +334,33 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   };
 
   return await new Promise<ConveyorTrialData>((resolve) => {
+    let pendingEnd: { reason: string; dueAtMs: number } | null = null;
     const endTrial = (reason: string, keyHandler: (e: KeyboardEvent) => void) => {
       if (ended) return;
       cleanup(keyHandler);
       const gameData = gameState.exportData();
-      const drtData = finalizedDrtData ?? drtController.exportData();
+      const drtData = finalizedDrtData ?? drtController?.exportData() ?? emptyDrtData;
+      const frameCount = Math.max(1, frameStats.frames);
+      const avgRawDtMs = frameStats.rawDtSumMs / frameCount;
+      const avgFps = avgRawDtMs > 0 ? (1000 / avgRawDtMs) : 0;
+      const avgTickCostMs = frameStats.tickCostSumMs / frameCount;
+      const rendererPerf = renderer.getPerformanceSnapshot();
+      const perfSummary = {
+        frame_budget_ms: frameBudgetMs,
+        frame_count: frameStats.frames,
+        avg_fps: avgFps,
+        raw_dt_avg_ms: avgRawDtMs,
+        raw_dt_min_ms: Number.isFinite(frameStats.rawDtMinMs) ? frameStats.rawDtMinMs : 0,
+        raw_dt_max_ms: frameStats.rawDtMaxMs,
+        clamped_frames: frameStats.clampedFrames,
+        budget_overrun_frames: frameStats.budgetOverrunFrames,
+        severe_frames: frameStats.severeFrames,
+        tick_cost_avg_ms: avgTickCostMs,
+        tick_cost_max_ms: frameStats.tickCostMaxMs,
+        budget_overrun_ratio: frameStats.frames > 0 ? (frameStats.budgetOverrunFrames / frameStats.frames) : 0,
+        severe_ratio: frameStats.frames > 0 ? (frameStats.severeFrames / frameStats.frames) : 0,
+        renderer: rendererPerf
+      };
       const trialData: ConveyorTrialData = {
         block_label: trial.blockLabel,
         block_index: trial.blockIndex,
@@ -288,7 +374,11 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         game: gameData,
         drt: drtData,
         timeline_events: timelineEvents,
+        performance: perfSummary,
       };
+      if (debugCfg.performanceConsole) {
+        console.info('[bricks-performance]', perfSummary);
+      }
       if (resolvedCfg?.debug?.saveTrialLog) {
         const prefix = String(resolvedCfg?.debug?.trialLogPrefix || 'trial_debug_log');
         const stamp = Date.now();
@@ -300,15 +390,37 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       }
       resolve(trialData);
     };
+    const scheduleEnd = (reason: string) => {
+      if (ended || pendingEnd) return;
+      const delayMs = reason === 'brick_quota_met' ? brickQuotaEndDelayMs : globalEndDelayMs;
+      pendingEnd = {
+        reason,
+        dueAtMs: gameState.elapsed + Math.max(0, delayMs),
+      };
+    };
 
     const tick = (timestamp: number) => {
       if (ended) return;
+      const tickStartTs = performance.now();
       if (lastFrame === null) {
         lastFrame = timestamp;
       }
       const rawDt = timestamp - lastFrame;
       lastFrame = timestamp;
       const dt = renderer.clampFrameDelta(rawDt);
+      frameStats.frames += 1;
+      frameStats.rawDtSumMs += rawDt;
+      frameStats.rawDtMinMs = Math.min(frameStats.rawDtMinMs, rawDt);
+      frameStats.rawDtMaxMs = Math.max(frameStats.rawDtMaxMs, rawDt);
+      if (dt !== rawDt) {
+        frameStats.clampedFrames += 1;
+      }
+      if (rawDt > frameBudgetMs) {
+        frameStats.budgetOverrunFrames += 1;
+      }
+      if (rawDt > frameBudgetMs * 2) {
+        frameStats.severeFrames += 1;
+      }
 
       gameState.step(dt);
       if (autoEnabled && trialStarted) {
@@ -336,25 +448,55 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       const focusState = gameState.getFocusState();
       renderer.syncBricks(Array.from(gameState.bricks.values()), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
       const remainingMs = maxDuration !== null ? Math.max(0, maxDuration - gameState.elapsed) : null;
-      renderer.updateHUD(gameState.getHUDStats(), remainingMs, {
-        label: trial.blockLabel,
-        drtStats: drtController.exportData().stats,
-        focusInfo: focusState,
-        drtEnabled: resolvedDrtConfig.enabled === true,
-      });
+      const hudStats = gameState.getHUDStats();
+      const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));
+      const hudSignature = [
+        String(hudStats.timeElapsedMs),
+        String(hudStats.bricksActive),
+        String(hudStats.spawned),
+        String(hudStats.cleared),
+        String(hudStats.dropped),
+        String(hudStats.points),
+        String(hudStats.focusBrickId ?? ''),
+        String(hudStats.focusBrickValue ?? ''),
+        String(focusState?.activeBrickId ?? ''),
+        remainingBucket,
+        String(drtStatsSnapshot.presented),
+        String(drtStatsSnapshot.hits),
+        String(drtStatsSnapshot.misses),
+        String(drtStatsSnapshot.falseAlarms),
+      ].join('|');
+      if (hudSignature !== lastHudSignature) {
+        lastHudSignature = hudSignature;
+        renderer.updateHUD(hudStats, remainingMs, {
+          label: trial.blockLabel,
+          drtStats: drtEnabled ? drtStatsSnapshot : undefined,
+          focusInfo: focusState,
+          drtEnabled,
+        });
+      }
 
-      if (enforceBrickQuota) {
+      if (!pendingEnd && enforceBrickQuota) {
         const completed = gameState.stats.cleared + gameState.stats.dropped;
         if (completed >= brickQuota && gameState.bricks.size === 0) {
-          endTrial('brick_quota_met', keyHandler);
-          return;
+          scheduleEnd('brick_quota_met');
         }
       }
 
-      if (maxDuration !== null && gameState.elapsed >= maxDuration) {
-        endTrial('time_limit', keyHandler);
+      if (!pendingEnd && maxDuration !== null && gameState.elapsed >= maxDuration) {
+        scheduleEnd('time_limit');
+      }
+
+      if (pendingEnd && gameState.elapsed >= pendingEnd.dueAtMs) {
+        const tickCostMs = performance.now() - tickStartTs;
+        frameStats.tickCostSumMs += tickCostMs;
+        frameStats.tickCostMaxMs = Math.max(frameStats.tickCostMaxMs, tickCostMs);
+        endTrial(pendingEnd.reason, keyHandler);
         return;
       }
+      const tickCostMs = performance.now() - tickStartTs;
+      frameStats.tickCostSumMs += tickCostMs;
+      frameStats.tickCostMaxMs = Math.max(frameStats.tickCostMaxMs, tickCostMs);
 
       animationFrameId = requestAnimationFrame(tick);
     };
@@ -367,7 +509,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     };
 
     if (trialStarted) {
-      drtController.start(0);
+      drtController?.start(0);
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
       startLoop();
     }
@@ -380,7 +522,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         if (startOverlay && startOverlay.parentNode) {
           startOverlay.parentNode.removeChild(startOverlay);
         }
-        drtController.start(gameState.elapsed);
+        drtController?.start(gameState.elapsed);
         startLoop();
         return;
       }
@@ -401,7 +543,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
 
     if (maxDuration !== null) {
       window.setTimeout(() => {
-        endTrial('time_limit', keyHandler);
+        scheduleEnd('time_limit');
       }, maxDuration + 20);
     }
   });

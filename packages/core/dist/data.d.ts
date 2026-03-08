@@ -1,5 +1,0 @@
-import type { SelectionContext } from "./types";
-export declare function downloadJson(data: unknown, filePrefix: string, selection: SelectionContext): void;
-export declare function downloadCsv(csv: string, filePrefix: string, selection: SelectionContext, suffix?: string): void;
-export declare function csvCell(value: unknown): string;
-export declare function recordsToCsv<T extends object>(records: T[]): string;

@@ -46,3 +46,33 @@ export function recordsToCsv<T extends object>(records: T[]): string {
   );
   return [header, ...rows].join("\n");
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] | null {
+  if (!Array.isArray(value)) return null;
+  if (!value.every((entry) => isRecord(entry))) return null;
+  return value as Record<string, unknown>[];
+}
+
+export function inferCsvFromPayload(payload: unknown): string | null {
+  const directRows = asRecordArray(payload);
+  if (directRows) return recordsToCsv(directRows);
+
+  if (!isRecord(payload)) return null;
+
+  const preferredKeys = ["records", "trials", "rows", "results", "data"];
+  for (const key of preferredKeys) {
+    const rows = asRecordArray(payload[key]);
+    if (rows) return recordsToCsv(rows);
+  }
+
+  for (const value of Object.values(payload)) {
+    const rows = asRecordArray(value);
+    if (rows) return recordsToCsv(rows);
+  }
+
+  return recordsToCsv([payload]);
+}

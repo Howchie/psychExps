@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import type { Download, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
@@ -36,8 +36,9 @@ test("sft completes in auto mode", async ({ page }, testInfo) => {
 
 test("stroop completes in auto mode", async ({ page }, testInfo) => {
   const capture = installDownloadCapture(page, testInfo);
+  const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
   await page.goto("/?task=stroop&variant=default&auto=true&participant=auto_e2e_stroop");
-  await expect(page.getByText("Stroop complete")).toBeVisible();
+  await downloadPromise;
   await page.waitForTimeout(1000);
   const files = await capture.flush();
   expect(files.length).toBeGreaterThan(0);
@@ -54,4 +55,34 @@ test("change_detection completes in auto mode", async ({ page }, testInfo) => {
   await page.waitForTimeout(1000);
   const files = await capture.flush();
   expect(files.length).toBeGreaterThan(0);
+});
+
+test("nback_pm_old exports stimulus list", async ({ page }, testInfo) => {
+  const capture = installDownloadCapture(page, testInfo);
+  const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
+  await page.goto("/?task=nback_pm_old&variant=modern&exportStimuli=true&participant=auto_e2e_nback_pm_old");
+  await downloadPromise;
+  await page.waitForTimeout(1000);
+  const files = await capture.flush();
+  expect(files.length).toBeGreaterThan(0);
+});
+
+test("nback pm_module_export_demo exports stimulus list with trial codes", async ({ page }, testInfo) => {
+  const capture = installDownloadCapture(page, testInfo);
+  const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
+  await page.goto("/?task=nback&variant=pm_module_export_demo&exportStimuli=true&participant=auto_e2e_nback_pm_module_export");
+  await downloadPromise;
+  await page.waitForTimeout(1000);
+  const files = await capture.flush();
+  expect(files.length).toBeGreaterThan(0);
+  const csv = await readFile(files[0], "utf8");
+  expect(csv).toContain("trial_code");
+  expect(csv).toContain("pm");
+  expect(csv).toMatch(/lure_[0-9]+/);
+});
+
+test("nback_pm_old launches under renamed task id", async ({ page }) => {
+  await page.goto("/?task=nback_pm_old&variant=modern&auto=true&participant=auto_e2e_nback_pm_old_launch");
+  await page.waitForTimeout(5000);
+  await expect(page.getByText("Experiment shell failed")).toHaveCount(0);
 });

@@ -15,4 +15,17 @@ export interface InstructionPageSlots {
     postBlock: string[];
     end: string[];
 }
+export interface InstructionScreenSpec {
+    title?: string;
+    text?: string;
+    html?: string;
+}
 export declare function resolveInstructionPageSlots(instructions: unknown, defaults?: Partial<InstructionPageSlots>): InstructionPageSlots;
+export interface InstructionScreenSlots {
+    intro: InstructionScreenSpec[];
+    preBlock: InstructionScreenSpec[];
+    postBlock: InstructionScreenSpec[];
+    end: InstructionScreenSpec[];
+}
+export declare function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[];
+export declare function resolveInstructionScreenSlots(instructions: unknown, defaults?: Partial<InstructionScreenSlots>): InstructionScreenSlots;

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { makeRNG } from './rng.js';
+import { createCoreRng } from '@experiments/core';
 import { createSampler } from './sampling.js';
 import { getBrickVisibleWidth } from './brick_logic.js';
 const BRICK_STATUS = {
@@ -16,7 +16,7 @@ export class GameState {
     constructor(config, { onEvent, seed } = {}) {
         this.config = config;
         this.onEvent = typeof onEvent === 'function' ? onEvent : () => { };
-        this.rng = makeRNG(seed ?? config?.trial?.seed);
+        this.rng = createCoreRng(seed ?? config?.trial?.seed);
         this.samplerCache = new WeakMap();
         this.elapsed = 0;
         this.events = [];

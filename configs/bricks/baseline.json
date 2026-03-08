@@ -2,7 +2,30 @@
   "task": {
     "implementation": "native_bricks",
     "runner": "native",
-    "title": "Bricks Baseline"
+    "title": "Bricks Baseline",
+    "modules": {
+      "drt": {
+        "enabled": false,
+        "key": " ",
+        "audio": {
+          "volume": 0.0
+        },
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 32,
+          "leftPx": 600,
+          "topPx": 30
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        },
+        "responseDeadlineMs": 2500
+      }
+    }
   },
   "display": {
     "canvasWidth": 1200,
@@ -120,9 +143,9 @@
       ]
     },
     "performance": {
-      "maxDevicePixelRatio": 2,
+      "maxDevicePixelRatio": 1.5,
       "maxFrameDtMs": 50,
-      "maxActiveEffects": 240
+      "maxActiveEffects": 180
     }
   },
   "conveyors": {
@@ -151,15 +174,37 @@
     "colorCategories": [
       {
         "id": "Target",
-        "label": "High Value", 
+        "label": "High Value",
         "color": "#fbbf24",
-        "value": { "type": "poisson", "lambda": 15, "min": 11, "max": 19 }
+        "value": {
+          "type": "poisson",
+          "lambda": 15,
+          "min": 11,
+          "max": 19
+        }
       },
       {
         "id": "Other",
         "label": "Distractor",
-        "color": {"type": "list", "values": ["#DDA0DD","#66CDAA","#d97706","#FFB6C1","#FF7F50","#228B22","#40E0D0"], "without_replacement": true},
-        "value": { "type": "poisson", "lambda": 5, "min": 1, "max": 9 }
+        "color": {
+          "type": "list",
+          "values": [
+            "#DDA0DD",
+            "#66CDAA",
+            "#d97706",
+            "#FFB6C1",
+            "#FF7F50",
+            "#228B22",
+            "#40E0D0"
+          ],
+          "without_replacement": true
+        },
+        "value": {
+          "type": "poisson",
+          "lambda": 5,
+          "min": 1,
+          "max": 9
+        }
       }
     ],
     "initialBricks": {
@@ -171,17 +216,56 @@
       "enable": true,
       "count": 4,
       "defaults": {
-        "width": { "type": "uniform", "min": 50, "max": 110 }
+        "width": {
+          "type": "uniform",
+          "min": 50,
+          "max": 110
+        }
       },
       "fields": {
-        "conveyorIndex": { "values": [0, 1, 2, 3], "draw": "without_replacement" },
-        "xFraction": { "values": [
-            { "type": "uniform", "min": 0.06, "max": 0.10 },
-            { "type": "uniform", "min": 0.08, "max": 0.12 },
-            { "type": "uniform", "min": 0.11, "max": 0.15 },
-            { "type": "uniform", "min": 0.13, "max": 0.15 }
-        ], "draw": "without_replacement" },
-        "colorCategoryId": { "values": ["Target", "Other", "Other", "Other"], "draw": "without_replacement" }
+        "conveyorIndex": {
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "draw": "without_replacement"
+        },
+        "xFraction": {
+          "values": [
+            {
+              "type": "uniform",
+              "min": 0.06,
+              "max": 0.1
+            },
+            {
+              "type": "uniform",
+              "min": 0.08,
+              "max": 0.12
+            },
+            {
+              "type": "uniform",
+              "min": 0.11,
+              "max": 0.15
+            },
+            {
+              "type": "uniform",
+              "min": 0.13,
+              "max": 0.15
+            }
+          ],
+          "draw": "without_replacement"
+        },
+        "colorCategoryId": {
+          "values": [
+            "Target",
+            "Other",
+            "Other",
+            "Other"
+          ],
+          "draw": "without_replacement"
+        }
       }
     },
     "maxBricksPerTrial": 4,
@@ -198,27 +282,6 @@
   },
   "difficultyModel": {
     "holdQualityMean": 0.5
-  },
-  "drt": {
-    "enable": false,
-    "stim_type": "visual",
-    "stim_visual_config": {
-      "shape": "square",
-      "color": "#dc2626",
-      "size_px": 32,
-      "x": 600,
-      "y": 30
-    },
-    "key": " ",
-    "isi_sampler": {
-      "type": "uniform",
-      "min": 3000,
-      "max": 5000
-    },
-    "response_deadline_ms": 2500,
-    "audio": {
-      "volume": 0.0
-    }
   },
   "trial": {
     "mode": "max_bricks",
@@ -252,6 +315,8 @@
     "postTrial": [
       {
         "preset": "atwit",
+        "showQuestionNumbers": false,
+        "showRequiredAsterisk": false,
         "prompt": "ATWIT: Rate your overall workload during the just-completed trial (1-10)."
       }
     ]
@@ -278,7 +343,7 @@
       },
       {
         "title": "How To Process",
-        "html": "<p>Press and hold on a block, then release. Aim for about 500 ms holds to maximize progress.</p><p>Larger blocks require more successful holds than smaller blocks, reflecting their larger processing demand.</p>"
+        "html": "<p>Press and hold on a block, then release. Aim for about {bricks.completionParams.target_hold_ms} ms holds to maximize progress.</p><p>Larger blocks require more successful holds than smaller blocks, reflecting their larger processing demand.</p>"
       },
       {
         "title": "Goal",

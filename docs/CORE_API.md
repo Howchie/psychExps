@@ -347,7 +347,11 @@ Converts flat object rows to CSV with escaping.
 ### `finalizeTaskRun(args): Promise<{ submittedToJatos: boolean; redirected: boolean }>`
 
 Behavior:
-1. Local save (`downloadJson` and optional `downloadCsv`) when `coreConfig.data.localSave !== false`.
+1. Local save when `coreConfig.data.localSave !== false`, using `coreConfig.data.localSaveFormat`:
+   - default: `"csv"` (CSV only)
+   - `"json"`: JSON only
+   - `"both"`: CSV + JSON
+   CSV uses explicit `args.csv.contents` when provided, else inferred tabular rows from payload where possible.
 2. Submit to JATOS when available.
 3. `endStudy()` unless `endJatosOnSubmit === false`.
 4. Resolve and apply redirect template if enabled.

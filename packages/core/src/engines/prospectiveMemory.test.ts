@@ -18,12 +18,29 @@ describe('ProspectiveMemoryModule', () => {
     runner.start({
       module,
       address: { scope: 'block', blockIndex: 0, trialIndex: null },
-      config: { rules },
+      config: { rules, captureResponses: true },
       context: {}
     });
 
     expect(runner.handleKey('space', 1000)).toBe(true);
     expect(runner.handleKey('a', 1000)).toBe(false);
+  });
+
+  it('should not handle keys when captureResponses is disabled', () => {
+    const runner = new TaskModuleRunner();
+    const module = new ProspectiveMemoryModule();
+    const rules: ProspectiveMemoryCueRule[] = [
+      { type: 'category_in', categories: ['animals'], responseKey: 'space' }
+    ];
+
+    runner.start({
+      module,
+      address: { scope: 'block', blockIndex: 0, trialIndex: null },
+      config: { rules, captureResponses: false },
+      context: {}
+    });
+
+    expect(runner.handleKey('space', 1000)).toBe(false);
   });
 
   describe('transformPlan', () => {

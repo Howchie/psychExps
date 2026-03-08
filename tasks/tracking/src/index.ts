@@ -1,6 +1,4 @@
 import {
-  DrtController,
-  TaskModuleRunner,
   TrackingBinSummarizer,
   TrackingMotionController,
   asArray,
@@ -32,6 +30,8 @@ import {
   type TrackingMotionConfig,
   type TrackingTargetGeometry,
   type TaskModuleAddress,
+  startDrtModuleScope,
+  stopModuleScope,
 } from "@experiments/core";
 import { createTrackingRenderer, type TrackingRendererBackend } from "./renderer";
 
@@ -47,7 +47,6 @@ class TrackingTaskAdapter implements TaskAdapter {
   };
 
   private context: TaskAdapterContext | null = null;
-  private runner = new TaskModuleRunner([]);
 
   async initialize(context: TaskAdapterContext): Promise<void> {
     this.context = context;
@@ -55,12 +54,11 @@ class TrackingTaskAdapter implements TaskAdapter {
 
   async execute(): Promise<unknown> {
     if (!this.context) throw new Error("Tracking Task not initialized");
-    const result = await runTrackingTask(this.context, this.runner);
+    const result = await runTrackingTask(this.context, this.context.moduleRunner);
     return result;
   }
 
   async terminate(): Promise<void> {
-    this.runner.stopAll();
     setCursorHidden(false);
   }
 }
@@ -235,7 +233,7 @@ interface MotTrialRuntimeResult {
 
 type TrackingTrialRuntimeResult = PursuitTrialRuntimeResult | MotTrialRuntimeResult;
 
-async function runTrackingTask(context: TaskAdapterContext, runner: TaskModuleRunner): Promise<unknown> {
+async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterContext["moduleRunner"]): Promise<unknown> {
   const parsed = parseTrackingConfig(context.taskConfig);
   const participantId = context.selection.participant.participantId;
   const variantId = context.selection.variantId;
@@ -287,30 +285,26 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskModuleRu
     blockIndex: number,
     trialIndex: number | null,
   ): void => {
-    if (!drtConfig.enabled) return;
-    runner.start({
-      module: DrtController.asTaskModule({
-        ...drtConfig,
-        seed: hashSeed(
-          context.selection.participant.participantId,
-          context.selection.participant.sessionId,
-          context.selection.variantId,
-          "tracking_drt",
-          `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`
-        )
-      }),
-      address: { scope, blockIndex, trialIndex },
-      config: drtConfig,
+    startDrtModuleScope({
+      runner,
+      drtConfig,
+      scope,
+      blockIndex,
+      trialIndex,
+      participantId: context.selection.participant.participantId,
+      sessionId: context.selection.participant.sessionId,
+      variantId: context.selection.variantId,
+      taskSeedKey: "tracking_drt",
       context: {
         displayElement: stageShell,
         borderTargetElement: stageShell,
         borderTargetRect: resolveTrackingDisplayFrameRect,
-      }
+      },
     });
   };
 
   const stopDrtScope = (scope: "block" | "trial", blockIndex: number, trialIndex: number | null): void => {
-    runner.stop({ scope, blockIndex, trialIndex });
+    stopModuleScope({ runner, scope, blockIndex, trialIndex });
   };
 
   eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
@@ -972,7 +966,7 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
   const targetDefaultsRaw = asObject(trialDefaultsRaw.target) ?? {};
   const motDefaultsRaw = asObject(trialDefaultsRaw.mot) ?? {};
 
-  const drtTaskRaw = asObject((asObject(taskRaw.embeds)?.drt) ?? taskRaw.drt ?? asObject(taskConfig.drt));
+  const drtTaskRaw = resolveTrackingDrtOverride(taskRaw) ?? resolveTrackingDrtOverride(taskConfig);
   const drtDefault = resolveTrackingDrtConfig(
     {
       enabled: false,
@@ -1038,7 +1032,7 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
       beforeBlockScreens: toStringScreens(raw.beforeBlockScreens),
       afterBlockScreens: toStringScreens(raw.afterBlockScreens),
       trialTemplate,
-      drt: resolveTrackingDrtConfig(drtDefault, asObject((asObject(raw.embeds)?.drt) ?? raw.drt)),
+      drt: resolveTrackingDrtConfig(drtDefault, resolveTrackingDrtOverride(raw)),
     } satisfies ParsedTrackingBlock;
   });
 
@@ -1084,6 +1078,16 @@ function resolveTrackingDrtConfig(
   overrideRaw: Record<string, unknown> | null,
 ): TrackingDrtConfig {
   return coerceScopedDrtConfig(base, overrideRaw);
+}
+
+function resolveTrackingDrtOverride(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  const source = asObject(raw);
+  if (!source) return null;
+  const taskModules = asObject(asObject(source.task)?.modules);
+  const localModules = asObject(source.modules);
+  return asObject(localModules?.drt) ?? asObject(taskModules?.drt) ?? null;
 }
 
 function computeBlockInsideRate(records: TrackingTrialRecord[], blockIndex: number): number {

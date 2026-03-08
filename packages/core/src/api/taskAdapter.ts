@@ -46,7 +46,7 @@ export class LifecycleManager {
    * Executes the full task lifecycle: initialize, execute, terminate.
    * If the adapter only has the legacy 'launch' method, it will use that.
    */
-  async run(context: Omit<TaskAdapterContext, "resolver">): Promise<unknown> {
+  async run(context: Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner">): Promise<unknown> {
     // Standardize VariableResolver instantiation using SelectionContext
     const taskConfig = context.taskConfig ?? {};
     const taskVariables = (taskConfig.task as JSONObject)?.variables as JSONObject;
@@ -77,6 +77,7 @@ export class LifecycleManager {
 
     // Resolve configuration variables after merging (static parts only)
     const configManager = new ConfigurationManager();
+    configManager.validateLegacyKeys(taskConfig);
     const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
 
     // Initialize module runner with standard core modules

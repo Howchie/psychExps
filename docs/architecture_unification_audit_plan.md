@@ -1,16 +1,35 @@
 # Architecture Unification Audit And Plan
 
 ## Scope
-This audit covers the full codebase architecture, identifies current dual-flow execution paths, and proposes a detailed unification plan. No implementation changes are included in this document.
+This document started as an architecture audit and proposed plan. It now also tracks implementation status for the core-adoption unification track.
+
+Status date: 2026-03-06
+
+## Current Implementation Status (2026-03-06)
+
+Implemented:
+- Core module lifecycle ownership converged in active paths (NBack/Bricks/Tracking) via shared `TaskModuleRunner` scope helpers.
+- Bricks task-local scheduler/RNG/CSV forks removed in favor of core helpers.
+- Shared instruction/page scheduling primitives now power both native and jsPsych task flows.
+- SFT/Stroop/NBack instruction+continue flows moved onto shared core jsPsych helpers.
+- Root workspace build/typecheck/tests pass after unification and hygiene updates.
+- Repository hygiene controls added:
+  - tracked task-local `node_modules` and checkpoint artifacts removed
+  - ignore rules added to prevent recurrence
+
+Still intentionally open / deferred:
+- Standalone PM remains a parity harness and is not being feature-developed.
+- Full PM parity governance (formal gates/evidence workflow) remains open.
+- Some manual verification checkpoints are pending due unavailable manual runtime pass.
 
 ## Audit Outcome
-Tracking is the correct testbed for migration because it is currently non-critical and on the native path, and its DRT integration is already among the most complete.
+Tracking was the initial migration testbed; this is now reflected in implemented module-scope and lifecycle convergence work.
 
 ## Where Dual Flows Exist Today
 
 1. Task runtime/orchestration split
 - jsPsych timeline tasks: PM/NBack/SFT/Stroop
-  - `/data/work/Experiments/tasks/pm/src/index.ts`
+  - `/data/work/Experiments/tasks/nback_pm_old/src/index.ts`
   - `/data/work/Experiments/tasks/nback/src/index.ts`
   - `/data/work/Experiments/tasks/sft/src/index.ts`
   - `/data/work/Experiments/tasks/stroop/src/index.ts`
@@ -68,7 +87,7 @@ Core-first in this repository should be interpreted as:
 
 Renderer choice remains task-local. Deployment framework (instructions, navigation, trial/block lifecycle, module embeds, finalization) should be shared.
 
-## Detailed Implementation Plan (No Code Yet)
+## Detailed Implementation Plan (Historical + Remaining)
 
 1. Define unified core deployment contract
 - Introduce a core `TaskSessionRunner` contract:
@@ -154,3 +173,15 @@ Renderer choice remains task-local. Deployment framework (instructions, navigati
 ## Notes
 - Tracking DRT orchestration is currently more complete than most jsPsych task integrations and should be used as the baseline contract for module embedding behavior.
 - PM remains the strongest reference for feature-rich trial pipeline semantics and should guide parity requirements during migration.
+
+## Residual Task-Local Systems (Intentional, With Rationale)
+
+1. Bricks renderer/game loop internals (`tasks/bricks/src/runtime/*`)
+- Rationale: paradigm-specific PIXI runtime and conveyor mechanics are irreducible task semantics.
+
+2. Standalone PM planner/runtime (`tasks/nback_pm_old/src/index.ts`)
+- Rationale: retained as parity harness while canonical PM integration matures in NBack+module path.
+- Policy: no net-new feature ownership; only stability/compatibility maintenance.
+
+3. Task-specific scoring semantics in each adapter
+- Rationale: correctness rules remain paradigm-specific even when lifecycle/orchestration is shared.

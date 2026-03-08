@@ -23,6 +23,8 @@ export declare class ConveyorRenderer {
     _setupPointerDebug(): void;
     _emitPointerDebug(type: any, brickId: any, e: any, extra?: {}): void;
     _updatePointerDebugOverlay(): void;
+    _resolveBeltProceduralStyleConfig(texCfg: any): any;
+    _resolveWarehouseProceduralStyleConfig(texCfg: any): any;
     _prepareBeltTexture(): Promise<void>;
     _buildProceduralTopdownBeltTexture(styleCfg?: {}): any;
     _buildProceduralWarehouseTexture(styleCfg?: {}): any;
@@ -81,4 +83,5 @@ export declare class ConveyorRenderer {
     _prepareBackgroundTexture(): Promise<void>;
     _drawBackground(): void;
     destroy(): void;
+    getPerformanceSnapshot(): any;
 }

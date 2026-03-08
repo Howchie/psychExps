@@ -21,6 +21,7 @@ export interface ConveyorTrialData {
     game: unknown;
     drt: unknown;
     timeline_events: Array<Record<string, unknown>>;
+    performance?: Record<string, unknown>;
 }
 export interface ConveyorTrialDrtRuntimeBindings {
     displayElement?: HTMLElement | null;

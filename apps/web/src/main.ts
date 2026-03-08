@@ -16,7 +16,7 @@ import {
 import type { TaskAdapter } from "@experiments/core";
 
 import { sftAdapter } from "@experiments/task-sft";
-import { pmAdapter } from "@experiments/task-pm";
+import { nbackPmOldAdapter } from "@experiments/task-nback-pm-old";
 import { nbackAdapter } from "@experiments/task-nback";
 import { bricksAdapter } from "@experiments/task-bricks";
 import { stroopAdapter } from "@experiments/task-stroop";
@@ -35,7 +35,7 @@ async function bootstrap(): Promise<void> {
   const configManager = new ConfigurationManager();
   const adapters: TaskAdapter[] = [
     sftAdapter,
-    pmAdapter,
+    nbackPmOldAdapter,
     nbackAdapter,
     bricksAdapter,
     stroopAdapter,
@@ -44,7 +44,10 @@ async function bootstrap(): Promise<void> {
   ];
   const adapterMap = buildTaskMap(adapters);
 
-  const selection = resolveSelection(coreDefaultConfig);
+  const initialSelection = resolveSelection(coreDefaultConfig);
+  const selection = initialSelection.taskId === "pm"
+    ? { ...initialSelection, taskId: "nback_pm_old", source: { ...initialSelection.source, task: "url" as const } }
+    : initialSelection;
   const adapter = adapterMap.get(selection.taskId);
   if (!adapter) {
     throw new Error(`Unknown task '${selection.taskId}'. Available: ${adapters.map((a) => a.manifest.taskId).join(", ")}`);
@@ -78,6 +81,17 @@ async function bootstrap(): Promise<void> {
     resolvedVariantConfig,
     selection.overrides ?? undefined,
   );
+
+  const query = new URLSearchParams(window.location.search);
+  const exportStimuliFlag = query.get("exportStimuli") ?? query.get("export_stimuli");
+  const exportStimuliOnly = exportStimuliFlag === "1" || exportStimuliFlag === "true";
+  if (exportStimuliOnly) {
+    const taskObj = (mergedTaskConfig.task && typeof mergedTaskConfig.task === "object" && !Array.isArray(mergedTaskConfig.task))
+      ? mergedTaskConfig.task as Record<string, unknown>
+      : {};
+    taskObj.exportStimuliOnly = true;
+    mergedTaskConfig.task = taskObj;
+  }
   configureAutoResponder(
     resolveAutoResponderProfile({
       coreConfig: coreDefaultConfig,

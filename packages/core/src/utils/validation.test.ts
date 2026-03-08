@@ -8,11 +8,11 @@ describe('validation utilities', () => {
     });
 
     it('should throw for forbidden root key', () => {
-      expect(() => validateTaskConfigIsolation('sft', { pm: {} })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('sft', { nback_pm_old: {} })).toThrow('Config isolation violation');
     });
 
     it('should throw for forbidden task namespace key', () => {
-      expect(() => validateTaskConfigIsolation('sft', { task: { pm: {} } })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('sft', { task: { nback_pm_old: {} } })).toThrow('Config isolation violation');
     });
   });
 

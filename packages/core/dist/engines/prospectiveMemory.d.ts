@@ -1,4 +1,5 @@
 import { SeededRandom } from "../infrastructure/random";
+import type { TaskModule, TaskModuleHandle, TaskModuleAddress, TaskModuleContext } from "../api/taskModule";
 export interface ProspectiveMemoryScheduleConfig {
     count: number;
     minSeparation: number;
@@ -38,6 +39,23 @@ export interface ProspectiveMemoryCueMatch {
     matched: boolean;
     responseKey: string | null;
     ruleId: string | null;
+}
+export interface ProspectiveMemoryModuleConfig {
+    enabled: boolean;
+    schedule: ProspectiveMemoryScheduleConfig;
+    rules: ProspectiveMemoryCueRule[];
+    eligibleTrialTypes?: string[];
+}
+export interface ProspectiveMemoryModuleResult {
+    responses: Array<{
+        key: string;
+        timestamp: number;
+    }>;
+}
+export declare class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModuleConfig, ProspectiveMemoryModuleResult> {
+    readonly id = "pm";
+    transformBlockPlan(block: any, config: ProspectiveMemoryModuleConfig, context: TaskModuleContext): any;
+    start(config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult>;
 }
 export declare function generateProspectiveMemoryPositions(rng: SeededRandom, nTrials: number, schedule: ProspectiveMemoryScheduleConfig): number[];
 export declare function resolveProspectiveMemoryCueMatch(context: ProspectiveMemoryCueContext, rules: ProspectiveMemoryCueRule[]): ProspectiveMemoryCueMatch;

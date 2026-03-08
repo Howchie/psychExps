@@ -1,5 +1,8 @@
 import { ConfigurationManager } from "../infrastructure/config";
 import { createVariableResolver } from "../infrastructure/variables";
+import { TaskModuleRunner } from "./taskModule";
+import { DrtModule } from "../engines/drt";
+import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
 /**
  * Manages the full lifecycle of a task adapter.
  */
@@ -39,12 +42,21 @@ export class LifecycleManager {
         const taskResolver = createVariableResolver(commonResolverArgs);
         // Resolve configuration variables after merging (static parts only)
         const configManager = new ConfigurationManager();
+        configManager.validateLegacyKeys(taskConfig);
         const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
+        // Initialize module runner with standard core modules
+        const moduleRunner = new TaskModuleRunner([
+            new DrtModule(),
+            new ProspectiveMemoryModule(),
+        ]);
         const resolvedContext = {
             ...context,
             taskConfig: resolvedConfig,
+            rawTaskConfig: taskConfig,
             resolver: taskResolver,
+            moduleRunner,
         };
+        moduleRunner.initialize();
         try {
             if (this.adapter.initialize) {
                 await this.adapter.initialize(resolvedContext);
@@ -63,6 +75,7 @@ export class LifecycleManager {
             return result;
         }
         finally {
+            moduleRunner.terminate();
             if (this.adapter.terminate) {
                 await this.adapter.terminate();
             }

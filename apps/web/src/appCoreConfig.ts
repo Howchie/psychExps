@@ -20,6 +20,7 @@ export const coreDefaultConfig: CoreConfig = {
   data: {
     localSave: true,
     filePrefix: "experiments",
+    localSaveFormat: "csv",
   },
   autoresponder: {
     enabled: false,

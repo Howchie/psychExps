@@ -2,6 +2,12 @@ export interface SeededRng {
   next(): number;
 }
 
+export interface CoreRng extends SeededRng {
+  nextFloat(): number;
+  nextRange(min: number, max: number): number;
+  nextNormal(mu?: number, sigma?: number): number;
+}
+
 export function hashSeed(...parts: string[]): number {
   let hash = 2166136261 >>> 0;
   for (const part of parts) {
@@ -51,4 +57,79 @@ export class SeededRandom {
     }
     return items;
   }
+}
+
+function sampleNormal(nextFloat: () => number, mu = 0, sigma = 1): number {
+  if (sigma <= 0) {
+    throw new Error(`RNG.nextNormal expects sigma > 0 (got ${sigma})`);
+  }
+  let u1 = 0;
+  while (u1 === 0) {
+    u1 = nextFloat();
+  }
+  const u2 = nextFloat();
+  const mag = Math.sqrt(-2.0 * Math.log(u1));
+  const z0 = mag * Math.cos(2.0 * Math.PI * u2);
+  return mu + sigma * z0;
+}
+
+function parseSeed(value: unknown): number | null {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || normalized === "random" || normalized === "auto") return null;
+    if (/^\d+$/.test(normalized)) return Number(normalized) >>> 0;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? (numeric >>> 0) : null;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric >>> 0;
+}
+
+class SeededCoreRng implements CoreRng {
+  private readonly random: SeededRandom;
+
+  constructor(seed: number) {
+    this.random = new SeededRandom(seed >>> 0);
+  }
+
+  next(): number {
+    return Math.floor(this.random.next() * 0x100000000) >>> 0;
+  }
+
+  nextFloat(): number {
+    return this.random.next();
+  }
+
+  nextRange(min: number, max: number): number {
+    if (max <= min) {
+      throw new Error(`RNG.nextRange expects max > min (got ${min}, ${max})`);
+    }
+    return min + (max - min) * this.nextFloat();
+  }
+
+  nextNormal(mu = 0, sigma = 1): number {
+    return sampleNormal(() => this.nextFloat(), mu, sigma);
+  }
+}
+
+function createUnseededCoreRng(): CoreRng {
+  const nextFloat = (): number => Math.random();
+  return {
+    next: () => Math.floor(nextFloat() * 0x100000000) >>> 0,
+    nextFloat,
+    nextRange: (min: number, max: number) => {
+      if (max <= min) {
+        throw new Error(`RNG.nextRange expects max > min (got ${min}, ${max})`);
+      }
+      return min + (max - min) * nextFloat();
+    },
+    nextNormal: (mu = 0, sigma = 1) => sampleNormal(nextFloat, mu, sigma),
+  };
+}
+
+export function createCoreRng(seed?: unknown): CoreRng {
+  const parsedSeed = parseSeed(seed);
+  if (parsedSeed == null) return createUnseededCoreRng();
+  return new SeededCoreRng(parsedSeed);
 }

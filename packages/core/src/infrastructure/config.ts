@@ -22,6 +22,25 @@ export class ConfigurationManager {
   }
 
   /**
+   * Validates the configuration for legacy top-level keys.
+   * Throws a Hard Error if 'drt' or 'pm' are found at the root.
+   */
+  validateLegacyKeys(config: JSONObject): void {
+    if (config.drt) {
+      throw new Error(
+        "Legacy configuration detected: Top-level 'drt' key is no longer supported. " +
+        "Please move DRT configuration to 'task.modules.drt'."
+      );
+    }
+    if (config.pm) {
+      throw new Error(
+        "Legacy configuration detected: Top-level 'pm' key is no longer supported. " +
+        "Please move Prospective Memory configuration to 'task.modules.pm'."
+      );
+    }
+  }
+
+  /**
    * Merges multiple configuration levels in sequence:
    * base -> taskDefault -> variantOverride -> runtimeOverride
    */

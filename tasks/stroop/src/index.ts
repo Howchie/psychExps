@@ -11,6 +11,9 @@ import {
   createMulberry32,
   createSemanticResolver,
   createResponseSemantics,
+  appendJsPsychInstructionScreens,
+  appendJsPsychTaskIntroScreen,
+  appendJsPsychBlockIntroScreen,
   drawCanvasCenteredText,
   drawCanvasFramedScene,
   drawTrialFeedbackOnCanvas,
@@ -212,23 +215,29 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
 
   const timeline: any[] = [];
-  pushJsPsychContinueScreen(
+  appendJsPsychTaskIntroScreen({
     timeline,
-    CallFunctionPlugin,
-    root,
-    `<h2>${escapeHtml(parsed.title)}</h2><p>Participant: <code>${escapeHtml(participantId)}</code></p>`,
-    "intro_start",
-    "stroop-continue-intro_start",
-  );
-  pushJsPsychContinueScreen(
+    plugin: CallFunctionPlugin,
+    container: root,
+    title: parsed.title,
+    participantId,
+    phase: "intro_start",
+    buttonId: "stroop-continue-intro_start",
+  });
+  appendJsPsychInstructionScreens({
     timeline,
-    CallFunctionPlugin,
-    root,
-    `<p>${escapeHtml(parsed.instructions)}</p><p><b>Respond to the font color:</b> red = <code>${escapeHtml(parsed.mapping.redKey)}</code>, green = <code>${escapeHtml(parsed.mapping.greenKey)}</code></p>`,
-    "intro_instructions",
-    "stroop-continue-intro_instructions",
-  );
+    plugin: CallFunctionPlugin,
+    container: root,
+    pages: [parsed.instructions],
+    section: "intro",
+    buttonIdPrefix: "stroop-continue-intro_instructions",
+    phase: "intro_instructions",
+    renderHtml: (ctx) =>
+      `<p>${escapeHtml(ctx.pageText)}</p><p><b>Respond to the font color:</b> red = <code>${escapeHtml(parsed.mapping.redKey)}</code>, green = <code>${escapeHtml(parsed.mapping.greenKey)}</code></p>`,
+    data: (ctx) => ({ introIndex: ctx.pageIndex }),
+  });
 
+  let lastBlockIntroSignature: string | null = null;
   for (let blockIndex = 0; blockIndex < plannedBlocks.length; blockIndex += 1) {
     const block = plannedBlocks[blockIndex];
 
@@ -240,27 +249,32 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
       },
     });
 
-    pushJsPsychContinueScreen(
-      timeline,
-      CallFunctionPlugin,
-      root,
-      `<h3>${escapeHtml(block.label)}</h3><p>Press continue when ready.</p>`,
-      "block_start",
-      `stroop-continue-block_start-${blockIndex}`,
-      { blockIndex },
-    );
-    for (let instructionIndex = 0; instructionIndex < block.beforeBlockScreens.length; instructionIndex += 1) {
-      const instruction = block.beforeBlockScreens[instructionIndex];
-      pushJsPsychContinueScreen(
+    const blockIntroText = "Press continue when ready.";
+    const blockIntroSignature = `${block.label}::${blockIntroText}`;
+    if (blockIntroSignature !== lastBlockIntroSignature) {
+      appendJsPsychBlockIntroScreen({
         timeline,
-        CallFunctionPlugin,
-        root,
-        `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`,
-        "block_pre_instruction",
-        `stroop-continue-block_pre_instruction-${blockIndex}-${instructionIndex}`,
-        { blockIndex, instructionIndex },
-      );
+        plugin: CallFunctionPlugin,
+        container: root,
+        blockLabel: block.label,
+        introText: blockIntroText,
+        phase: "block_start",
+        buttonId: `stroop-continue-block_start-${blockIndex}`,
+        data: { blockIndex },
+      });
+      lastBlockIntroSignature = blockIntroSignature;
     }
+    appendJsPsychInstructionScreens({
+      timeline,
+      plugin: CallFunctionPlugin,
+      container: root,
+      pages: block.beforeBlockScreens,
+      section: "preBlock",
+      buttonIdPrefix: `stroop-continue-block_pre_instruction-${blockIndex}`,
+      phase: "block_pre_instruction",
+      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
+      data: (ctx) => ({ blockIndex, instructionIndex: ctx.pageIndex }),
+    });
 
     for (const trial of block.trials) {
       appendStroopTrialTimeline({
@@ -299,18 +313,17 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
         }).then(done);
       },
     });
-    for (let instructionIndex = 0; instructionIndex < block.afterBlockScreens.length; instructionIndex += 1) {
-      const instruction = block.afterBlockScreens[instructionIndex];
-      pushJsPsychContinueScreen(
-        timeline,
-        CallFunctionPlugin,
-        root,
-        `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(instruction)}</p>`,
-        "block_post_instruction",
-        `stroop-continue-block_post_instruction-${blockIndex}-${instructionIndex}`,
-        { blockIndex, instructionIndex },
-      );
-    }
+    appendJsPsychInstructionScreens({
+      timeline,
+      plugin: CallFunctionPlugin,
+      container: root,
+      pages: block.afterBlockScreens,
+      section: "postBlock",
+      buttonIdPrefix: `stroop-continue-block_post_instruction-${blockIndex}`,
+      phase: "block_post_instruction",
+      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
+      data: (ctx) => ({ blockIndex, instructionIndex: ctx.pageIndex }),
+    });
   }
 
   const jsPsych = initJsPsych({

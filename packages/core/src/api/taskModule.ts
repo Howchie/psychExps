@@ -1,4 +1,6 @@
 import type { SeededRandom } from "../infrastructure/random";
+import { asString } from "../utils/coerce";
+import type { VariableResolver } from "../infrastructure/variables";
 
 export type TaskModuleScope = "task" | "block" | "trial";
 
@@ -160,6 +162,68 @@ export class TaskModuleRunner {
       }
     }
     return currentBlock;
+  }
+
+  /**
+   * Starts all modules configured for the specified scope.
+   */
+  startScopedModules(args: {
+    scope: TaskModuleScope;
+    blockIndex: number | null;
+    trialIndex: number | null;
+    moduleConfigs: Record<string, any>;
+    context: TaskModuleContext;
+  }): void {
+    const { scope, blockIndex, trialIndex, moduleConfigs, context } = args;
+    for (const module of this.modules) {
+      let config = moduleConfigs[module.id];
+      if (config && config.enabled !== false) {
+        // Resolve config if it wasn't already resolved (e.g. if passed raw)
+        if (context.resolver) {
+          config = context.resolver.resolveInValue(config, {
+            ...(blockIndex == null ? {} : { blockIndex }),
+            ...(trialIndex == null ? {} : { trialIndex }),
+            locals: context.locals,
+          });
+        }
+        
+        const moduleScope = (asString(config.scope) || "block").toLowerCase();
+        if (moduleScope === scope) {
+          this.start({
+            module,
+            address: { scope, blockIndex, trialIndex },
+            config,
+            context,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Stops all modules at the specified scope.
+   */
+  stopScopedModules(address: TaskModuleAddress): TaskModuleResult[] {
+    const results: TaskModuleResult[] = [];
+    for (const [scopeId, entry] of this.active.entries()) {
+      if (
+        entry.address.scope === address.scope &&
+        entry.address.blockIndex === address.blockIndex &&
+        entry.address.trialIndex === address.trialIndex
+      ) {
+        const data = entry.handle.stop();
+        this.active.delete(scopeId);
+
+        const result: TaskModuleResult = {
+          moduleId: entry.moduleId,
+          ...entry.address,
+          data,
+        };
+        this.results.push(result);
+        results.push(result);
+      }
+    }
+    return results;
   }
 
   private createScopeId(moduleId: string, address: TaskModuleAddress): string {

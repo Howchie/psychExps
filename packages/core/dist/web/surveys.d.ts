@@ -30,6 +30,8 @@ export interface SurveyDefinition {
     id: string;
     title?: string;
     description?: string;
+    showQuestionNumbers?: boolean;
+    showRequiredAsterisk?: boolean;
     questions: SurveyQuestion[];
     submitLabel?: string;
     computeScores?: (answers: SurveyAnswerMap) => Record<string, number> | undefined;
@@ -55,6 +57,8 @@ export interface AtwitSurveyOptions {
     prompt?: string;
     min?: number;
     max?: number;
+    showQuestionNumbers?: boolean;
+    showRequiredAsterisk?: boolean;
     required?: boolean;
 }
 export declare function createAtwitSurvey(options?: AtwitSurveyOptions): SurveyDefinition;
@@ -67,6 +71,8 @@ export interface NasaTlxSurveyOptions {
     max?: number;
     step?: number;
     initial?: number;
+    showQuestionNumbers?: boolean;
+    showRequiredAsterisk?: boolean;
     showValue?: boolean;
     required?: boolean;
 }
@@ -78,6 +84,8 @@ export type SurveyPresetSpec = {
     prompt?: string;
     min?: number;
     max?: number;
+    showQuestionNumbers?: boolean;
+    showRequiredAsterisk?: boolean;
     required?: boolean;
 } | {
     preset: "nasa_tlx";
@@ -89,6 +97,8 @@ export type SurveyPresetSpec = {
     max?: number;
     step?: number;
     initial?: number;
+    showQuestionNumbers?: boolean;
+    showRequiredAsterisk?: boolean;
     showValue?: boolean;
     required?: boolean;
 };

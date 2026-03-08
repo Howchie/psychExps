@@ -12,7 +12,7 @@ Config objects are merged in the following order (higher items overwrite lower i
 4. **Runtime overrides:** `selection.overrides` (JATOS overrides if present, else URL `overrides`).
 
 Current repository state:
-- `taskDefaults` is currently empty for all tasks (`sft`, `pm`, `nback`, `bricks`, `stroop`, `tracking`).
+- `taskDefaults` is currently empty for all tasks (`sft`, `nback_pm_old`, `nback`, `bricks`, `stroop`, `tracking`).
 - Effective baseline behavior therefore comes from the selected variant config JSON.
 
 ### Merger Behavior: `buildMergedConfig`
@@ -92,7 +92,7 @@ Resolution order:
 3. URL `auto=...` (final override for enabled/disabled)
 
 Behavior:
-- jsPsych tasks (`sft`, `pm`, `nback`, `stroop`) run in jsPsych simulation mode.
+- jsPsych tasks (`sft`, `nback_pm_old`, `nback`, `stroop`) run in jsPsych simulation mode.
 - Continue screens auto-advance with sampled delays.
 - Native Bricks auto-starts, applies synthetic holds, and enforces a max trial duration guard in auto mode.
 
@@ -256,6 +256,23 @@ If your config changes aren't taking effect, check the following:
 
 ---
 
+## 9. Stimulus Export Mode (No Full Run)
+
+The web shell supports a planning/export mode for parity and audit workflows.
+
+Use URL flag:
+- `exportStimuli=true` (or `export_stimuli=true`)
+
+Supported tasks:
+- `nback`
+- `nback_pm_old`
+
+Behavior:
+- Task runtime builds planned blocks/trials but skips trial execution.
+- A CSV is downloaded with planned stimuli and response coding fields (including `trial_code` values like `pm`, `lure_<n>`, `target`, `non_target`).
+
+---
+
 ## 8. Trial/Manipulation Planning Surfaces (Current)
 
 Current planning capabilities are task-specific on top of shared core scheduling primitives:
@@ -277,3 +294,26 @@ For stimulus identity pools (e.g. NBack/PM category item draws), use task `stimu
 - `nbackDraw`
 - `pmItemDraw`
 - `pmCategoryDraw`
+
+---
+
+## 9. Local Data Output Format
+
+Core local-save behavior is controlled by `data.localSaveFormat`:
+
+```json
+{
+  "data": {
+    "localSave": true,
+    "filePrefix": "experiments",
+    "localSaveFormat": "csv"
+  }
+}
+```
+
+Supported values:
+- `csv` (default): local CSV download
+- `json`: local JSON download
+- `both`: local CSV + JSON download
+
+JATOS submission is unaffected by this setting and still sends JSON payloads when JATOS is available.

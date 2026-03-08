@@ -9,6 +9,11 @@ export declare class ConfigurationManager {
      */
     load(path: string): Promise<JSONObject>;
     /**
+     * Validates the configuration for legacy top-level keys.
+     * Throws a Hard Error if 'drt' or 'pm' are found at the root.
+     */
+    validateLegacyKeys(config: JSONObject): void;
+    /**
      * Merges multiple configuration levels in sequence:
      * base -> taskDefault -> variantOverride -> runtimeOverride
      */

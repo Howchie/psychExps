@@ -1,4 +1,4 @@
-import { type TrialTimelineResult } from "../web/trial";
+import { type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "../web/trial";
 export interface RtTiming {
     trialDurationMs: number;
     fixationOnsetMs?: number;
@@ -47,20 +47,6 @@ export interface BasicRtTrialResult {
     timeline: TrialTimelineResult;
 }
 export declare function computeRtPhaseDurations(timing: RtTiming, options?: RtPhaseOptions): RtPhaseDurations;
-export interface TrialPhase {
-    id: string;
-    durationMs: number;
-    render?: () => void | string;
-}
-export interface RunMultiPhaseTrialArgs {
-    container: HTMLElement;
-    phases: TrialPhase[];
-    response: {
-        allowedKeys: string[];
-        startMs: number;
-        endMs: number;
-    };
-}
 export interface MultiPhaseTrialResult {
     key: string | null;
     rtMs: number | null;

@@ -2,4 +2,6 @@
 /test-results
 /.Rtmp
 /.ipynb_checkpoints
-
+**/.ipynb_checkpoints/
+/node_modules/
+tasks/**/node_modules/

@@ -75,4 +75,45 @@ export function resolveInstructionPageSlots(instructions, defaults) {
         end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
     };
 }
+export function toInstructionScreenSpecs(value) {
+    if (typeof value === "string") {
+        const text = value.trim();
+        return text ? [{ text }] : [];
+    }
+    return asArray(value)
+        .map((item) => {
+        if (typeof item === "string") {
+            const text = item.trim();
+            return text ? { text } : null;
+        }
+        const raw = asObject(item);
+        if (!raw)
+            return null;
+        const title = asString(raw.title) ?? undefined;
+        const html = asString(raw.html) ?? undefined;
+        const text = asString(raw.text) ?? asString(raw.body) ?? asString(raw.content) ?? undefined;
+        if (!html && !text)
+            return null;
+        return { ...(title ? { title } : {}), ...(text ? { text } : {}), ...(html ? { html } : {}) };
+    })
+        .filter((item) => Boolean(item));
+}
+export function resolveInstructionScreenSlots(instructions, defaults) {
+    const raw = asObject(instructions);
+    const hasOwn = (key) => Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
+    const pickFirstScreens = (keys, fallback) => {
+        for (const key of keys) {
+            if (!hasOwn(key))
+                continue;
+            return toInstructionScreenSpecs(raw?.[key]);
+        }
+        return Array.isArray(fallback) ? [...fallback] : [];
+    };
+    return {
+        intro: pickFirstScreens(["pages", "introPages", "intro", "screens"], defaults?.intro),
+        preBlock: pickFirstScreens(["preBlockPages", "beforeBlockPages", "beforeBlockScreens"], defaults?.preBlock),
+        postBlock: pickFirstScreens(["postBlockPages", "afterBlockPages", "afterBlockScreens"], defaults?.postBlock),
+        end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
+    };
+}
 //# sourceMappingURL=coerce.js.map

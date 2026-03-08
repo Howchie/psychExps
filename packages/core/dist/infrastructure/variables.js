@@ -79,6 +79,8 @@ function normalizeVariableDefinition(name, raw) {
             count: 1,
         };
     }
+    // If it's a string, it's a direct value (potentially a variable token like $var.foo)
+    // We do NOT treat it as a sampler even if it looks like a list sampler might be intended later.
     return {
         name,
         scope: "participant",
@@ -148,7 +150,13 @@ export function createVariableResolver(args = {}) {
     };
     const resolveVarInternal = (name, context, stack) => {
         if (context?.locals && Object.prototype.hasOwnProperty.call(context.locals, name)) {
-            return context.locals[name];
+            const rawLocal = context.locals[name];
+            if (stack.has(name))
+                return rawLocal;
+            stack.add(name);
+            const resolved = resolveInValueInternal(rawLocal, context, stack);
+            stack.delete(name);
+            return resolved;
         }
         const def = getDef(name);
         if (!def)
@@ -169,9 +177,10 @@ export function createVariableResolver(args = {}) {
         if (valueCache.has(key))
             return valueCache.get(key);
         const count = Math.max(1, Math.floor(Number(def.count ?? 1)));
-        const value = count > 1
+        const rawValue = count > 1
             ? Array.from({ length: count }, () => getSampler(def, context)())
             : getSampler(def, context)();
+        const value = resolveInValueInternal(rawValue, context, stack);
         valueCache.set(key, value);
         return value;
     };
@@ -247,14 +256,28 @@ export function createVariableResolver(args = {}) {
         if (namespaceMatch) {
             const namespace = namespaceMatch[1];
             const path = namespaceMatch[2];
-            const resolved = resolveNamespace(namespace, path, context, stack);
-            return typeof resolved !== "undefined" ? resolved : token;
+            // Special case: if it's $var.foo, we already handled it above.
+            if (namespace !== "var" && namespace !== "sample") {
+                const resolved = resolveNamespace(namespace, path, context, stack);
+                if (typeof resolved !== "undefined")
+                    return resolved;
+                // Fallback: maybe the namespace is actually a variable name?
+                const baseValue = resolveVarInternal(namespace, context, stack);
+                if (typeof baseValue !== "undefined") {
+                    const nested = deepGet(baseValue, path);
+                    if (typeof nested !== "undefined")
+                        return nested;
+                }
+            }
         }
         return token;
     };
     const resolveInValueInternal = (value, context, stack) => {
         if (Array.isArray(value)) {
-            return value.map((entry) => resolveInValueInternal(entry, context, stack));
+            return value.flatMap((entry) => {
+                const resolved = resolveInValueInternal(entry, context, stack);
+                return Array.isArray(resolved) ? resolved : [resolved];
+            });
         }
         if (isObject(value)) {
             const out = {};

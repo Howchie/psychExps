@@ -2,42 +2,39 @@
   "task": {
     "implementation": "native_bricks",
     "runner": "native",
-    "title": "Bricks Moray 1991 VPT+VDD Baseline"
+    "title": "Bricks Moray 1991 VPT+VDD Baseline",
+    "modules": {
+      "drt": {
+        "enabled": false,
+        "key": " ",
+        "audio": {
+          "volume": 0.0
+        },
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 32,
+          "leftPx": 600,
+          "topPx": 30
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        },
+        "responseDeadlineMs": 2500
+      }
+    }
   },
   "display": {
     "canvasWidth": 1200,
     "canvasHeight": 760,
     "viewportPaddingPx": 24,
     "backgroundColor": "#7f858a",
-    "backgroundTexture": {
-      "enable": true,
-      "renderMode": "procedural_warehouse",
-      "alpha": 0.84,
-      "scale": 1.15,
-      "scrollFactor": 0,
-      "proceduralWarehouse": {
-        "tileSizePx": 240,
-        "paverWidthPx": 82,
-        "paverHeightPx": 82,
-        "groutPx": 3,
-        "layout": "grid",
-        "rowOffsetPx": 0,
-        "pattern": "checker_alternating",
-        "alternationStrength": 0.07,
-        "variation": 0.12,
-        "edgeShadingAlpha": 0,
-        "noiseCount": 20,
-        "seamDashCount": 8,
-        "baseColor": "#8f959c",
-        "groutColor": "#6e757e",
-        "seamDarkColor": "#4b545f",
-        "seamLightColor": "#b4bac1",
-        "scratchColor": "#5a616b"
-      }
-    },
     "beltColor": "#e5e7eb",
     "beltHeight": 56,
-    "beltGap": 40,
+    "beltGap": 50,
     "brickHeight": 36,
     "brickCornerRadius": 3,
     "brickTextureOverlay": {
@@ -63,29 +60,6 @@
       "showPoints": true,
       "showDRT": false
     },
-    "beltTexture": {
-      "enable": true,
-      "renderMode": "procedural_topdown",
-      "alpha": 1,
-      "scale": 1,
-      "scrollFactor": 1,
-      "proceduralTopdown": {
-        "tileSizePx": 120,
-        "ribStepPx": 12,
-        "ribWidthPx": 8,
-        "sideBandPx": 18,
-        "sideCleatStepPx": 16,
-        "sideCleatLengthPx": 12,
-        "shadeAlpha": 0.55,
-        "baseColor": "#2a323b",
-        "shadeColor": "#202730",
-        "ribColor": "#4d5863",
-        "grooveColor": "#2b333c",
-        "sideCleatColor": "#6b7280",
-        "sideLineDarkColor": "#111827",
-        "sideLineLightColor": "#9ca3af"
-      }
-    },
     "dueDateMarker": {
       "enable": true,
       "color": "#111827",
@@ -94,7 +68,7 @@
       "alpha": 0.95
     },
     "missAnimation": {
-      "mode": "furnace",
+      "mode": "disintegrate",
       "durationMs": 240,
       "markerFlashMs": 150,
       "flashColor": "#ef4444",
@@ -112,12 +86,8 @@
       "offsetX": 2
     },
     "preset": {
-      "mode": "random_per_trial",
-      "pool": [
-        "warehouse_concrete_checker",
-        "industrial_sleek_flat",
-        "kraft_wood_packaging"
-      ]
+      "mode": "fixed",
+      "id": "warehouse_concrete_checker"
     }
   },
   "conveyors": {
@@ -135,7 +105,7 @@
   "bricks": {
     "completionMode": "hold_duration",
     "completionParams": {
-      "target_hold_ms": 500,
+      "target_hold_ms": 1000,
       "progress_per_perfect": 0.175,
       "progress_curve": 1,
       "overshoot_tolerance_ms": 180,
@@ -146,15 +116,37 @@
     "colorCategories": [
       {
         "id": "Target",
-        "label": "High Value", 
+        "label": "High Value",
         "color": "#fbbf24",
-        "value": { "type": "poisson", "lambda": 15, "min": 11, "max": 19 }
+        "value": {
+          "type": "poisson",
+          "lambda": 15,
+          "min": 11,
+          "max": 19
+        }
       },
       {
         "id": "Other",
         "label": "Distractor",
-        "color": {"type": "list", "values": ["#DDA0DD","#66CDAA","#d97706","#FFB6C1","#FF7F50","#228B22","#40E0D0"], "without_replacement": true},
-        "value": { "type": "poisson", "lambda": 5, "min": 1, "max": 9 }
+        "color": {
+          "type": "list",
+          "values": [
+            "#DDA0DD",
+            "#66CDAA",
+            "#d97706",
+            "#FFB6C1",
+            "#FF7F50",
+            "#228B22",
+            "#40E0D0"
+          ],
+          "without_replacement": true
+        },
+        "value": {
+          "type": "poisson",
+          "lambda": 5,
+          "min": 1,
+          "max": 9
+        }
       }
     ],
     "initialBricks": {
@@ -166,17 +158,56 @@
       "enable": true,
       "count": 4,
       "defaults": {
-        "width": { "type": "uniform", "min": 50, "max": 110 }
+        "width": {
+          "type": "uniform",
+          "min": 50,
+          "max": 110
+        }
       },
       "fields": {
-        "conveyorIndex": { "values": [0, 1, 2, 3], "draw": "without_replacement" },
-        "xFraction": { "values": [
-            { "type": "uniform", "min": 0.06, "max": 0.10 },
-            { "type": "uniform", "min": 0.08, "max": 0.12 },
-            { "type": "uniform", "min": 0.11, "max": 0.15 },
-            { "type": "uniform", "min": 0.13, "max": 0.15 }
-        ], "draw": "without_replacement" },
-        "colorCategoryId": { "values": ["Target", "Other", "Other", "Other"], "draw": "without_replacement" }
+        "conveyorIndex": {
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "draw": "without_replacement"
+        },
+        "xFraction": {
+          "values": [
+            {
+              "type": "uniform",
+              "min": 0.06,
+              "max": 0.1
+            },
+            {
+              "type": "uniform",
+              "min": 0.08,
+              "max": 0.12
+            },
+            {
+              "type": "uniform",
+              "min": 0.11,
+              "max": 0.15
+            },
+            {
+              "type": "uniform",
+              "min": 0.13,
+              "max": 0.15
+            }
+          ],
+          "draw": "without_replacement"
+        },
+        "colorCategoryId": {
+          "values": [
+            "Target",
+            "Other",
+            "Other",
+            "Other"
+          ],
+          "draw": "without_replacement"
+        }
       }
     },
     "maxBricksPerTrial": 4,
@@ -193,27 +224,6 @@
   },
   "difficultyModel": {
     "holdQualityMean": 0.5
-  },
-  "drt": {
-    "enable": false,
-    "stim_type": "visual",
-    "stim_visual_config": {
-      "shape": "square",
-      "color": "#dc2626",
-      "size_px": 32,
-      "x": 600,
-      "y": 30
-    },
-    "key": " ",
-    "isi_sampler": {
-      "type": "uniform",
-      "min": 3000,
-      "max": 5000
-    },
-    "response_deadline_ms": 2500,
-    "audio": {
-      "volume": 0.0
-    }
   },
   "trial": {
     "mode": "max_bricks",
@@ -235,19 +245,14 @@
       "fontSize": "18px"
     }
   },
-  "debug": {
-    "pointerOverlay": false,
-    "pointerConsole": false,
-    "holdConsole": false,
-    "saveTrialLog": false,
-    "printTrialLog": false,
-    "trialLogPrefix": "moray_pointer_debug"
-  },
   "surveys": {
     "postTrial": [
       {
         "preset": "atwit",
-        "prompt": "Rate your overall workload during the just-completed trial (1-10)."
+        "showQuestionNumbers": false,
+        "showRequiredAsterisk": false,
+        "prompt": "Rate your overall workload during the just-completed trial (1-10).",
+        "title": ""
       }
     ]
   },
@@ -273,7 +278,7 @@
       },
       {
         "title": "How To Process",
-        "html": "<p>Press and hold on a block, then release. Aim for about 500 ms holds to maximize progress.</p><p>Larger blocks require more successful holds than smaller blocks, reflecting their larger processing demand.</p>"
+        "html": "<p>Press and hold on a block, then release. Aim for about {bricks.completionParams.target_hold_ms} ms holds to maximize progress.</p><p>Larger blocks require more successful holds than smaller blocks, reflecting their larger processing demand.</p>"
       },
       {
         "title": "Goal",

@@ -20,6 +20,7 @@ The NBack task is implemented using the standardized `TaskAdapter` interface.
   - `nback/default`
   - `nback/drt_block_demo`
   - `nback/pm_module_demo`
+  - `nback/pm_module_export_demo`
 
 ## Response mapping
 
@@ -66,7 +67,7 @@ Example:
 
 NBack supports optional DRT using shared core controller (`DrtController`):
 
-`task.drt` config:
+`task.modules.drt` config:
 - `enabled`: boolean
 - `scope`: `"block"` or `"trial"`
 - `key`: DRT response key (for example `"space"`)
@@ -88,7 +89,7 @@ Behavior:
 - DRT scope records also include row-aligned transform linkage for each DRT response (`scopeRecords[].responseRows`).
 - Visual default is a red square shown at top-center of the monitor viewport (`position: fixed`), not constrained to the task canvas.
 - Border mode applies a flashing outline to the inner framed stimulus area (the square where n-back items are drawn), not the full task host/container.
-- Block-level `drt` overrides are supported in `plan.blocks[]` so different blocks can use different DRT modes/settings.
+- Block-level overrides are supported in `plan.blocks[].modules.drt` so different blocks can use different DRT modes/settings.
 
 ## Demo variant
 
@@ -116,3 +117,29 @@ Behavior:
 - PM category targeting (`activePmCategories`)
 - Control blocks without PM response slots
 - PM-aware block intro templates and key policy
+
+## Canonical PM Integration Path
+
+NBack + core PM module is the canonical PM-integration direction.
+
+Current PM module path in NBack:
+- uses core module lifecycle (`TaskModuleRunner` scoped start/stop)
+- applies PM trial transformations through `task.modules.pm`
+- exports PM module scope outputs in finalized payload (`payload.pm.moduleResults`)
+
+Parity with standalone PM task is still partial. See:
+- `docs/PM_NBACK_PARITY_AUDIT.md`
+
+## Stimulus Export (No Full Run)
+
+For parity workflows, NBack can export planned stimulus lists without executing trials.
+
+Launch with:
+- `?task=nback&variant=<variant>&exportStimuli=true`
+
+Behavior:
+- Skips timeline execution.
+- Saves a CSV with planned rows including:
+  - `trial_type`
+  - `trial_code` (`pm`, `lure_<n>`, `target`, `non_target`)
+  - item/category and block/trial indices.

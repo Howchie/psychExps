@@ -31,6 +31,26 @@ describe('ConfigurationManager', () => {
     });
   });
 
+  describe('validateLegacyKeys', () => {
+    it('should throw error if top-level drt key is present', () => {
+      const manager = new ConfigurationManager();
+      const config = { drt: { enabled: true } };
+      expect(() => manager.validateLegacyKeys(config)).toThrow("Legacy configuration detected: Top-level 'drt' key is no longer supported.");
+    });
+
+    it('should throw error if top-level pm key is present', () => {
+      const manager = new ConfigurationManager();
+      const config = { pm: { enabled: true } };
+      expect(() => manager.validateLegacyKeys(config)).toThrow("Legacy configuration detected: Top-level 'pm' key is no longer supported.");
+    });
+
+    it('should not throw if no legacy keys are present', () => {
+      const manager = new ConfigurationManager();
+      const config = { task: { modules: { drt: {} } } };
+      expect(() => manager.validateLegacyKeys(config)).not.toThrow();
+    });
+  });
+
   describe('loading', () => {
     beforeEach(() => {
       vi.stubGlobal('fetch', vi.fn());

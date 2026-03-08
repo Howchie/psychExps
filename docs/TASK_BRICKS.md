@@ -48,6 +48,10 @@ Top-level optional:
   - `poolId: [ [manipA, manipB], [manipC], ... ]`
   - blocks with `manipulationPool: "poolId"` draw one bundle
   - draws are participant-seeded and shuffled without replacement, then recycled
+- `surveys`:
+  - `surveys.postTrial[]` supports preset surveys (`"atwit"`, `"nasa_tlx"`)
+  - use `showQuestionNumbers: false` to hide `Q1`/`1.` labels when rendering survey items
+  - use `showRequiredAsterisk: false` to hide required `*` markers while keeping required validation
 
 ## 3. Runtime config sections
 
@@ -62,6 +66,13 @@ The merged per-trial config is passed to conveyor runtime. Common sections:
 - `difficultyModel`
 - `selfReport`
 - `instructions`
+
+`instructions` supports either simple strings or rich page objects:
+- string page: `"Read this"`
+- object page: `{ "title": "How To Process", "html": "<p>...</p>" }`
+
+Instruction text/html supports `{dot.path}` interpolation against the merged Bricks config (and resolver-backed variables), for example:
+- `{bricks.completionParams.target_hold_ms}`
 
 For detailed runtime field definitions, use:
 - [bricks-runtime-config-schema.md](./bricks-runtime-config-schema.md)
@@ -84,6 +95,9 @@ Final payload submitted/saved by `finalizeTaskRun`:
 Notes on `drt` outputs:
 - Trial-scoped DRT: `record.drt` reflects that trial scope snapshot; transform rows are attached as `drt_transforms` and `drt_response_rows`.
 - Block-scoped DRT: `record.drt.stats` is converted to per-trial deltas for accurate trial/block summaries, and cumulative snapshots are preserved in `record.drt_cumulative`.
+
+Notes on runtime performance outputs:
+- Each trial record now includes `record.performance` with frame pacing summary (`avg_fps`, frame overrun ratios, tick cost) and renderer counters (active/peak effects, skipped effects at cap, active/peak brick sprites).
 
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.

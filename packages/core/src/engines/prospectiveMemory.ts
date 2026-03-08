@@ -31,6 +31,7 @@ export interface ProspectiveMemoryModuleConfig {
   schedule: ProspectiveMemoryScheduleConfig;
   rules: ProspectiveMemoryCueRule[];
   eligibleTrialTypes?: string[];
+  captureResponses?: boolean;
 }
 
 export interface ProspectiveMemoryModuleResult {
@@ -91,9 +92,11 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
   start(config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult> {
     const responses: Array<{ key: string; timestamp: number }> = [];
     const allowedKeys = new Set(config.rules.map(r => r.responseKey));
+    const captureResponses = config.captureResponses === true;
 
     return {
       handleKey: (key, now) => {
+        if (!captureResponses) return false;
         if (allowedKeys.has(key)) {
           responses.push({ key, timestamp: now });
           return true;

@@ -16,49 +16,51 @@
       },
       "responseTerminatesTrial": false
     },
-    "drt": {
-      "enabled": true,
-      "scope": "block",
-      "key": "space",
-      "transformPersistence": "session",
-      "responseWindowMs": 2500,
-      "displayDurationMs": 1000,
-      "responseTerminatesStimulus": true,
-      "parameterTransforms": [
-        {
-          "type": "wald_conjugate",
-          "id": "drt_wald_online",
-          "includeOutcomes": ["hit"],
-          "minWindowSize": 10,
-          "maxWindowSize": 50,
-          "t0": 180,
-          "priors": {
-            "mu0": 2,
-            "precision0": 1,
-            "kappa0": 6,
-            "beta0": 1
-          },
-          "credibleInterval": {
-            "lower": 0.05,
-            "upper": 0.95
-          },
-          "priorUpdate": {
-            "enabled": true,
-            "mode": "shift_means"
+    "modules": {
+      "drt": {
+        "enabled": true,
+        "scope": "block",
+        "key": "space",
+        "transformPersistence": "session",
+        "responseWindowMs": 2500,
+        "displayDurationMs": 1000,
+        "responseTerminatesStimulus": true,
+        "parameterTransforms": [
+          {
+            "type": "wald_conjugate",
+            "id": "drt_wald_online",
+            "includeOutcomes": ["hit"],
+            "minWindowSize": 10,
+            "maxWindowSize": 50,
+            "t0": 180,
+            "priors": {
+              "mu0": 2,
+              "precision0": 1,
+              "kappa0": 6,
+              "beta0": 1
+            },
+            "credibleInterval": {
+              "lower": 0.05,
+              "upper": 0.95
+            },
+            "priorUpdate": {
+              "enabled": true,
+              "mode": "shift_means"
+            }
           }
+        ],
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 34,
+          "topPx": 16
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
         }
-      ],
-      "stimMode": "visual",
-      "visual": {
-        "shape": "square",
-        "color": "#dc2626",
-        "sizePx": 34,
-        "topPx": 16
-      },
-      "isiSampler": {
-        "type": "uniform",
-        "min": 3000,
-        "max": 5000
       }
     }
   },
@@ -134,13 +136,15 @@
         "targetCount": 6,
         "lureCount": 0,
         "nbackSourceCategories": ["other"],
-        "drt": {
-          "stimMode": "border",
-          "border": {
-            "color": "#dc2626",
-            "widthPx": 4,
-            "radiusPx": 0,
-            "target": "display"
+        "modules": {
+          "drt": {
+            "stimMode": "border",
+            "border": {
+              "color": "#dc2626",
+              "widthPx": 4,
+              "radiusPx": 0,
+              "target": "display"
+            }
           }
         },
         "beforeBlockScreens": [

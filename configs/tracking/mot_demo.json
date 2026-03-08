@@ -3,24 +3,26 @@
     "implementation": "native_tracking",
     "runner": "native",
     "title": "MOT + DRT Demo",
-    "drt": {
-      "enabled": true,
-      "scope": "block",
-      "key": "space",
-      "responseWindowMs": 2500,
-      "displayDurationMs": 1000,
-      "responseTerminatesStimulus": true,
-      "stimMode": "visual",
-      "visual": {
-        "shape": "square",
-        "color": "#dc2626",
-        "sizePx": 34,
-        "topPx": 14
-      },
-      "isiSampler": {
-        "type": "uniform",
-        "min": 3000,
-        "max": 5000
+    "modules": {
+      "drt": {
+        "enabled": true,
+        "scope": "block",
+        "key": "space",
+        "responseWindowMs": 2500,
+        "displayDurationMs": 1000,
+        "responseTerminatesStimulus": true,
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 34,
+          "topPx": 14
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        }
       }
     }
   },
@@ -89,13 +91,15 @@
           "speedPxPerSec": 125,
           "directionJitterRadPerSec": 1.8
         },
-        "drt": {
-          "stimMode": "border",
-          "border": {
-            "color": "#dc2626",
-            "widthPx": 4,
-            "radiusPx": 0,
-            "target": "display"
+        "modules": {
+          "drt": {
+            "stimMode": "border",
+            "border": {
+              "color": "#dc2626",
+              "widthPx": 4,
+              "radiusPx": 0,
+              "target": "display"
+            }
           }
         }
       }

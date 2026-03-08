@@ -284,7 +284,7 @@ export function createSampler(spec, optionsOrRng, backendArg) {
             const valuesRaw = normalizedSpec.values ?? normalizedSpec.items ?? normalizedSpec.options;
             const items = Array.isArray(valuesRaw) ? valuesRaw.slice() : [];
             if (items.length === 0) {
-                throw new Error('List sampler requires a non-empty "values" array.');
+                return () => null;
             }
             const weights = parseListWeights(normalizedSpec.weights, items.length);
             const drawModeRaw = normalizedSpec.draw ?? normalizedSpec.mode;

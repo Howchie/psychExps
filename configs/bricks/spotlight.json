@@ -2,7 +2,27 @@
   "task": {
     "implementation": "native_bricks",
     "runner": "native",
-    "title": "Bricks Spotlight + DRT"
+    "title": "Bricks Spotlight + DRT",
+    "modules": {
+      "drt": {
+        "enabled": true,
+        "key": " ",
+        "stimMode": "visual",
+        "visual": {
+          "shape": "square",
+          "color": "#dc2626",
+          "sizePx": 32,
+          "leftPx": 600,
+          "topPx": 30
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        },
+        "responseDeadlineMs": 2500
+      }
+    }
   },
   "display": {
     "canvasWidth": 1200,
@@ -58,14 +78,19 @@
       ]
     },
     "performance": {
-      "maxDevicePixelRatio": 2,
+      "maxDevicePixelRatio": 1.5,
       "maxFrameDtMs": 50,
-      "maxActiveEffects": 240
+      "maxActiveEffects": 180
     }
   },
   "conveyors": {
     "nConveyors": 4,
-    "lengthPx": [940, 1020, 1100, 1180],
+    "lengthPx": [
+      940,
+      1020,
+      1100,
+      1180
+    ],
     "speedPxPerSec": {
       "type": "fixed",
       "value": 30
@@ -109,10 +134,32 @@
       "value": 0
     },
     "forcedSet": [
-      { "conveyorIndex": 0, "x": 80, "width": 220, "value": 12, "isTarget": true, "label": "Experimental Brick" },
-      { "conveyorIndex": 1, "x": 160, "width": 140, "value": 3 },
-      { "conveyorIndex": 2, "x": 120, "width": 180, "value": 3 },
-      { "conveyorIndex": 3, "x": 200, "width": 100, "value": 3 }
+      {
+        "conveyorIndex": 0,
+        "x": 80,
+        "width": 220,
+        "value": 12,
+        "isTarget": true,
+        "label": "Experimental Brick"
+      },
+      {
+        "conveyorIndex": 1,
+        "x": 160,
+        "width": 140,
+        "value": 3
+      },
+      {
+        "conveyorIndex": 2,
+        "x": 120,
+        "width": 180,
+        "value": 3
+      },
+      {
+        "conveyorIndex": 3,
+        "x": 200,
+        "width": 100,
+        "value": 3
+      }
     ],
     "maxBricksPerTrial": 4,
     "spawn": {
@@ -126,24 +173,6 @@
       "maxActivePerConveyor": 1
     }
   },
-  "drt": {
-    "enable": true,
-    "stim_type": "visual",
-    "stim_visual_config": {
-      "shape": "square",
-      "color": "#dc2626",
-      "size_px": 32,
-      "x": 600,
-      "y": 30
-    },
-    "key": " ",
-    "isi_sampler": {
-      "type": "uniform",
-      "min": 3000,
-      "max": 5000
-    },
-    "response_deadline_ms": 2500
-  },
   "trial": {
     "mode": "fixed_time",
     "maxTimeSec": 40,
@@ -151,7 +180,12 @@
       "enable": true,
       "switchMode": "on_clear",
       "switchOnDrop": true,
-      "sequence": [1, 0, 2, 3],
+      "sequence": [
+        1,
+        0,
+        2,
+        3
+      ],
       "spotlightPadding": 18,
       "dimAlpha": 0.45,
       "coverStory": {
@@ -183,6 +217,8 @@
     "postTrial": [
       {
         "preset": "atwit",
+        "showQuestionNumbers": false,
+        "showRequiredAsterisk": false,
         "prompt": "ATWIT: Rate your overall workload during the just-completed trial (1-10)."
       }
     ]
@@ -211,7 +247,12 @@
       "overrides": {
         "trial": {
           "forcedOrder": {
-            "sequence": [1, 0, 2, 3]
+            "sequence": [
+              1,
+              0,
+              2,
+              3
+            ]
           }
         }
       }
@@ -222,7 +263,12 @@
       "overrides": {
         "trial": {
           "forcedOrder": {
-            "sequence": [1, 2, 0, 3]
+            "sequence": [
+              1,
+              2,
+              0,
+              3
+            ]
           }
         }
       }
@@ -233,7 +279,12 @@
       "overrides": {
         "trial": {
           "forcedOrder": {
-            "sequence": [1, 2, 3, 0]
+            "sequence": [
+              1,
+              2,
+              3,
+              0
+            ]
           }
         }
       }

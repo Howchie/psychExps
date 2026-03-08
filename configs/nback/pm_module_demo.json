@@ -41,14 +41,18 @@
   },
   "variables": {
     "pmCount": 0,
-    "pmCategory": "animals"
+    "pmCategory": "animals",
+    "pmCategories": ["animals", "fruits"]
   },
   "instructions": {
     "introPages": [
       "Respond M for n-back targets and Z for non-targets.",
       "In PM blocks, press SPACE for PM-category items."
     ],
+    "pmTemplate": "PM categories in this run: {pmCategoryText}",
     "blockIntroTemplate": "This is a {nLevel}-back block.",
+    "blockIntroPmTemplate": "This is a {nLevel}-back PM block. Watch for {pmCategoryText}.",
+    "blockIntroControlTemplate": "This is a {nLevel}-back control block. No PM responses in this block.",
     "preBlockBeforeBlockIntro": false,
     "showBlockLabel": true
   },

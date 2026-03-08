@@ -17,7 +17,8 @@
   },
   "data": {
     "localSave": true,
-    "filePrefix": "experiments"
+    "filePrefix": "experiments",
+    "localSaveFormat": "csv"
   },
   "autoresponder": {
     "enabled": false,

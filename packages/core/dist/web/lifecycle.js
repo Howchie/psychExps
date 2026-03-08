@@ -1,19 +1,27 @@
-import { downloadCsv, downloadJson } from "../infrastructure/data";
+import { downloadCsv, downloadJson, inferCsvFromPayload } from "../infrastructure/data";
 import { endJatosStudy, submitToJatos } from "../infrastructure/jatos";
 import { resolveTemplate } from "../infrastructure/redirect";
 function resolveDataSettings(coreConfig) {
     const data = coreConfig.data;
+    const rawFormat = data?.localSaveFormat;
+    const localSaveFormat = rawFormat === "json" || rawFormat === "both" ? rawFormat : "csv";
     return {
         localSave: data?.localSave !== false,
         filePrefix: data?.filePrefix?.trim() || "experiments",
+        localSaveFormat,
     };
 }
 export async function finalizeTaskRun(args) {
-    const { localSave, filePrefix } = resolveDataSettings(args.coreConfig);
+    const { localSave, filePrefix, localSaveFormat } = resolveDataSettings(args.coreConfig);
     if (localSave) {
-        downloadJson(args.payload, filePrefix, args.selection);
-        if (args.csv?.contents) {
-            downloadCsv(args.csv.contents, filePrefix, args.selection, args.csv.suffix ?? "trials");
+        if (localSaveFormat !== "json") {
+            const csvContents = args.csv?.contents ?? inferCsvFromPayload(args.payload);
+            if (csvContents != null) {
+                downloadCsv(csvContents, filePrefix, args.selection, args.csv?.suffix ?? "trials");
+            }
+        }
+        if (localSaveFormat !== "csv") {
+            downloadJson(args.payload, filePrefix, args.selection);
         }
     }
     const submittedToJatos = await submitToJatos(args.payload);
