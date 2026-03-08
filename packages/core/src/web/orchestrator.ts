@@ -4,6 +4,7 @@ import { TaskModuleRunner, type TaskModuleAddress } from "../api/taskModule";
 import { runTaskIntroFlow, runBlockStartFlow, runBlockEndFlow, runTaskEndFlow } from "./taskUiFlow";
 import { runTaskSession, type TaskSessionRunnerBlockResult } from "./sessionRunner";
 import { finalizeTaskRun } from "./lifecycle";
+import { recordsToCsv } from "../infrastructure/data";
 
 export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   getBlocks: (taskConfig: JSONObject) => TBlock[];
@@ -18,13 +19,21 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   
   // Customization hooks
   onTaskStart?: () => Promise<void> | void;
+  onTaskEnd?: (payload: any) => Promise<void> | void;
   onBlockStart?: (ctx: { block: TBlock; blockIndex: number }) => Promise<void> | void;
   onBlockEnd?: (ctx: { block: TBlock; blockIndex: number; trialResults: TTrialResult[] }) => Promise<void> | void;
+  onTrialStart?: (ctx: { block: TBlock; blockIndex: number; trial: TTrial; trialIndex: number }) => Promise<void> | void;
+  onTrialEnd?: (ctx: { block: TBlock; blockIndex: number; trial: TTrial; trialIndex: number; result: TTrialResult }) => Promise<void> | void;
+  getTaskMetadata?: (sessionResult: any) => Record<string, unknown>;
   
   // UI Configuration
   buttonIdPrefix: string;
   autoFinalize?: boolean;
-  csvSuffix?: string;
+  csvOptions?: {
+    suffix: string;
+    getRecords?: (sessionResult: any) => any[];
+  };
+  renderInstruction?: (ctx: { pageText: string; pageIndex: number; section: string; blockLabel?: string | null }) => string;
 }
 
 export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
@@ -42,18 +51,20 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     const instructions = asObject(taskConfig.instructions);
     const introPages = asObject(context.resolver.resolveInValue(instructions?.introPages)) as any;
     
-    await runTaskIntroFlow({
-      container,
-      title: asString(asObject(taskConfig.task)?.title) || "Task",
-      participantId: selection.participant.participantId,
-      introPages: Array.isArray(introPages) ? introPages : [],
-      buttonIdPrefix: args.buttonIdPrefix,
-    });
+    if (introPages && Array.isArray(introPages) && introPages.length > 0) {
+      await runTaskIntroFlow({
+        container,
+        title: asString(asObject(taskConfig.task)?.title) || "Task",
+        participantId: selection.participant.participantId,
+        introPages,
+        buttonIdPrefix: args.buttonIdPrefix,
+        renderHtml: args.renderInstruction,
+      });
+    }
 
     // 3. Main Session
-    const blocks = args.getBlocks(taskConfig);
     const sessionResult = await runTaskSession<TBlock, TTrial, TTrialResult>({
-      blocks,
+      blocks: args.getBlocks(taskConfig),
       getTrials: args.getTrials,
       runTrial: async (ctx) => {
         // Auto-handle trial-scoped modules
@@ -73,8 +84,12 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           }
         });
 
+        if (args.onTrialStart) await args.onTrialStart(ctx);
+
         try {
-          return await args.runTrial(ctx);
+          const result = await args.runTrial(ctx);
+          if (args.onTrialEnd) await args.onTrialEnd({ ...ctx, result });
+          return result;
         } finally {
           moduleRunner.stopScopedModules({ 
             scope: "trial", 
@@ -105,8 +120,9 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
             blockIndex: ctx.blockIndex,
             buttonIdPrefix: args.buttonIdPrefix,
-            introText: (ctx.block as any).introText, // TODO: standard field?
+            introText: (ctx.block as any).introText,
             preBlockPages: (ctx.block as any).beforeBlockScreens,
+            renderHtml: args.renderInstruction,
           });
 
           if (args.onBlockStart) await args.onBlockStart(ctx);
@@ -120,6 +136,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             blockIndex: ctx.blockIndex,
             buttonIdPrefix: args.buttonIdPrefix,
             postBlockPages: (ctx.block as any).afterBlockScreens,
+            renderHtml: args.renderInstruction,
           });
 
           moduleRunner.stopScopedModules({ 
@@ -133,29 +150,47 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
 
     // 4. Task End Flow
     const endPages = asObject(context.resolver.resolveInValue(instructions?.endPages)) as any;
-    await runTaskEndFlow({
-      container,
-      endPages: Array.isArray(endPages) ? endPages : [],
-      buttonIdPrefix: args.buttonIdPrefix,
-    });
+    if (endPages && Array.isArray(endPages) && endPages.length > 0) {
+      await runTaskEndFlow({
+        container,
+        endPages,
+        buttonIdPrefix: args.buttonIdPrefix,
+        renderHtml: args.renderInstruction,
+      });
+    }
 
     // 5. Finalization
+    const records = args.csvOptions?.getRecords 
+      ? args.csvOptions.getRecords(sessionResult) 
+      : sessionResult.blocks.flatMap(b => b.trialResults);
+
+    const taskMetadata = args.getTaskMetadata ? args.getTaskMetadata(sessionResult) : {};
+
     const payload = {
       selection,
+      mapping: (taskConfig as any).mapping,
+      timing: (taskConfig as any).timing,
       blocks: sessionResult.blocks.map(b => ({
         blockIndex: b.blockIndex,
         label: (b.block as any).label,
-        trialResults: b.trialResults,
       })),
+      records,
       moduleResults: moduleRunner.getResults(),
+      events: (context as any).eventLogger?.events ?? [],
+      ...taskMetadata,
     };
+
+    if (args.onTaskEnd) await args.onTaskEnd(payload);
 
     if (args.autoFinalize !== false) {
       await finalizeTaskRun({
         coreConfig: context.coreConfig,
         selection,
         payload,
-        csv: null, // TODO: support CSV standard row building
+        csv: args.csvOptions ? { 
+          contents: recordsToCsv(records), 
+          suffix: args.csvOptions.suffix 
+        } : null,
         completionStatus: "complete",
       });
     }

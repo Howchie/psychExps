@@ -155,7 +155,7 @@ class BricksTaskAdapter implements TaskAdapter {
           pages: [pageSpec as any],
           templateVars: taskConfig as Record<string, unknown>,
           resolver,
-          blockIndex: ctx.blockIndex
+          blockIndex: ctx.blockLabel ? blockPlan.findIndex(b => b.label === ctx.blockLabel) : undefined
         })[0];
 
         return renderBricksInstructionPage(resolved || {}, ctx.pageText);
@@ -199,9 +199,9 @@ class BricksTaskAdapter implements TaskAdapter {
       runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
         const resolvedDrtConfig = resolveBricksDrtConfig(resolveBricksDrtOverride(trial));
         let injectedDrtRuntime: ConveyorTrialDrtRuntime | undefined;
+        const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
 
         if (resolvedDrtConfig.enabled) {
-          const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
           
           if (resolvedDrtConfig.scope === "trial") {
             const activeScope: ActiveBricksDrtScope = {

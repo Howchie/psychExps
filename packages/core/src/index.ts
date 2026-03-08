@@ -54,6 +54,7 @@ export * from "./web/scene";
 export * from "./web/sceneRenderer";
 export * from "./web/moduleScopes";
 export * from "./web/stimulusExport";
+export * from "./web/orchestrator";
 
 // Utils
 export * from "./utils/coerce";

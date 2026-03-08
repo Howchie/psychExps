@@ -7,6 +7,7 @@ export interface RunTaskIntroFlowArgs {
   participantId?: string | null;
   introPages: string[];
   buttonIdPrefix: string;
+  renderHtml?: (ctx: { pageText: string; pageIndex: number; section: string }) => string;
 }
 
 export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void> {
@@ -22,6 +23,7 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
     section: "intro",
     title: args.title,
     buttonIdPrefix: args.buttonIdPrefix,
+    renderHtml: args.renderHtml,
   });
 }
 
@@ -33,6 +35,7 @@ export interface RunBlockUiFlowArgs {
   introText?: string | null;
   preBlockPages?: string[];
   postBlockPages?: string[];
+  renderHtml?: (ctx: { pageText: string; pageIndex: number; section: string; blockLabel?: string | null }) => string;
 }
 
 export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void> {
@@ -48,6 +51,7 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
     section: "preBlock",
     blockLabel: args.blockLabel,
     buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
+    renderHtml: args.renderHtml,
   });
 }
 
@@ -58,6 +62,7 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
     section: "postBlock",
     blockLabel: args.blockLabel,
     buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
+    renderHtml: args.renderHtml,
   });
 }
 
@@ -68,6 +73,7 @@ export interface RunTaskEndFlowArgs {
   completeTitle?: string;
   completeMessage?: string;
   doneButtonLabel?: string;
+  renderHtml?: (ctx: { pageText: string; pageIndex: number; section: string }) => string;
 }
 
 export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
@@ -77,7 +83,7 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
     section: "end",
     title: args.completeTitle ?? "Complete",
     buttonIdPrefix: args.buttonIdPrefix,
-    renderHtml: (ctx) => `<h3>${escapeHtml(args.completeTitle ?? "Complete")}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
+    renderHtml: args.renderHtml ?? ((ctx) => `<h3>${escapeHtml(args.completeTitle ?? "Complete")}</h3><p>${escapeHtml(ctx.pageText)}</p>`),
   });
 
   await waitForContinue(
