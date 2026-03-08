@@ -52,13 +52,10 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
 
     if (eligibleIndices.length === 0) return block;
 
-    const pmPositions = generateProspectiveMemoryPositions(context.rng!, trials.length, config.schedule);
+    const pmPositions = generateProspectiveMemoryPositions(context.rng!, trials.length, config.schedule, new Set(eligibleIndices));
     
-    // Filter PM positions to only those that fall on eligible trials
-    const validPmPositions = pmPositions.filter(pos => eligibleIndices.includes(pos));
-
     const newTrials = [...trials];
-    for (const pos of validPmPositions) {
+    for (const pos of pmPositions) {
       // Pick a rule and an item
       const ruleIndex = context.rng!.int(0, config.rules.length - 1);
       const rule = config.rules[ruleIndex];
@@ -89,26 +86,11 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
     return { ...block, trials: newTrials };
   }
 
-  start(config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult> {
-    const responses: Array<{ key: string; timestamp: number }> = [];
-    const allowedKeys = new Set(config.rules.map(r => r.responseKey));
-    const captureResponses = config.captureResponses === true;
-
+  start(_config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult> {
     return {
-      handleKey: (key, now) => {
-        if (!captureResponses) return false;
-        if (allowedKeys.has(key)) {
-          responses.push({ key, timestamp: now });
-          return true;
-        }
-        return false;
-      },
-      getData: () => ({
-        responses
-      }),
       stop: () => ({
-        responses
-      })
+        responses: [],
+      }),
     };
   }
 }
@@ -117,29 +99,47 @@ export function generateProspectiveMemoryPositions(
   rng: SeededRandom,
   nTrials: number,
   schedule: ProspectiveMemoryScheduleConfig,
+  eligibleIndices?: Set<number>,
 ): number[] {
   const nPm = Math.max(0, Math.floor(schedule.count));
   const minSep = Math.max(1, Math.floor(schedule.minSeparation));
   const maxSep = Math.max(minSep, Math.floor(schedule.maxSeparation));
   if (nPm <= 0) return [];
-  if (nPm * minSep > nTrials - 1) {
-    throw new Error(`Cannot place ${nPm} PM trials in ${nTrials} trials.`);
-  }
+
   const positions: number[] = [];
-  let lastPos = 0;
+  let lastPos = -minSep; // Allow the first PM to potentially land at 0 if eligible
+
   for (let i = 0; i < nPm; i += 1) {
     const remaining = nPm - i - 1;
     const minPos = lastPos + minSep;
     const latestByMaxGap = lastPos + maxSep;
     const latestByRemaining = nTrials - 1 - remaining * minSep;
     const maxPos = Math.min(latestByMaxGap, latestByRemaining);
+
     if (minPos > maxPos) {
-      throw new Error(`Cannot place PM trial ${i + 1}/${nPm}.`);
+      throw new Error(`Cannot place PM trial ${i + 1}/${nPm}: spacing constraints impossible.`);
     }
-    const pos = rng.int(minPos, maxPos);
+
+    const possiblePos: number[] = [];
+    for (let p = minPos; p <= maxPos; p++) {
+      if (!eligibleIndices || eligibleIndices.has(p)) {
+        possiblePos.push(p);
+      }
+    }
+
+    if (possiblePos.length === 0) {
+      // If no eligible positions in current window, we have a violation of either min/max or eligible pool
+      throw new Error(
+        `Cannot place PM trial ${i + 1}/${nPm}: no eligible trials found between indices ${minPos} and ${maxPos}.`,
+      );
+    }
+
+    // Pick one of the possible positions
+    const pos = possiblePos[rng.int(0, possiblePos.length - 1)];
     positions.push(pos);
     lastPos = pos;
   }
+
   return positions;
 }
 

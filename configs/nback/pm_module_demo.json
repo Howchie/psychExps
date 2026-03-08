@@ -42,17 +42,15 @@
   "variables": {
     "pmCount": 0,
     "pmCategory": "animals",
-    "pmCategories": ["animals", "fruits"]
+    "pmCategories": ["animals", "fruits"],
+    "blockIntro": "This is a {nLevel}-back block."
   },
   "instructions": {
     "introPages": [
       "Respond M for n-back targets and Z for non-targets.",
       "In PM blocks, press SPACE for PM-category items."
     ],
-    "pmTemplate": "PM categories in this run: {pmCategoryText}",
-    "blockIntroTemplate": "This is a {nLevel}-back block.",
-    "blockIntroPmTemplate": "This is a {nLevel}-back PM block. Watch for {pmCategoryText}.",
-    "blockIntroControlTemplate": "This is a {nLevel}-back control block. No PM responses in this block.",
+    "blockIntroTemplate": "$var.blockIntro",
     "preBlockBeforeBlockIntro": false,
     "showBlockLabel": true
   },
@@ -74,9 +72,9 @@
   },
   "plan": {
     "manipulations": [
-      { "id": "control_block", "overrides": { "variables": { "pmCount": 0 } } },
-      { "id": "pm_block_animals", "overrides": { "variables": { "pmCount": 5, "pmCategory": "animals" } } },
-      { "id": "pm_block_fruits", "overrides": { "variables": { "pmCount": 5, "pmCategory": "fruits" } } },
+      { "id": "control_block", "overrides": { "variables": { "pmCount": 0, "blockIntro": "This is a {nLevel}-back control block. No PM responses in this block." } } },
+      { "id": "pm_block_animals", "overrides": { "variables": { "pmCount": 5, "pmCategory": "animals", "blockIntro": "This is a {nLevel}-back PM block. Watch for: animals." } } },
+      { "id": "pm_block_fruits", "overrides": { "variables": { "pmCount": 5, "pmCategory": "fruits", "blockIntro": "This is a {nLevel}-back PM block. Watch for: fruits." } } },
       { "id": "nlevel_1", "overrides": { "nLevel": 1 } },
       { "id": "nlevel_2", "overrides": { "nLevel": 2 } },
       { "id": "nlevel_3", "overrides": { "nLevel": 3 } }

@@ -66,6 +66,8 @@ import {
   type PoolDrawConfig,
   type CategoryDrawConfig,
   type TaskModuleAddress,
+  isStimulusExportOnly,
+  exportStimulusRows,
   startDrtModuleScope,
   stopModuleScope,
 } from "@experiments/core";
@@ -121,10 +123,6 @@ class NbackTaskAdapter implements TaskAdapter {
 
 export const nbackAdapter = new NbackTaskAdapter();
 
-function isStimulusExportOnly(config: JSONObject): boolean {
-  return asObject(config.task)?.exportStimuliOnly === true;
-}
-
 function toTrialCode(trialType: string): string {
   if (trialType === "PM") return "pm";
   if (trialType === "N") return "target";
@@ -148,18 +146,11 @@ async function exportNbackStimulusList(context: TaskAdapterContext, runtime: Nba
       correct_response: trial.correctResponse,
     })),
   );
-  await finalizeTaskRun({
-    coreConfig: context.coreConfig,
-    selection: context.selection,
-    payload: { selection: context.selection, records: rows, exportOnly: true, rows: rows.length },
-    csv: { contents: recordsToCsv(rows), suffix: "stimulus_list" },
-    completionStatus: "complete",
+  return exportStimulusRows({
+    context,
+    rows,
+    suffix: "nback_stimulus_list",
   });
-  context.container.innerHTML = renderCenteredNotice({
-    title: "Stimulus List Exported",
-    message: `Exported ${rows.length} planned trials. No task run was executed.`,
-  });
-  return { exported: true, rows: rows.length };
 }
 
 function shouldHideCursorForPhase(phase: unknown): boolean {
@@ -309,13 +300,11 @@ interface ParsedNbackConfig {
     postBlockPages: string[];
     endPages: string[];
     blockIntroTemplate: string;
-    pmTemplate: string | null;
     showBlockLabel: boolean;
     preBlockBeforeBlockIntro: boolean;
   };
   practiceBlocks: NbackBlockConfig[];
   mainBlocks: NbackBlockConfig[];
-  pmCategories: string[];
   stimuliByCategory: Record<string, string[]>;
   nbackRule: NbackRuleConfig;
   feedbackDefaults: TrialFeedbackConfig;
@@ -511,18 +500,6 @@ async function runNbackJsPsychTask(context: TaskAdapterContext, runtime: NbackRu
     phase: "intro_page",
     data: (ctx) => ({ introIndex: ctx.pageIndex }),
   });
-  if (parsed.instructions.pmTemplate && parsed.pmCategories.length > 0) {
-    appendJsPsychInstructionScreens({
-      timeline,
-      plugin: CallFunctionPlugin,
-      container: root,
-      pages: [parsed.instructions.pmTemplate.replace("{pmCategoryText}", parsed.pmCategories.join(", "))],
-      section: "intro",
-      buttonIdPrefix: "nback-continue-intro_pm_template",
-      phase: "intro_pm_template",
-      data: (ctx) => ({ introIndex: ctx.pageIndex }),
-    });
-  }
   await runTaskSession<PlannedBlock, PlannedTrial, null>({
     blocks: plan,
     getTrials: ({ block }) => block.trials,
@@ -1086,7 +1063,7 @@ function drawNbackPhase(
 
 function evaluateNbackOutcome(
   parsed: ParsedNbackConfig,
-  block: PlannedBlock,
+  _block: PlannedBlock,
   trial: PlannedTrial,
   responseKey: string | null,
   rtMs: number | null,
@@ -1097,20 +1074,6 @@ function evaluateNbackOutcome(
   expectedCategory: string;
   rtMs: number;
 } {
-  if (trial.trialType === "PM") {
-    const normalizedExpected = normalizeKey(trial.correctResponse);
-    const normalizedResponse = responseKey ? normalizeKey(responseKey) : null;
-    const responded = normalizedResponse ? 1 : 0;
-    const correct = normalizedResponse === normalizedExpected ? 1 : 0;
-    return {
-      correct,
-      responded,
-      responseCategory: correct ? "pm" : responded ? "other" : "timeout",
-      expectedCategory: "pm",
-      rtMs: rtMs ?? -1,
-    };
-  }
-
   const responseCategory = parsed.responseSemantics.responseCategoryFromKey(responseKey);
   const expectedCategory = parsed.responseSemantics.expectedCategoryFromSpec(trial.correctResponse, "timeout");
   const outcome = evaluateTrialOutcome({
@@ -1296,8 +1259,7 @@ function parseNbackConfig(
     ...(taskVariables ?? {}),
     ...(configVariables ?? {}),
   };
-  const pmCategoriesResolved = variableResolver.resolveInValue(configVariables?.pmCategories);
-  
+
   const lureLagPasses = parseLureLagPasses(nbackRuleRaw?.lureLagPasses);
   const maxInsertionAttempts = toPositiveNumber(nbackRuleRaw?.maxInsertionAttempts, 10);
   const planManipulations = createManipulationOverrideMap(plan?.manipulations);
@@ -1389,13 +1351,11 @@ function parseNbackConfig(
       postBlockPages: instructionSlots.postBlock,
       endPages: instructionSlots.end,
       blockIntroTemplate: asString(instructionsRaw?.blockIntroTemplate) || "This is a {nLevel}-back block.",
-      pmTemplate: asString(instructionsRaw?.pmTemplate) || null,
       showBlockLabel: instructionsRaw?.showBlockLabel !== false,
       preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
     },
     practiceBlocks: parsedPracticeBlocks,
     mainBlocks: parsedMainBlocks,
-    pmCategories: asStringArray(pmCategoriesResolved, []),
     stimuliByCategory,
     nbackRule: {
       lureLagPasses,

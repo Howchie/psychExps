@@ -53,6 +53,7 @@ export * from "./web/trial";
 export * from "./web/scene";
 export * from "./web/sceneRenderer";
 export * from "./web/moduleScopes";
+export * from "./web/stimulusExport";
 
 // Utils
 export * from "./utils/coerce";
