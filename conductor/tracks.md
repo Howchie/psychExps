@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [x] **Track: Core adoption and redundancy removal across tasks**
-*Link: [./tracks/core_adoption_unification_20260306/](./tracks/core_adoption_unification_20260306/)*
+- [ ] **Track: Consolidate and generalize task orchestration into a core TaskOrchestrator**
+*Link: [./tracks/orchestration_unification_20260308/](./tracks/orchestration_unification_20260308/)*
