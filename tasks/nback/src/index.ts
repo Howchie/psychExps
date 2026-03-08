@@ -123,6 +123,7 @@ class NbackTaskAdapter implements TaskAdapter {
       getTaskMetadata: () => ({
         jsPsychData: jsPsych?.data.get().values() ?? [],
       }),
+      getEvents: () => eventLogger.events,
       onTaskStart: () => {
         const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
         this.setKeyScrollRemover(removeKeyScrollBlocker);
@@ -170,9 +171,11 @@ class NbackTaskAdapter implements TaskAdapter {
 
         await runJsPsychTimeline(jsPsych, timeline);
 
-        // Extract the main record from jsPsych data
-        // It should be the one where phase is 'nback_response_window'
-        const trialData = jsPsych.data.get().last(1).values()[0];
+        const trialData = findNbackResponseWindowRow(
+          jsPsych.data.get().values() as Array<Record<string, unknown>>,
+          block.blockIndex,
+          trial.trialIndex,
+        );
         const records = collectNbackRecords([trialData], runtime.participantId, runtime.variantId);
         return records[0];
       },
@@ -840,6 +843,21 @@ function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId
     });
   }
   return output;
+}
+
+function findNbackResponseWindowRow(
+  rows: Array<Record<string, unknown>>,
+  blockIndex: number,
+  trialIndex: number,
+): Record<string, unknown> {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (row.phase !== "nback_response_window") continue;
+    if (Number(row.blockIndex) !== blockIndex) continue;
+    if (Number(row.trialIndex) !== trialIndex) continue;
+    return row;
+  }
+  throw new Error(`Missing n-back response window data for block ${blockIndex}, trial ${trialIndex}.`);
 }
 
 function getNbackResponseRowsFromValues(rows: Array<Record<string, unknown>>, blockIndex: number): TrialRecord[] {

@@ -1,4 +1,4 @@
-import { asObject, asString } from "../utils/coerce";
+import { asObject, asString, toStringScreens } from "../utils/coerce";
 import type { TaskAdapterContext, JSONObject } from "../api/types";
 import { TaskModuleRunner, type TaskModuleAddress } from "../api/taskModule";
 import { runTaskIntroFlow, runBlockStartFlow, runBlockEndFlow, runTaskEndFlow } from "./taskUiFlow";
@@ -25,6 +25,7 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   onTrialStart?: (ctx: { block: TBlock; blockIndex: number; trial: TTrial; trialIndex: number }) => Promise<void> | void;
   onTrialEnd?: (ctx: { block: TBlock; blockIndex: number; trial: TTrial; trialIndex: number; result: TTrialResult }) => Promise<void> | void;
   getTaskMetadata?: (sessionResult: any) => Record<string, unknown>;
+  getEvents?: (sessionResult: any) => unknown[];
   
   // UI Configuration
   buttonIdPrefix: string;
@@ -49,7 +50,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     
     // 2. Intro Flow
     const instructions = asObject(taskConfig.instructions);
-    const introPages = asObject(context.resolver.resolveInValue(instructions?.introPages)) as any;
+    const introPages = toStringScreens(context.resolver.resolveInValue(instructions?.introPages));
     
     if (introPages && Array.isArray(introPages) && introPages.length > 0) {
       await runTaskIntroFlow({
@@ -149,7 +150,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     });
 
     // 4. Task End Flow
-    const endPages = asObject(context.resolver.resolveInValue(instructions?.endPages)) as any;
+    const endPages = toStringScreens(context.resolver.resolveInValue(instructions?.endPages));
     if (endPages && Array.isArray(endPages) && endPages.length > 0) {
       await runTaskEndFlow({
         container,
@@ -165,6 +166,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       : sessionResult.blocks.flatMap(b => b.trialResults);
 
     const taskMetadata = args.getTaskMetadata ? args.getTaskMetadata(sessionResult) : {};
+    const taskEvents = args.getEvents ? args.getEvents(sessionResult) : [];
 
     const payload = {
       selection,
@@ -176,7 +178,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       })),
       records,
       moduleResults: moduleRunner.getResults(),
-      events: (context as any).eventLogger?.events ?? [],
+      events: Array.isArray(taskEvents) ? taskEvents : [],
       ...taskMetadata,
     };
 

@@ -142,6 +142,7 @@ class BricksTaskAdapter implements TaskAdapter {
       buttonIdPrefix: "bricks",
       getBlocks: () => blockPlan,
       getTrials: ({ block }) => block.trialConfigs,
+      getEvents: () => eventLogger.events,
       onTaskStart: () => {
         eventLogger.emit("task_start", { task: "bricks" });
       },
@@ -270,8 +271,12 @@ class BricksTaskAdapter implements TaskAdapter {
 
         // Handle DRT results if trial-scoped
         if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "trial") {
-          const results = moduleRunner.getResults();
-          const trialResult = results.find(r => r.moduleId === "drt" && r.blockIndex === blockIndex && r.trialIndex === trialIndex);
+          const trialScopeResults = moduleRunner.stopScopedModules({
+            scope: "trial",
+            blockIndex,
+            trialIndex,
+          });
+          const trialResult = trialScopeResults.find((r) => r.moduleId === "drt");
           if (trialResult) {
             record = {
               ...record,
