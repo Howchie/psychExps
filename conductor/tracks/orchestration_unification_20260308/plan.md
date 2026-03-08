@@ -14,12 +14,12 @@
     - [x] Verify `nback` functionality and parity. d3e652d
 - [x] Task: Conductor - User Manual Verification 'NBack Refactor' (Protocol in workflow.md) d3e652d
 
-## Phase 3: Bricks Refactor
-- [ ] Task: Refactor `bricks` to use `TaskOrchestrator`
-    - [ ] Remove manual DRT scope management.
-    - [ ] Standardize `bricks` block/trial transitions via core.
-    - [ ] Verify `bricks` functionality and parity.
-- [ ] Task: Conductor - User Manual Verification 'Bricks Refactor' (Protocol in workflow.md)
+## Phase 3: Bricks Refactor [checkpoint: 11102a7]
+- [x] Task: Refactor `bricks` to use `TaskOrchestrator` 11102a7
+    - [x] Remove manual DRT scope management. 11102a7
+    - [x] Standardize `bricks` block/trial transitions via core. 11102a7
+    - [x] Verify `bricks` functionality and parity. 11102a7
+- [x] Task: Conductor - User Manual Verification 'Bricks Refactor' (Protocol in workflow.md) 11102a7
 
 ## Phase 4: Final Unification & Cleanup
 - [ ] Task: Standardize data finalization in `TaskOrchestrator`
