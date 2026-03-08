@@ -33,11 +33,12 @@
     - [x] Verify test suites for all modified tasks pass.
 - [x] Task: Conductor - User Manual Verification 'Task Refactoring (Remaining Tasks)' (Protocol in workflow.md)
 
-## Phase: Review Fixes [checkpoint: bec7c12]
-- [x] Task: Apply review suggestions bec7c12
-    - [x] Refine PM injection to strictly respect spacing within eligible indices.
-    - [x] Remove hardcoded PM logic from N-back core (true split).
-    - [x] Unified N-back configs to use dynamic block intro variables instead of hardcoded PM fields.
+## Phase: Review Fixes (Round 2) [checkpoint: 64408bb]
+- [x] Task: Apply final review suggestions 64408bb
+    - [x] Implement generic literal key fallback in `evaluateTrialOutcome` to support modular responses without hardcoded host task logic.
+    - [x] Implement `getModularSemantics` in `TaskModule` and `TaskModuleRunner` to automate key registration.
+    - [x] Fixed N-back evaluation to pass necessary metadata for modular correctness checks.
+    - [x] Verified true split: N-back core is now completely free of PM-specific code.
 
 ## Verification Evidence
 - [x] Typecheck checks passed for module-migrated tasks (`@experiments/task-nback`, `@experiments/task-tracking`, `@experiments/task-bricks`).
