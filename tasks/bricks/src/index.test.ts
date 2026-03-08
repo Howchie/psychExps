@@ -3,29 +3,48 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { bricksAdapter } from './index';
-import { createVariableResolver } from '@experiments/core';
+import { createVariableResolver, TaskOrchestrator } from '@experiments/core';
+
+vi.mock('@experiments/core', async () => {
+  const actual = await vi.importActual<any>('@experiments/core');
+  return {
+    ...actual,
+    TaskOrchestrator: vi.fn().mockImplementation(function(this: any) {
+      this.run = vi.fn().mockResolvedValue({ status: 'complete' });
+    })
+  };
+});
 
 describe('BricksTaskAdapter', () => {
-  it('should initialize correctly', async () => {
+  it('should initialize and execute using TaskOrchestrator', async () => {
     const taskConfig = {
-      plan: {
-        blocks: [{ index: 0, label: 'B1', trials: 10, trialConfigs: [] }]
-      }
+      task: { title: 'Test' },
+      blocks: [{ label: 'B1', trials: 10 }]
     };
 
     const resolver = createVariableResolver({ variables: {} });
+    const mockModuleRunner = {
+      setOptions: vi.fn(),
+      getResults: vi.fn().mockReturnValue([]),
+      getActiveData: vi.fn().mockReturnValue([])
+    };
 
     const context: any = {
       container: document.createElement('div'),
       selection: {
         participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
+        variantId: 'annikaHons'
       },
       taskConfig: taskConfig,
-      resolver: resolver
+      rawTaskConfig: taskConfig,
+      resolver: resolver,
+      moduleRunner: mockModuleRunner
     };
 
     await bricksAdapter.initialize(context);
-    expect((bricksAdapter as any).context).toBe(context);
+    const result = await bricksAdapter.execute();
+
+    expect(result).toEqual({ status: 'complete' });
+    expect(TaskOrchestrator).toHaveBeenCalledWith(context);
   });
 });
