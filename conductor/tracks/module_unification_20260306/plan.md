@@ -33,6 +33,12 @@
     - [x] Verify test suites for all modified tasks pass.
 - [x] Task: Conductor - User Manual Verification 'Task Refactoring (Remaining Tasks)' (Protocol in workflow.md)
 
+## Phase: Review Fixes [checkpoint: bec7c12]
+- [x] Task: Apply review suggestions bec7c12
+    - [x] Refine PM injection to strictly respect spacing within eligible indices.
+    - [x] Remove hardcoded PM logic from N-back core (true split).
+    - [x] Unified N-back configs to use dynamic block intro variables instead of hardcoded PM fields.
+
 ## Verification Evidence
 - [x] Typecheck checks passed for module-migrated tasks (`@experiments/task-nback`, `@experiments/task-tracking`, `@experiments/task-bricks`).
 - [x] Auto-responder suite passed on 2026-03-08 via `npm run test:auto` (Playwright; 3/3 passing).
