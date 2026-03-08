@@ -1,8 +1,0 @@
-{
-  "track_id": "module_unification_20260306",
-  "type": "refactor",
-  "status": "completed",
-  "created_at": "2026-03-06T12:00:00Z",
-  "updated_at": "2026-03-08T00:58:23Z",
-  "description": "Standardize modular task extensions (DRT, PM) under a unified task.modules configuration path across all tasks."
-}

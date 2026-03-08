@@ -115,9 +115,14 @@ class NbackTaskAdapter implements TaskAdapter {
 
     return orchestrator.run({
       buttonIdPrefix: "nback",
-      csvSuffix: "nback",
       getBlocks: () => runtime.plan,
       getTrials: ({ block }) => block.trials,
+      csvOptions: {
+        suffix: "nback",
+      },
+      getTaskMetadata: () => ({
+        jsPsychData: jsPsych?.data.get().values() ?? [],
+      }),
       onTaskStart: () => {
         const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
         this.setKeyScrollRemover(removeKeyScrollBlocker);
