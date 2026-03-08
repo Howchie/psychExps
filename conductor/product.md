@@ -13,6 +13,7 @@ To provide a highly modular and extensible framework for developing and running 
 
 ## Key Features
 - **Shared Core Framework:** Provides common services like session management, configuration inheritance, and data collection.
+- **Unified Task Orchestration:** Core orchestrator that automates the high-level experiment lifecycle (intros, loops, modular hooks, finalization) to reduce task-level boilerplate.
 - **Modular Task Adapters:** Specialized modules for specific cognitive tasks (e.g., SFT, PM, NBack, Stroop) that plug into the core framework.
 - **Modular Task Extensions (TaskModules):** Reusable components (e.g., DRT, Prospective Memory) that can be dynamically injected into any task to extend its functionality without modifying the primary task code.
 - **Unified Browser Shell:** A single entry point for all experiments, supporting various task configurations via URL parameters.
