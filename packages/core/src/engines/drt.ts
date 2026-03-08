@@ -911,6 +911,11 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
 
   constructor(private options: Omit<DrtControllerOptions, "transformRunner"> = {}) {}
 
+  getModularSemantics(config: ScopedDrtConfig): Record<string, string | string[]> {
+    if (!config.enabled || !config.key) return {};
+    return { drt: [normalizeKey(config.key)] };
+  }
+
   start(config: ScopedDrtConfig, address: TaskModuleAddress, context: TaskModuleContext): TaskModuleHandle<DrtModuleResult> {
     const controller = new DrtController(
       config,

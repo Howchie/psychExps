@@ -86,6 +86,13 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
     return { ...block, trials: newTrials };
   }
 
+  getModularSemantics(config: ProspectiveMemoryModuleConfig): Record<string, string | string[]> {
+    if (!config.enabled) return {};
+    const keys = Array.from(new Set(config.rules.map((r) => r.responseKey))).filter(Boolean);
+    if (keys.length === 0) return {};
+    return { pm: keys };
+  }
+
   start(_config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult> {
     return {
       stop: () => ({

@@ -44,6 +44,11 @@ export interface TaskModule<TConfig = any, TResult = any> {
   transformBlockPlan?(block: any, config: TConfig, context: TaskModuleContext): any;
 
   /**
+   * Optional: Called during initialization to retrieve modular response mappings.
+   */
+  getModularSemantics?(config: TConfig, context: TaskModuleContext): Record<string, string | string[]>;
+
+  /**
    * Called when the module's scope starts.
    * Returns a handle to the active module instance.
    */
@@ -224,6 +229,23 @@ export class TaskModuleRunner {
       }
     }
     return results;
+  }
+
+  /**
+   * Aggregates modular response semantics from all registered modules.
+   */
+  getModularSemantics(moduleConfigs: Record<string, any>, context: TaskModuleContext): Record<string, string | string[]> {
+    const combined: Record<string, string | string[]> = {};
+    for (const module of this.modules) {
+      if (module.getModularSemantics) {
+        const config = moduleConfigs[module.id];
+        if (config && config.enabled !== false) {
+          const semantics = module.getModularSemantics(config, context);
+          Object.assign(combined, semantics);
+        }
+      }
+    }
+    return combined;
   }
 
   private createScopeId(moduleId: string, address: TaskModuleAddress): string {

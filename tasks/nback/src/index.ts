@@ -357,7 +357,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     resolver: context.resolver,
   });
 
-  const parsed = parseNbackConfig(config, context.selection, context.resolver, stimuliByCategory);
+  const parsed = parseNbackConfig(config, context.selection, context.resolver, stimuliByCategory, context.moduleRunner);
   const rng = new SeededRandom(
     hashSeed(
       context.selection.participant.participantId,
@@ -1083,6 +1083,8 @@ function evaluateNbackOutcome(
     meta: {
       trialType: trial.trialType,
       item: trial.item,
+      correctResponse: trial.correctResponse,
+      responseKey: responseKey,
     },
   });
   return {
@@ -1139,6 +1141,7 @@ function parseNbackConfig(
   selection: TaskAdapterContext["selection"] | undefined,
   variableResolver: VariableResolver,
   stimuliByCategory: Record<string, string[]>,
+  moduleRunner: TaskModuleRunner,
 ): ParsedNbackConfig {
   const mappingRaw = asObject(config.mapping);
   const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
@@ -1147,11 +1150,19 @@ function parseNbackConfig(
   if (nonTargetKey && targetKey === nonTargetKey) {
     throw new Error("Invalid NBack mapping: target and nonTarget keys must be distinct.");
   }
-  const responseSemantics = createResponseSemantics(
-    nonTargetKey
-      ? { target: targetKey, non_target: nonTargetKey }
-      : { target: targetKey },
+
+  // Modular semantics: extract response keys from all active modules
+  const moduleConfigs = asObject(taskRaw?.modules) ?? {};
+  const modularSemantics = variableResolver.resolveInValue(
+    moduleRunner.getModularSemantics(moduleConfigs, { resolver: variableResolver }),
   );
+
+  const responseSemantics = createResponseSemantics({
+    ...(nonTargetKey
+      ? { target: targetKey, non_target: nonTargetKey }
+      : { target: targetKey }),
+    ...asObject(modularSemantics),
+  });
 
   const timingRaw = asObject(config.timing);
   const timing: NbackTiming = {

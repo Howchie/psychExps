@@ -26,6 +26,7 @@ describe('NbackTaskAdapter', () => {
     const mockModuleRunner = {
       transformPlan: vi.fn().mockImplementation((plan) => plan),
       transformBlockPlan: vi.fn().mockImplementation((block) => block),
+      getModularSemantics: vi.fn().mockReturnValue({}),
       initialize: vi.fn(),
       terminate: vi.fn()
     };
