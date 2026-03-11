@@ -92,6 +92,38 @@ describe('LifecycleManager', () => {
     }));
   });
 
+  it('should resolve interpolated variable expressions in strings', async () => {
+    const mockAdapter: any = {
+      manifest: { taskId: 'test' },
+      initialize: vi.fn().mockResolvedValue(undefined),
+      execute: vi.fn().mockResolvedValue('ok'),
+      terminate: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const context: any = {
+      container: {},
+      selection: {
+        participant: { participantId: 'p1', sessionId: 's1' },
+        variantId: 'v1'
+      },
+      taskConfig: {
+        variables: {
+          pmCategory: 'animals'
+        },
+        field: '${var.pmCategory}_controls'
+      }
+    };
+
+    const manager = new LifecycleManager(mockAdapter);
+    await manager.run(context);
+
+    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      taskConfig: expect.objectContaining({
+        field: 'animals_controls'
+      })
+    }));
+  });
+
   it('should resolve variables from task.variables and top-level variables', async () => {
     const mockAdapter: any = {
       manifest: { taskId: 'test' },

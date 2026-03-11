@@ -161,11 +161,19 @@ The framework supports dynamic redirect URLs upon completion. These are configur
 
 For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`), `instructions` supports:
 
-- `pages` (preferred intro pages): string or string[]
+- `pages` (preferred intro pages): string, object, or array
   - aliases: `introPages`, `intro`, `screens`
-- `preBlockPages`: string or string[] (shown before every block)
-- `postBlockPages`: string or string[] (shown after every block)
-- `endPages`: string or string[] (shown before final completion screen)
+- `preBlockPages`: string, object, or array (shown before every block)
+- `postBlockPages`: string, object, or array (shown after every block)
+- `endPages`: string, object, or array (shown before final completion screen)
+
+Instruction page object shape:
+- `text`: plain text (escaped)
+- `html`: raw HTML fragment
+- `title`: optional heading for that page
+- `actions`: optional button array for that page
+  - each action: `{ "id"?: string, "label": string, "action"?: "continue" | "exit" }`
+  - `"exit"` halts the task flow immediately and does not run completion finalization/redirect.
 
 Resolution behavior:
 - Slot aliases are checked in priority order, and the first key that is explicitly present is used.
@@ -190,6 +198,113 @@ Example:
   }
 }
 ```
+
+### 6.1 Instruction Insertions (Generalized)
+
+For tasks that use the core orchestrator (including NBack), you can insert additional instruction pages at specific lifecycle points using:
+
+- `instructions.insertions`: array of insertion specs
+
+Insertion spec fields:
+- `at`: insertion point (required)
+- `pages`: string/object or array (required)
+- `id`: optional label for readability
+- `when`: optional block filter
+  - `blockIndex`: number[]
+  - `blockLabel`: string[]
+  - `blockType`: string[]
+  - `isPractice`: boolean
+
+Supported `at` values:
+- `task_intro_before`
+- `task_intro_after`
+- `block_start_before_intro`
+- `block_start_after_intro`
+- `block_start_after_pre`
+- `block_end_before_post`
+- `block_end_after_post`
+- `task_end_before`
+- `task_end_after`
+
+Notes:
+- Multiple insertion specs at the same `at` point are supported and run in array order.
+- `when` filters apply to block-level insertion points.
+- Insertion pages are resolved through the task variable resolver, including block-local context where available.
+
+Example:
+```json
+{
+  "instructions": {
+    "pages": ["Welcome."],
+    "preBlockPages": "Get ready.",
+    "insertions": [
+      { "at": "task_intro_before", "pages": ["Consent reminder."] },
+      {
+        "at": "task_intro_before",
+        "pages": [
+          {
+            "title": "Consent",
+            "html": "<iframe src=\"/assets/pm-words/consent.html\" style=\"width:min(980px,96vw);height:70vh;border:1px solid #ccc;border-radius:8px;\"></iframe>",
+            "actions": [
+              { "label": "I Consent", "action": "continue" },
+              { "label": "Disagree (exit study)", "action": "exit" }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "block_start_after_intro",
+        "pages": ["Remember PM response for this block."],
+        "when": { "blockType": ["pm"], "isPractice": false }
+      },
+      { "at": "task_end_before", "pages": ["Almost done."] }
+    ]
+  }
+}
+```
+
+---
+
+### 6.2 Block Retry Loops (Core Orchestrator)
+
+For tasks that run through the core orchestrator (including NBack), blocks can define:
+
+- `repeatUntil`: optional object on a block
+
+Fields:
+- `enabled` (default `true` when object is present)
+- `maxAttempts` (integer, default `1`)
+- `minAccuracy` (0..1) or `minAccuracyPct` (0..100)
+- `minCorrect` (optional integer)
+- `minTotal` (optional integer)
+- `where` (optional trial filter object, same shape as block-summary filtering)
+- `metrics.correctField` (field used for correct/incorrect scoring; `true`/`1` count as correct)
+
+Example:
+```json
+{
+  "plan": {
+    "blocks": [
+      {
+        "label": "Practice",
+        "trials": 20,
+        "repeatUntil": {
+          "maxAttempts": 3,
+          "minAccuracy": 0.8,
+          "where": { "trialType": ["N"] },
+          "metrics": { "correctField": "responseCorrect" }
+        }
+      }
+    ]
+  }
+}
+```
+
+Notes:
+- Evaluation is attempt-local and computed from that attempt's trial results.
+- Retries stop as soon as thresholds are met or `maxAttempts` is reached.
+- Default post-block pages (`afterBlockScreens` / task-level post-block pages) are shown on the final attempt only.
+- Use `repeatAfterBlockScreens` (alias `repeatPostBlockScreens`) on a block for retry-attempt messaging.
 
 ---
 
@@ -235,6 +350,37 @@ Variables are defined in the `variables` section of the task configuration.
 - **`$var.name`**: Direct variable reference.
 - **`$sample.name[:count]`**: Samples from a variable (uses the variable's sampler).
 - **`$namespace.path`**: References values from a specific namespace (e.g., `$local.itemId` or `$between.condition`).
+
+### String Interpolation
+
+In addition to full-token fields, any string value resolved through the core resolver can interpolate variable expressions with `${...}`.
+
+- `${var.name}`: interpolate a variable value.
+- `${namespace.path}`: interpolate values from a namespace.
+
+Examples:
+
+```json
+{
+  "variables": {
+    "pmCategory": "animals",
+    "between": {
+      "controlSuffix": "controls"
+    }
+  },
+  "plan": {
+    "blocks": [
+      {
+        "nbackSourceCategories": ["${var.pmCategory}_${between.controlSuffix}"]
+      }
+    ]
+  }
+}
+```
+
+Notes:
+- Existing full-token behavior is unchanged (`"$var.name"` still resolves as before).
+- Interpolation is string-oriented; unresolved expressions are left unchanged.
 
 ### Namespace Support
 
@@ -316,4 +462,60 @@ Supported values:
 - `json`: local JSON download
 - `both`: local CSV + JSON download
 
-JATOS submission is unaffected by this setting and still sends JSON payloads when JATOS is available.
+JATOS submission is unaffected by this setting. When JATOS is available, core emits incremental JSON-lines data through its sink path and still preserves local save behavior for testing.
+
+---
+
+## 10. Generic Stimulus Injection Module
+
+Core provides a reusable module for injecting trials into an existing task plan:
+
+- config path: `task.modules.injector`
+- module id: `injector`
+
+Minimal shape:
+```json
+{
+  "task": {
+    "modules": {
+      "injector": {
+        "enabled": true,
+        "injections": [
+          {
+            "id": "example",
+            "schedule": { "count": 3, "minSeparation": 6, "maxSeparation": 10 },
+            "eligibleTrialTypes": ["F"],
+            "source": { "type": "category_in", "categories": ["animals"] },
+            "sourceDraw": {
+              "mode": "without_replacement",
+              "scope": "block",
+              "shuffle": true
+            },
+            "set": {
+              "trialType": "PM",
+              "itemCategory": "PM",
+              "correctResponse": "space",
+              "responseCategory": "pm"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+Source modes:
+- `category_in`: draws from loaded stimulus pools by category name.
+- `literal`: draws from `source.items` inline list.
+- `sourceDraw`: controls draw behavior for injected items.
+  - `mode`: `without_replacement` (default), `with_replacement`, `ordered`
+  - `scope`: `block` (default), `participant`
+  - `shuffle`: defaults to `true`
+  - `without_replacement` recycles automatically once exhausted.
+
+Setter fields:
+- `set.trialType` (optional)
+- `set.itemCategory` (optional)
+- `set.correctResponse` (optional)
+- `set.responseCategory` (optional semantic label used for module response semantics)

@@ -15,19 +15,33 @@
       "responseTerminatesTrial": false
     },
     "modules": {
-      "pm": {
-        "enabled": "$var.pmEnabled",
-        "eligibleTrialTypes": ["F"],
-        "schedule": {
-          "count": "$var.pmCount",
-          "minSeparation": 8,
-          "maxSeparation": 11
-        },
-        "rules": [
+      "injector": {
+        "enabled": true,
+        "injections": [
           {
-            "type": "category_in",
-            "categories": ["$var.pmCategories"],
-            "responseKey": "space"
+            "id": "pm_injection",
+            "enabled": "$var.pmEnabled",
+            "eligibleTrialTypes": ["F", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9"],
+            "schedule": {
+              "count": "$var.pmCount",
+              "minSeparation": 8,
+              "maxSeparation": 15
+            },
+            "source": {
+              "type": "category_in",
+              "categories": "$var.pmCategories"
+            },
+            "sourceDraw": {
+              "mode": "without_replacement",
+              "scope": "participant",
+              "shuffle": true
+            },
+            "set": {
+              "trialType": "PM",
+              "itemCategory": "PM",
+              "correctResponse": "space",
+              "responseCategory": "pm"
+            }
           }
         ]
       }
@@ -38,34 +52,94 @@
     "nonTargetKey": "z"
   },
   "display": {
+    "frameBackground": "#ffffff",
     "fixationFontSizePx": 24,
     "fixationFontWeight": 400,
-    "stimulusFontSizePx": 30
+    "stimulusFontSizePx": 30,
+    "frameBorder": "2px solid #FF69B4"
   },
   "ui": {
-    "pageBackground": "linear-gradient(180deg, #E8E8E8 0%, #DCDCDC 100%)"
+    "pageBackground": "linear-gradient(180deg, #F8C8DC 0%, #FFC0CB 100%)"
   },
   "instructions": {
     "pages": [
       "Hi Annika, this is your experiment!",
-      "In each trial, decide whether the item is an n-back match (M) or not (Z).\nThis is a test of line breaks :)"
+      "In this experiment you will be presented with a series of words that progress automatically.\nYou will need to remember the sequence.\nOn each trial, decide whether the word is the same as the one two (2) words ago (M) or not (Z).",
+      "Let's have a short practice. Each trial will present one word.\nYou must decide whether the word matches the one presented two (2) trials ago.\n\nIf the word matches, press the 'm' key.\nIf the word does not match, press the 'z' key.\n\nYou will receive feedback after the block is finished.\nWords can repeat, so try to remember the sequence not just recognise words."
     ],
+    "showTaskTitleCard": false,
     "blockIntroTemplate": "$var.blockIntro",
     "showBlockLabel": false,
-    "preBlockBeforeBlockIntro": true
+    "preBlockBeforeBlockIntro": true,
+    "insertions": [
+      {
+        "id": "start_fullscreen",
+        "at": "task_intro_before",
+        "pages": [
+          {
+            "title": "Ready to begin",
+            "text": "Click the button below to start the study in fullscreen mode.",
+            "actions": [
+              { "id": "start_fullscreen", "label": "Start in fullscreen", "action": "continue" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "consent_form",
+        "at": "task_intro_before",
+        "pages": [
+          {
+            "title": "Participant Information and Consent",
+            "html": "<iframe src=\"assets/pm-words/consent.html\" title=\"Consent form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
+            "actions": [
+              { "id": "consent_yes", "label": "I Consent", "action": "continue" },
+              { "id": "consent_no", "label": "Disagree (exit study)", "action": "exit" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "debrief_form",
+        "at": "task_end_after",
+        "pages": [
+          {
+            "title": "Debrief",
+            "html": "<iframe src=\"assets/pm-words/debrief.html\" title=\"Debrief form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>"
+          }
+        ]
+      }
+    ],
+    "blockSummary": {
+      "enabled": true,
+      "at": "before_post",
+      "title": "Feedback",
+      "lines": [
+        "Target accuracy: {accuracyPct}% ({correct}/{total})"
+      ],
+      "metrics": {
+        "correctField": "responseCorrect",
+        "rtField": "responseRtMs"
+      },
+      "where": {
+        "trialType": ["N"]
+      },
+      "when": {
+        "isPractice": true
+      }
+    },
+    "endPages": "That concludes the experiment.\nThank you very much for participating.\n\nPlease read the debrief form on the next screen, then click Continue and Done so your completion can be finalized."
   },
   "stimuliCsv": {
     "basePath": "/assets/pm-words",
     "idColumn": "word",
     "categories": {
-      "animals": "animals_members.csv",
-      "animals_controls": "animals_controls.csv",
-      "colours": "colours_members.csv",
-      "colours_controls": "colours_controls.csv",
-      "instruments": "instruments_members.csv",
-      "instruments_controls": "instruments_controls.csv",
-      "fruit/vegetables": "fruit_vegetables_members.csv",
-      "fruit_vegetables_controls": "fruit_vegetables_controls.csv"
+      "animals": "pm_animals.csv",
+      "animals_controls": "control_animals.csv",
+      "three": "pm_colour_fruit_vegetable_flower.csv",
+      "three_controls": "control_colour_fruit_vegetable_flower.csv",
+      "other_controls": "control.csv",
+      "practice": "practice.csv"
     }
   },
   "variables": {
@@ -80,41 +154,47 @@
         "values": [
           {
             "cell1Enabled": true,
-            "cell1PmCount": 5,
-            "cell1PmCategories": ["$pmCats.one"],
-            "cell1Intro": "This is a {nLevel}-back PM block. Press SPACE for PM items from: animals.",
+            "cell1PmCount": 10,
+            "cell1PmCategories": ["animals"],
+            "cell1NbackCategories": ["animals_controls"],
+            "cell1Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell1PostScreen": "",
             "cell2Enabled": true,
-            "cell2PmCount": 5,
-            "cell2PmCategories": ["$pmCats.three"],
-            "cell2Intro": "This is a {nLevel}-back PM block. Press SPACE for PM items from: colours, instruments, fruit/vegetables.",
+            "cell2PmCount": 10,
+            "cell2PmCategories": ["three"],
+            "cell2NbackCategories": ["three_controls"],
+            "cell2Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell2PreScreen": "",
-            "cell2PostScreen": "There will be no more PM trials from this point forward. Continue with standard n-back responses only.",
+            "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
             "cell3PmCount": 0,
             "cell3PmCategories": [],
-            "cell3Intro": "This is a {nLevel}-back control block.",
+            "cell3NbackCategories": ["other_controls"],
+            "cell3Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           },
           {
             "cell1Enabled": true,
-            "cell1PmCount": 5,
-            "cell1PmCategories": ["$pmCats.three"],
-            "cell1Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: colours, instruments, fruit/vegetables.",
-            "cell1PreScreen": "In the following blocks you will also perform the PM task.",
+            "cell1PmCount": 10,
+            "cell1PmCategories": ["three"],
+            "cell1NbackCategories": ["three_controls"],
+            "cell1Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell1PostScreen": "",
             "cell2Enabled": true,
-            "cell2PmCount": 5,
-            "cell2PmCategories": ["$pmCats.one"],
-            "cell2Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: animals.",
+            "cell2PmCount": 10,
+            "cell2PmCategories": ["animals"],
+            "cell2NbackCategories": ["animals_controls"],
+            "cell2Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell2PreScreen": "",
-            "cell2PostScreen": "There will be no more PM trials from this point forward. Continue with standard n-back responses only.",
+            "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
             "cell3PmCount": 0,
             "cell3PmCategories": [],
-            "cell3Intro": "This is a {nLevel}-back control block.",
+            "cell3NbackCategories": ["other_controls"],
+            "cell3Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           },
@@ -122,49 +202,50 @@
             "cell1Enabled": false,
             "cell1PmCount": 0,
             "cell1PmCategories": [],
-            "cell1Intro": "This is a {nLevel}-back control block.",
+            "cell1NbackCategories": ["other_controls"],
+            "cell1Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 5,
-            "cell2PmCategories": ["$pmCats.one"],
-            "cell2Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: animals.",
-            "cell2PreScreen": "In the following blocks you will also perform the PM task.",
+            "cell2PmCategories": ["animals"],
+            "cell2NbackCategories": ["animals_controls"],
+            "cell2Intro": "Press SPACE for PM items from the category: animals.\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
             "cell3PmCount": 5,
-            "cell3PmCategories": ["$pmCats.three"],
-            "cell3Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: colours, instruments, fruit/vegetables.",
+            "cell3PmCategories": ["three"],
+            "cell3NbackCategories": ["three_controls"],
+            "cell3Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
-            "cell3PostScreen": "There will be no more PM trials from this point forward. Continue with standard n-back responses only."
+            "cell3PostScreen": ""
           },
           {
             "cell1Enabled": false,
             "cell1PmCount": 0,
             "cell1PmCategories": [],
-            "cell1Intro": "This is a {nLevel}-back control block.",
+            "cell1NbackCategories": ["other_controls"],
+            "cell1Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 5,
-            "cell2PmCategories": ["$pmCats.three"],
-            "cell2Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: colours, instruments, fruit/vegetables.",
-            "cell2PreScreen": "In the following blocks you will also perform the PM task.",
+            "cell2PmCategories": ["three"],
+            "cell2NbackCategories": ["three_controls"],
+            "cell2Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
             "cell3PmCount": 5,
-            "cell3PmCategories": ["$pmCats.one"],
-            "cell3Intro": "This is a {nLevel}-back PM block. Press SPACE for items from: animals.",
+            "cell3PmCategories": ["animals"],
+            "cell3NbackCategories": ["animals_controls"],
+            "cell3Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
-            "cell3PostScreen": "There will be no more PM trials from this point forward. Continue with standard n-back responses only."
+            "cell3PostScreen": ""
           }
         ]
       }
-    },
-    "pmCats": {
-      "one": ["animals"],
-      "three": ["colours","instruments","fruit/vegetables"],
-      "control": ["colours_controls","instruments_controls","fruit_vegetables_controls","animals_controls"]
     }
   },
   "nbackRule": {
@@ -173,6 +254,20 @@
   },
   "plan": {
     "manipulations": [
+      {
+        "id": "practice",
+        "overrides": {
+          "nLevel": 2,
+          "variables": {
+            "pmEnabled": false,
+            "pmCount": 0,
+            "pmCategories": [],
+            "blockIntro": "Remember, trials will proceed automatically, but you must respond to each word.\n\nPress 'm' if the word matches the one two (2) trials ago.\nPress 'z' if the word does not match.\nThe first two words will require a 'z' response, because there are no corresponding two-back trials."
+          },
+          "beforeBlockScreens": [""],
+          "nbackSourceCategories": ["practice"]
+        }
+      },
       {
         "id": "cell_1",
         "overrides": {
@@ -185,7 +280,7 @@
           },
           "beforeBlockScreens": ["$between.cell1PreScreen"],
           "afterBlockScreens": ["$between.cell1PostScreen"],
-          "nbackSourceCategories": ["$pmCats.control"]
+          "nbackSourceCategories": ["$between.cell1NbackCategories"]
         }
       },
       {
@@ -200,7 +295,7 @@
           },
           "beforeBlockScreens": ["$between.cell2PreScreen"],
           "afterBlockScreens": ["$between.cell2PostScreen"],
-          "nbackSourceCategories": ["$pmCats.control"]
+          "nbackSourceCategories": ["$between.cell2NbackCategories"]
         }
       },
       {
@@ -215,17 +310,49 @@
           },
           "beforeBlockScreens": ["$between.cell3PreScreen"],
           "afterBlockScreens": ["$between.cell3PostScreen"],
-          "nbackSourceCategories": ["$pmCats.control"]
+          "nbackSourceCategories": ["$between.cell3NbackCategories"]
         }
       }
     ],
     "blocks": [
-      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 54 },
-      { "phase": "main", "label": "Block 2", "manipulation": "cell_2", "trials": 54 },
-      { "phase": "main", "label": "Block 3", "manipulation": "cell_3", "trials": 54 }
+      { "phase": "practice", "manipulation": "practice", "label": "Practice Block","trials": 20, "lureCount": 2, "targetCount": 4,
+          "rtTask": {"timing": {
+            "trialDurationMs": 4000,
+            "fixationOnsetMs": 250,
+            "fixationDurationMs": 500,
+            "stimulusOnsetMs": 750,
+            "stimulusDurationMs": 3250,
+            "responseWindowStartMs": 750,
+            "responseWindowEndMs": 4000}},
+        "afterBlockScreens": ["Great work! The rest of the experiment will always use this same response rule.\nYou are always responding to whether the current word matches the one from two (2) trials ago.\nWords can repeat, so try to remember the sequence not just recognise words."],
+        "repeatAfterBlockScreens": ["Remember:\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.\n\nPress continue when you are ready for the next set of trials."],
+        "repeatUntil": {
+          "enabled": true,
+          "maxAttempts": 1,
+          "minCorrect": 2,
+          "where": { "trialType": ["N"] },
+          "metrics": { "correctField": "responseCorrect" }}
+      },
+      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100 },
+      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100 },
+      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
+      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100 },
+      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100 },
+      { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100}
     ]
   },
   "feedback": {
-    "enabled": false
-  }
+    "enabled": false,
+    "durationMS": 1000,
+    "style": {
+        "fontSizePx": 30
+    }
+  },
+  "completion": {
+      "redirect": {
+        "enabled": true,
+        "completeUrlTemplate": "https://uwapsychology.sona-systems.com/webstudy_credit.aspx?experiment_id=1829&credit_token=1a3105ec2a8542868300b761e77cc8d1&survey_code={participantId}",
+        "incompleteUrlTemplate": ""
+      }
+    }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { asStringArray, asPositiveNumberArray } from './coerce';
+import { asStringArray, asPositiveNumberArray, coerceInstructionInsertions } from './coerce';
 
 describe('coerce utilities', () => {
   describe('asStringArray', () => {
@@ -35,6 +35,40 @@ describe('coerce utilities', () => {
 
     it('should return fallback if input is not an array', () => {
       expect(asPositiveNumberArray(null, [10])).toEqual([10]);
+    });
+  });
+
+  describe('coerceInstructionInsertions', () => {
+    it('should parse valid insertion entries', () => {
+      expect(
+        coerceInstructionInsertions([
+          {
+            id: 'x',
+            at: 'block_start_after_intro',
+            pages: ['A', 'B'],
+            when: { blockIndex: [1], blockType: ['MAIN'], isPractice: false },
+          },
+        ]),
+      ).toEqual([
+        {
+          id: 'x',
+          at: 'block_start_after_intro',
+          pages: ['A', 'B'],
+          when: { blockIndex: [1], blockType: ['main'], isPractice: false },
+        },
+      ]);
+    });
+
+    it('should ignore invalid entries and empty pages', () => {
+      expect(
+        coerceInstructionInsertions([
+          { at: 'not_a_point', pages: ['x'] },
+          { at: 'task_intro_before', pages: '' },
+          { at: 'task_intro_after', pages: ['ok'] },
+        ]),
+      ).toEqual([
+        { at: 'task_intro_after', pages: ['ok'] },
+      ]);
     });
   });
 });

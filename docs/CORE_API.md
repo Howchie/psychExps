@@ -353,8 +353,18 @@ Behavior:
    - `"both"`: CSV + JSON
    CSV uses explicit `args.csv.contents` when provided, else inferred tabular rows from payload where possible.
 2. Submit to JATOS when available.
+   - When a core data sink handles JATOS incrementally, finalization does not overwrite streamed result data with a second full-payload submit.
 3. `endStudy()` unless `endJatosOnSubmit === false`.
 4. Resolve and apply redirect template if enabled.
+
+### Core Data Sinks
+
+`TaskOrchestrator` can emit task/session data through a core-level `TaskDataSink`.
+
+- Default behavior now installs a JATOS JSON-lines sink when JATOS is available.
+- Session lifecycle events and trial results are emitted incrementally as envelopes.
+- Local CSV/JSON save remains available for testing and debugging.
+- Task adapters should not implement JATOS submission directly.
 
 ## 8. Events, outcomes, feedback
 
@@ -553,3 +563,69 @@ Runs a generic single-trial RT lifecycle with:
 - shared response capture window
 - user-provided render hooks for fixation/blank/stimulus
 - optional `responseTerminatesTrial` phase shaping (for fixed-trial tasks keep this `false`)
+
+### `resolveRtTaskConfig(options): ResolvedRtTaskConfig`
+
+Resolves an RT task config from:
+- a required `baseTiming`
+- optional `override` object (`enabled`, `responseTerminatesTrial`, `timing.*`)
+- default flags (`defaultEnabled`, `defaultResponseTerminatesTrial`)
+
+Useful for task-level defaults.
+
+### `mergeRtTaskConfig(base, override?): ResolvedRtTaskConfig`
+
+Merges a partial override onto an already-resolved RT config.
+Useful for per-block/per-condition overrides in plan-driven tasks.
+
+## 15. Block summary helpers
+
+### `coerceBlockSummaryConfig(value): BlockSummaryConfig | null`
+
+Parses `instructions.blockSummary` into a normalized config.
+Supports:
+- `enabled`
+- `at`: `before_post`/`after_post` (aliases for block-end insertion slots)
+- `title`
+- `lines` (string or string[])
+- `when` filters (`blockIndex`, `blockLabel`, `blockType`, `isPractice`)
+- `where` trial-result filters (field -> value or array of values)
+- `metrics.correctField`, `metrics.rtField`
+
+### `buildBlockSummaryModel(args): BlockSummaryModel | null`
+
+Builds a computed block summary from block metadata and trial results.
+Template variables include:
+- `{blockLabel}`, `{blockIndex}`, `{blockIndex1}`, `{blockType}`, `{isPractice}`
+- `{total}`, `{correct}`, `{incorrect}`, `{accuracyPct}`, `{meanRtMs}`, `{validRtCount}`
+
+### `renderBlockSummaryCardHtml(model): string`
+
+Renders a simple HTML card from a summary model for tasks that use custom `waitForContinue` screens.
+
+### `computeBlockSummaryStats(args): { total, correct, accuracyPct, meanRtMs, validRtCount }`
+
+Computes filtered summary stats from trial results using `where` + `metrics`.
+Useful when non-UI control flow (for example, retry logic) should use the same scoring semantics as block summary screens.
+
+## 16. Block repeat helpers
+
+### `coerceBlockRepeatUntilConfig(value): BlockRepeatUntilConfig | null`
+
+Parses a block-level `repeatUntil` object into normalized form.
+Supports:
+- `enabled`
+- `maxAttempts`
+- `minAccuracy` (0..1) and `minAccuracyPct` (0..100 alias)
+- `minCorrect`, `minTotal`
+- `where` trial-result filtering
+- `metrics.correctField`
+
+### `evaluateBlockRepeatUntil(args): BlockRepeatEvaluation`
+
+Evaluates pass/repeat decisions for one block attempt from trial results.
+Returns:
+- `passed`
+- `shouldRepeat`
+- `reason` (`threshold_met`, `threshold_not_met`, `max_attempts_reached`, `disabled`)
+- attempt-local `stats` (`total`, `correct`, `accuracy`)

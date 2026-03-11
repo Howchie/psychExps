@@ -3,6 +3,7 @@ import { createVariableResolver } from "../infrastructure/variables";
 import { TaskModuleRunner } from "./taskModule";
 import { DrtModule } from "../engines/drt";
 import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
+import { StimulusInjectorModule } from "../engines/stimulusInjector";
 import type { TaskManifest, TaskAdapterContext, JSONObject } from "./types";
 
 /**
@@ -84,6 +85,7 @@ export class LifecycleManager {
     const moduleRunner = new TaskModuleRunner([
       new DrtModule(),
       new ProspectiveMemoryModule(),
+      new StimulusInjectorModule(),
     ]);
 
     const resolvedContext: TaskAdapterContext = {

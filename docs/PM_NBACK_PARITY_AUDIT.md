@@ -1,6 +1,6 @@
 # PM vs NBack+Module Parity Audit (Current State)
 
-Date: 2026-03-06
+Date: 2026-03-10
 
 ## Scope
 
@@ -40,20 +40,20 @@ Standalone PM:
 
 NBack + module:
 - Uses core module `generateProspectiveMemoryPositions`.
-- PM positions are generated across all trials, then filtered by `eligibleTrialTypes`.
-- This can reduce effective PM count and weaken spacing guarantees after filtering.
+- PM positions are generated directly against eligible indices (`eligibleTrialTypes`).
+- Count and spacing are enforced, but edge semantics (for example first-eligible position policy and collision constraints) still differ from standalone PM.
 - See:
   - `packages/core/src/engines/prospectiveMemory.ts` (`transformBlockPlan`).
 
-### B. PM key gating differs (high impact)
+### B. PM key gating parity improved (low impact)
 
 Standalone PM:
 - PM blocks allow PM key; control blocks disallow PM key.
 - Implemented via block-type aware key resolution.
 
 NBack + module:
-- NBack task-level allowed keys are target/non-target (+ DRT), not PM-key aware by block.
-- PM module captures keys via module handle, but no explicit block intro + key policy contract equivalent to standalone PM.
+- Runtime key set now includes PM keys only for blocks that actually contain PM trials.
+- Remaining gap is explicit PM-vs-control block contract, not key activation itself.
 
 ### C. Trial typing/plan semantics differ (medium impact)
 

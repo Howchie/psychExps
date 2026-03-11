@@ -58,6 +58,11 @@ Core is the source of truth; tasks should consume core mechanisms rather than re
 - Any files updated should be typechecked
 - Wherever possible, automated responder tests should be run on all tasks after changes have been made, to determine whether any dependencies were unwittingly disrupted.
 
+8. JATOS-Deployable By Default
+- All experiments must remain deployable through JATOS as a hard core-level requirement.
+- Local CSV/JSON save paths exist for testing and debugging, but they are not a substitute for JATOS-compatible data flow.
+- Data capture, trial/event emission, and completion/finalization logic that affects JATOS deployment belongs in `packages/core`, not in task-local adapters.
+
 ---
 
 ## Mandatory Decision Gate: “Can This Be Core-Level?”
@@ -85,6 +90,7 @@ If “no”, keep task-local and document why it is irreducibly task-specific.
 - Selection, participant metadata handling, runtime overrides.
 - Common timing/scheduling primitives.
 - Generic data/event envelope shape.
+- JATOS-compatible data sinks, streaming/batch submission, and finalization behavior.
 - Shared validation and schema patterns.
 
 ### Task-Level Candidates (usually local)

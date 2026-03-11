@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { finalizeTaskRun } from "./lifecycle";
 import { downloadCsv, downloadJson, inferCsvFromPayload } from "../infrastructure/data";
+import { endJatosStudy, submitToJatos } from "../infrastructure/jatos";
 
 vi.mock("../infrastructure/data", () => ({
   downloadCsv: vi.fn(),
@@ -108,5 +109,18 @@ describe("finalizeTaskRun local save format", () => {
 
     expect(downloadCsv).toHaveBeenCalledTimes(1);
     expect(downloadJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-submit to JATOS when a sink already handled it", async () => {
+    await finalizeTaskRun({
+      coreConfig: baseCoreConfig,
+      selection: baseSelection,
+      payload: { ok: true },
+      csv: { contents: "a,b\n1,2" },
+      jatosHandledBySink: true,
+    });
+
+    expect(submitToJatos).not.toHaveBeenCalled();
+    expect(endJatosStudy).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,8 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Experiments Shell</title>
-    <script type="module" crossorigin src="/assets/index-YFgcDUWT.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D8y6IBWx.css">
+    <script>
+      (function loadJatosScript() {
+        const candidates = [
+          "/assets/lib/jatos-publix/javascripts/jatos.js",
+          "/jatos/assets/lib/jatos-publix/javascripts/jatos.js",
+          "/jatos/jatos.js",
+          "/jatos.js",
+          "jatos.js",
+        ];
+        const seen = new Set();
+        window.__jatosScriptAttempts = [];
+        const tryNext = () => {
+          const src = candidates.shift();
+          if (!src || seen.has(src)) return;
+          seen.add(src);
+          window.__jatosScriptAttempts.push(src);
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => {
+            window.__jatosScriptLoadedFrom = src;
+          };
+          script.onerror = () => tryNext();
+          document.head.appendChild(script);
+        };
+        tryNext();
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-Buyl4c2j.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D8y6IBWx.css">
   </head>
   <body>
     <div id="app"></div>

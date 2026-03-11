@@ -20,6 +20,7 @@ SFT currently runs `jspsych` via the `LifecycleManager`.
 
 Top-level sections consumed:
 - `task`
+- `instructions`
 - `design`
 - `timing`
 - `display`
@@ -36,6 +37,7 @@ Top-level sections consumed:
 Note:
 - SFT currently uses a single intro instruction string from `task.instructions`.
 - It does not currently use the shared instruction-slot keys (`instructions.pages`, `preBlockPages`, `postBlockPages`, `endPages`).
+- SFT now supports `instructions.blockSummary` (core-level) for block-end computed summary cards.
 
 ### 2.2 `design`
 

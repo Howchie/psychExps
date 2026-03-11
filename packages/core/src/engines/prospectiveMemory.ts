@@ -114,7 +114,8 @@ export function generateProspectiveMemoryPositions(
   if (nPm <= 0) return [];
 
   const positions: number[] = [];
-  let lastPos = -minSep; // Allow the first PM to potentially land at 0 if eligible
+  // Match legacy PM semantics: first PM is constrained by minSeparation from trial 0.
+  let lastPos = 0;
 
   for (let i = 0; i < nPm; i += 1) {
     const remaining = nPm - i - 1;

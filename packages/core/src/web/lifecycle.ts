@@ -13,6 +13,7 @@ export interface FinalizeTaskRunArgs {
   } | null;
   completionStatus?: "complete" | "incomplete";
   endJatosOnSubmit?: boolean;
+  jatosHandledBySink?: boolean;
 }
 
 export interface FinalizeTaskRunResult {
@@ -52,7 +53,9 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
     }
   }
 
-  const submittedToJatos = await submitToJatos(args.payload as Record<string, unknown>);
+  const submittedToJatos = args.jatosHandledBySink
+    ? true
+    : await submitToJatos(args.payload as Record<string, unknown>);
   if (submittedToJatos && args.endJatosOnSubmit !== false) {
     await endJatosStudy();
   }

@@ -47,6 +47,10 @@ import {
   isStimulusExportOnly,
   exportStimulusRows,
   createResponseSemantics,
+  coerceBlockSummaryConfig,
+  buildBlockSummaryModel,
+  renderBlockSummaryCardHtml,
+  type BlockSummaryConfig,
   type RtTiming,
   type ResponseSemantics,
   type SurveyDefinition,
@@ -163,6 +167,7 @@ interface SftParsedConfig {
     feedbackPhase: "separate" | "post_response";
   };
   betweenTrialSurveys: SurveyDefinition[];
+  blockSummary: BlockSummaryConfig | null;
 }
 
 interface Manipulation {
@@ -747,13 +752,28 @@ function appendBlockTimeline(args: {
       async: true,
       func: (done: () => void) => {
         const stats = blockStatsMap.get(block.id);
-        const accuracy = stats?.accuracy ?? 0;
+        const summaryModel = buildBlockSummaryModel({
+          config: config.blockSummary,
+          block: {
+            label: block.label,
+            blockType: "main",
+            isPractice: false,
+          },
+          blockIndex,
+          fallbackStats: {
+            total: stats?.total ?? 0,
+            correct: stats?.correct ?? 0,
+            accuracyPct: stats?.accuracy ?? 0,
+          },
+        });
         const host = resolveJsPsychContentHost(container);
-        void waitForContinue(
-          host,
-          `<h3>End of ${escapeHtml(block.label)}</h3><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`,
-          { buttonId: `sft-end-${block.id}` },
-        ).then(done);
+        if (!summaryModel) {
+          done();
+          return;
+        }
+        void waitForContinue(host, renderBlockSummaryCardHtml(summaryModel), {
+          buttonId: `sft-end-${block.id}`,
+        }).then(done);
       },
     });
     appendJsPsychInstructionScreens({
@@ -1060,6 +1080,14 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
   };
   const rtTask = parseSftRtTaskConfig(config, legacyTiming);
+  const blockSummary = coerceBlockSummaryConfig(asObject(asObject(config.instructions)?.blockSummary)) ??
+    coerceBlockSummaryConfig({
+      enabled: true,
+      at: "before_post",
+      title: "End of {blockLabel}",
+      lines: ["Accuracy: {accuracyPct}% ({correct}/{total})"],
+      metrics: { correctField: "correct", rtField: "rt" },
+    });
   const responses = {
     orYes: asStringArray(asObject(keysRaw?.OR)?.yes, ["a"]),
     orNo: asStringArray(asObject(keysRaw?.OR)?.no, ["l"]),
@@ -1125,6 +1153,7 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     feedbackDefaults,
     rtTask,
     betweenTrialSurveys: parseBetweenTrialSurveys(config),
+    blockSummary,
   };
 }
 

@@ -13,6 +13,7 @@ import {
   drawCanvasCenteredText,
   ensureJsPsychCanvasCentered,
   installKeyScrollBlocker,
+  lockPageScroll,
   pushJsPsychContinueScreen,
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
@@ -25,6 +26,8 @@ import {
   resolveTemplate,
   createResponseSemantics,
   computeRtPhaseDurations,
+  resolveRtTaskConfig,
+  mergeRtTaskConfig,
   appendJsPsychTaskIntroScreen,
   appendJsPsychBlockIntroScreen,
   appendJsPsychInstructionScreens,
@@ -54,7 +57,7 @@ import {
   toNonNegativeNumber,
   parseTrialFeedbackConfig,
   type TrialFeedbackConfig,
-  type RtTiming,
+  type ResolvedRtTaskConfig,
   type DrtEvent,
   type DrtControllerConfig,
   type JSONObject,
@@ -92,6 +95,8 @@ class NbackTaskAdapter implements TaskAdapter {
   private context: TaskAdapterContext | null = null;
   private runtime: NbackRuntimeState | null = null;
   private removeKeyScrollBlocker: (() => void) | null = null;
+  private removePageScrollLock: (() => void) | null = null;
+  private rootPresentationState: RootPresentationState | null = null;
 
   async initialize(context: TaskAdapterContext): Promise<void> {
     this.context = context;
@@ -108,6 +113,12 @@ class NbackTaskAdapter implements TaskAdapter {
 
     const { context, runtime } = this;
     const { parsed, eventLogger } = runtime;
+    const resolvedIntroPages = toStringScreens(
+      runtime.variableResolver.resolveInValue(parsed.instructions.introPages),
+    );
+    const resolvedEndPages = toStringScreens(
+      runtime.variableResolver.resolveInValue(parsed.instructions.endPages),
+    );
     const root = context.container;
     let jsPsych: ReturnType<typeof initJsPsych> | null = null;
 
@@ -115,10 +126,56 @@ class NbackTaskAdapter implements TaskAdapter {
 
     return orchestrator.run({
       buttonIdPrefix: "nback",
+      resolveUiContainer: () => resolveJsPsychContentHost(root),
       getBlocks: () => runtime.plan,
       getTrials: ({ block }) => block.trials,
+      introPages: resolvedIntroPages,
+      endPages: resolvedEndPages,
+      getBlockUi: ({ block, blockIndex }) => {
+        const resolverContext = {
+          blockIndex,
+          locals: block.variables,
+        };
+        const resolvedIntroTemplate = runtime.variableResolver.resolveInValue(
+          parsed.instructions.blockIntroTemplate,
+          resolverContext,
+        );
+        const introTemplate = asString(resolvedIntroTemplate) || parsed.instructions.blockIntroTemplate;
+        const introText = introTemplate.replace("{nLevel}", String(block.nLevel));
+        return {
+          introText,
+          preBlockPages: [...parsed.instructions.preBlockPages, ...block.beforeBlockScreens],
+          postBlockPages: [...parsed.instructions.postBlockPages, ...block.afterBlockScreens],
+          repeatPostBlockPages: block.repeatAfterBlockScreens,
+          showBlockLabel: parsed.instructions.showBlockLabel,
+          preBlockBeforeIntro: parsed.instructions.preBlockBeforeBlockIntro,
+        };
+      },
       csvOptions: {
         suffix: "nback",
+      },
+      renderInstruction: (ctx) => {
+        if (ctx.pageHtml) {
+          const headerText = ctx.pageTitle ?? ctx.blockLabel ?? null;
+          if (!headerText) return ctx.pageHtml;
+          return `<h3>${escapeHtml(headerText)}</h3>${ctx.pageHtml}`;
+        }
+        // Render computed block-summary insertions as title + body instead of a single plain paragraph.
+        if (/^blockEnd(Before|After)Post_/.test(ctx.section)) {
+          const lines = ctx.pageText
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+          if (lines.length > 0) {
+            const [titleLine, ...bodyLines] = lines;
+            const blockLabelHtml = ctx.blockLabel ? `<h3>${escapeHtml(ctx.blockLabel)}</h3>` : "";
+            const bodyHtml = bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+            return `${blockLabelHtml}<h2>${escapeHtml(titleLine)}</h2>${bodyHtml}`;
+          }
+        }
+        const headerText = ctx.blockLabel || null;
+        if (!headerText) return `<p>${escapeHtml(ctx.pageText)}</p>`;
+        return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
       },
       getTaskMetadata: () => ({
         jsPsychData: jsPsych?.data.get().values() ?? [],
@@ -127,16 +184,14 @@ class NbackTaskAdapter implements TaskAdapter {
       onTaskStart: () => {
         const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
         this.setKeyScrollRemover(removeKeyScrollBlocker);
-        
-        root.style.maxWidth = "1000px";
-        root.style.margin = "0 auto";
-        root.style.fontFamily = "system-ui";
-        root.style.lineHeight = "1.4";
-        ensureJsPsychCanvasCentered(root);
+        this.setPageScrollLockRemover(lockPageScroll());
+        this.rootPresentationState = applyNbackRootPresentation(root);
         
         jsPsych = initJsPsych({
           display_element: root,
           on_trial_start: (trial: Record<string, unknown>) => {
+            window.scrollTo(0, 0);
+            root.scrollTop = 0;
             const data = asObject(trial?.data);
             setCursorHidden(shouldHideCursorForPhase(data?.phase));
           },
@@ -158,7 +213,7 @@ class NbackTaskAdapter implements TaskAdapter {
         const resolvedStimulus = resolveStimulusPath(parsed, block, trial.item, trial.trialIndex, runtime.variableResolver);
         const preloaded = await preloadNbackStimulus(resolvedStimulus);
         
-        appendJsPsychNbackTrial({
+        const timelineCapture = appendJsPsychNbackTrial({
           timeline,
           parsed,
           block,
@@ -171,11 +226,7 @@ class NbackTaskAdapter implements TaskAdapter {
 
         await runJsPsychTimeline(jsPsych, timeline);
 
-        const trialData = findNbackResponseWindowRow(
-          jsPsych.data.get().values() as Array<Record<string, unknown>>,
-          block.blockIndex,
-          trial.trialIndex,
-        );
+        const trialData = readNbackTrialResponseRow(timelineCapture, block.blockIndex, trial.trialIndex);
         const records = collectNbackRecords([trialData], runtime.participantId, runtime.variantId);
         return records[0];
       },
@@ -199,6 +250,14 @@ class NbackTaskAdapter implements TaskAdapter {
 
   async terminate(): Promise<void> {
     setCursorHidden(false);
+    if (this.context?.container) {
+      restoreNbackRootPresentation(this.context.container, this.rootPresentationState);
+      this.rootPresentationState = null;
+    }
+    if (this.removePageScrollLock) {
+      this.removePageScrollLock();
+      this.removePageScrollLock = null;
+    }
     if (this.removeKeyScrollBlocker) {
       this.removeKeyScrollBlocker();
       this.removeKeyScrollBlocker = null;
@@ -208,30 +267,31 @@ class NbackTaskAdapter implements TaskAdapter {
   setKeyScrollRemover(remover: () => void) {
     this.removeKeyScrollBlocker = remover;
   }
+
+  setPageScrollLockRemover(remover: () => void) {
+    this.removePageScrollLock = remover;
+  }
 }
 
 export const nbackAdapter = new NbackTaskAdapter();
 
-function toTrialCode(trialType: string): string {
-  if (trialType === "PM") return "pm";
-  if (trialType === "N") return "target";
-  if (trialType === "F") return "non_target";
-  if (/^L\d+$/i.test(trialType)) return `lure_${trialType.slice(1)}`;
-  return trialType.toLowerCase();
-}
-
 async function exportNbackStimulusList(context: TaskAdapterContext, runtime: NbackRuntimeState): Promise<unknown> {
+  const exportBlockType = (block: PlannedBlock): string => {
+    if (block.isPractice) return "practice";
+    const hasPmTrials = block.trials.some((trial) => trial.trialType === "PM");
+    return hasPmTrials ? "pm" : "control";
+  };
   const rows = runtime.plan.flatMap((block) =>
     block.trials.map((trial) => ({
       block_label: block.label,
       block_index: block.blockIndex,
+      block_phase: block.isPractice ? "practice" : "main",
+      block_type: exportBlockType(block),
       n_level: block.nLevel,
       trial_index: trial.trialIndex,
       trial_type: trial.trialType,
-      trial_code: toTrialCode(trial.trialType),
       item: trial.item,
       source_category: trial.sourceCategory,
-      item_category: trial.itemCategory,
       correct_response: trial.correctResponse,
     })),
   );
@@ -307,8 +367,12 @@ interface NbackBlockConfig {
   lureCount: number;
   stimulusVariant: number | null;
   feedback: TrialFeedbackConfig;
+  rtTask: ResolvedRtTaskConfig;
+  blockSummary: Record<string, unknown> | null;
+  repeatUntil: Record<string, unknown> | null;
   beforeBlockScreens: string[];
   afterBlockScreens: string[];
+  repeatAfterBlockScreens: string[];
   drt: NbackDrtConfig;
   variables: Record<string, unknown>;
 }
@@ -326,6 +390,7 @@ interface PlannedTrial {
   sourceCategory: string;
   itemCategory: string;
   correctResponse: string;
+  expectedCategory?: string;
   usedAsSource?: boolean;
 }
 
@@ -338,8 +403,12 @@ interface PlannedBlock {
   stimulusVariant: number | null;
   trials: PlannedTrial[];
   feedback: TrialFeedbackConfig;
+  rtTask: ResolvedRtTaskConfig;
+  blockSummary: Record<string, unknown> | null;
+  repeatUntil: Record<string, unknown> | null;
   beforeBlockScreens: string[];
   afterBlockScreens: string[];
+  repeatAfterBlockScreens: string[];
   drt: NbackDrtConfig;
   variables: Record<string, unknown>;
 }
@@ -365,11 +434,7 @@ interface ParsedNbackConfig {
     imageHeightPx: number | null;
     imageUpscale: boolean;
   };
-  rtTask: {
-    enabled: boolean;
-    timing: RtTiming;
-    responseTerminatesTrial: boolean;
-  };
+  rtTask: ResolvedRtTaskConfig;
   drt: NbackDrtConfig;
   imageAssets: {
     enabled: boolean;
@@ -418,6 +483,8 @@ interface TrialRecord {
   responseKey: string;
   responseRtMs: number;
   responseCorrect: number;
+  clockTime: string;
+  clockTimeUnixMs: number;
 }
 
 interface PreloadedStimulus {
@@ -437,6 +504,18 @@ interface NbackRuntimeState {
   variantId: string;
 }
 
+interface RootPresentationState {
+  maxWidth: string;
+  margin: string;
+  fontFamily: string;
+  lineHeight: string;
+  hadCenteredClass: boolean;
+}
+
+interface NbackTrialCapture {
+  responseWindowRow: Record<string, unknown> | null;
+}
+
 async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRuntimeState> {
   const config = context.taskConfig;
   const resolvedInlinePools = asObject(context.resolver.resolveInValue(config.stimuli));
@@ -446,7 +525,14 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     resolver: context.resolver,
   });
 
-  const parsed = parseNbackConfig(config, context.selection, context.resolver, stimuliByCategory, context.moduleRunner);
+  const parsed = parseNbackConfig(
+    config,
+    context.selection,
+    context.resolver,
+    stimuliByCategory,
+    context.moduleRunner,
+    context.rawTaskConfig,
+  );
   const rng = new SeededRandom(
     hashSeed(
       context.selection.participant.participantId,
@@ -480,7 +566,7 @@ function appendJsPsychNbackTrial(args: {
   runtime: NbackRuntimeState;
   preloaded: PreloadedStimulus;
   eventLogger: ReturnType<typeof createEventLogger>;
-}): void {
+}): NbackTrialCapture {
   const { timeline, parsed, block, trial, resolvedStimulus, runtime, preloaded, eventLogger } = args;
   const { timing } = parsed;
   const layout = computeCanvasFrameLayout({
@@ -491,8 +577,8 @@ function appendJsPsychNbackTrial(args: {
   });
   const jsPsychAllowedKeys = toJsPsychChoices(resolveAllowedKeysForNback(parsed.responseSemantics, block));
 
-  const rtTiming = parsed.rtTask.enabled
-    ? parsed.rtTask.timing
+  const rtTiming = block.rtTask.enabled
+    ? block.rtTask.timing
     : {
         trialDurationMs: timing.trialDurationMs,
         fixationOnsetMs: 0,
@@ -503,7 +589,7 @@ function appendJsPsychNbackTrial(args: {
         responseWindowEndMs: timing.responseWindowEndMs,
       };
   const phaseTiming = computeRtPhaseDurations(rtTiming, {
-    responseTerminatesTrial: parsed.rtTask.enabled ? parsed.rtTask.responseTerminatesTrial : false,
+    responseTerminatesTrial: block.rtTask.enabled ? block.rtTask.responseTerminatesTrial : false,
   });
   const preFixationBlankMs = Math.max(0, Math.round(phaseTiming.preFixationBlankMs));
   const fixationMs = Math.max(0, Math.round(phaseTiming.fixationMs));
@@ -516,6 +602,9 @@ function appendJsPsychNbackTrial(args: {
   const postResponseStimulusMs = Math.max(0, Math.round(phaseTiming.postResponseStimulusMs));
   const postResponseBlankMs = Math.max(0, Math.round(phaseTiming.postResponseBlankMs));
   let feedbackView: { text: string; color: string } | null = null;
+  const capture: NbackTrialCapture = {
+    responseWindowRow: null,
+  };
 
   const baseData = {
     participantId: runtime.participantId,
@@ -591,7 +680,7 @@ function appendJsPsychNbackTrial(args: {
   }
 
   const responseSegments: Array<{ phase: string; durationMs: number; showStimulus: boolean; isFinal: boolean }> = [];
-  if (!parsed.rtTask.responseTerminatesTrial && parsed.rtTask.enabled) {
+  if (!block.rtTask.responseTerminatesTrial && block.rtTask.enabled) {
     if (responsePreStimBlankMs > 0) {
       responseSegments.push({ phase: "nback_response_window_pre_stim_blank", durationMs: responsePreStimBlankMs, showStimulus: false, isFinal: false });
     }
@@ -621,7 +710,7 @@ function appendJsPsychNbackTrial(args: {
       },
       canvas_size: [layout.totalHeightPx, layout.aperturePx],
       choices: segment.durationMs > 0 ? jsPsychAllowedKeys : "NO_KEYS",
-      response_ends_trial: parsed.rtTask.responseTerminatesTrial,
+      response_ends_trial: block.rtTask.responseTerminatesTrial,
       trial_duration: segment.durationMs,
       data: { ...baseData, phase: segment.phase },
       on_finish: (data: Record<string, unknown>) => {
@@ -637,6 +726,7 @@ function appendJsPsychNbackTrial(args: {
 
         if (!segment.isFinal) return;
         const evaluated = evaluateNbackOutcome(parsed, block, trial, capturedKey, capturedRt);
+        const clockTimeUnixMs = Date.now();
         feedbackView = resolveTrialFeedbackView({
           feedback: block.feedback,
           responseCategory: evaluated.responseCategory,
@@ -662,7 +752,10 @@ function appendJsPsychNbackTrial(args: {
           responseCorrect: evaluated.correct,
           responseCategory: evaluated.responseCategory,
           expectedCategory: evaluated.expectedCategory,
+          clockTime: new Date(clockTimeUnixMs).toISOString(),
+          clockTimeUnixMs,
         });
+        capture.responseWindowRow = { ...data };
         eventLogger.emit(
           "trial_complete",
           {
@@ -721,6 +814,7 @@ function appendJsPsychNbackTrial(args: {
       data: { ...baseData, phase: "nback_feedback" },
     });
   }
+  return capture;
 }
 
 function drawNbackPhase(
@@ -788,11 +882,12 @@ function evaluateNbackOutcome(
   rtMs: number;
 } {
   const responseCategory = parsed.responseSemantics.responseCategoryFromKey(responseKey);
-  const expectedCategory = parsed.responseSemantics.expectedCategoryFromSpec(trial.correctResponse, "timeout");
+  const expectedCategorySpec = trial.expectedCategory ?? trial.correctResponse;
+  const expectedCategoryResolved = parsed.responseSemantics.expectedCategoryFromSpec(expectedCategorySpec, "timeout");
   const outcome = evaluateTrialOutcome({
     responseCategory,
     rt: rtMs,
-    expectedCategory,
+    expectedCategory: expectedCategoryResolved,
     meta: {
       trialType: trial.trialType,
       item: trial.item,
@@ -804,18 +899,17 @@ function evaluateNbackOutcome(
     correct: outcome.correct,
     responded: responseKey ? 1 : 0,
     responseCategory: outcome.responseCategory,
-    expectedCategory: outcome.expectedCategory ?? expectedCategory,
+    expectedCategory: outcome.expectedCategory ?? expectedCategoryResolved,
     rtMs: outcome.rt,
   };
 }
 
 function resolveAllowedKeysForNback(semantics: ResponseSemantics, block: PlannedBlock): string[] {
   const base = semantics.allowedKeys(["target", "non_target"]);
-  const pmKeys = block.trials
-    .filter((trial) => trial.trialType === "PM")
+  const injectedKeys = block.trials
     .map((trial) => normalizeKey(trial.correctResponse))
-    .filter((key) => key.length > 0);
-  return Array.from(new Set([...base, ...pmKeys]));
+    .filter((key) => key.length > 0 && key !== "timeout");
+  return Array.from(new Set([...base, ...injectedKeys]));
 }
 
 function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId: string, variantId: string): TrialRecord[] {
@@ -840,28 +934,21 @@ function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId
       responseKey: typeof row.responseKey === "string" ? normalizeKey(row.responseKey) : "",
       responseRtMs: Number(row.responseRtMs ?? -1),
       responseCorrect: Number(row.responseCorrect ?? 0) === 1 ? 1 : 0,
+      clockTime: asString(row.clockTime) || "",
+      clockTimeUnixMs: Number(row.clockTimeUnixMs ?? -1),
     });
   }
   return output;
 }
 
-function findNbackResponseWindowRow(
-  rows: Array<Record<string, unknown>>,
+function readNbackTrialResponseRow(
+  capture: NbackTrialCapture,
   blockIndex: number,
   trialIndex: number,
 ): Record<string, unknown> {
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
-    if (row.phase !== "nback_response_window") continue;
-    if (Number(row.blockIndex) !== blockIndex) continue;
-    if (Number(row.trialIndex) !== trialIndex) continue;
-    return row;
-  }
+  const row = capture.responseWindowRow;
+  if (row && Number(row.blockIndex) === blockIndex && Number(row.trialIndex) === trialIndex) return row;
   throw new Error(`Missing n-back response window data for block ${blockIndex}, trial ${trialIndex}.`);
-}
-
-function getNbackResponseRowsFromValues(rows: Array<Record<string, unknown>>, blockIndex: number): TrialRecord[] {
-  return collectNbackRecords(rows, "", "").filter((row) => row.blockIndex === blockIndex);
 }
 
 function parseNbackConfig(
@@ -870,6 +957,7 @@ function parseNbackConfig(
   variableResolver: VariableResolver,
   stimuliByCategory: Record<string, string[]>,
   moduleRunner: TaskModuleRunner,
+  rawConfig?: JSONObject,
 ): ParsedNbackConfig {
   const mappingRaw = asObject(config.mapping);
   const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
@@ -901,26 +989,20 @@ function parseNbackConfig(
     responseWindowEndMs: toNonNegativeNumber(timingRaw?.responseWindowEndMs, 5000),
   };
   const rtTaskRaw = asObject(taskRaw?.rtTask);
-  const rtTaskTimingRaw = asObject(rtTaskRaw?.timing);
-  const rtTrialDurationMs = toPositiveNumber(rtTaskTimingRaw?.trialDurationMs, timing.trialDurationMs);
-  const rtStimulusOnsetMs = toNonNegativeNumber(rtTaskTimingRaw?.stimulusOnsetMs, timing.stimulusOnsetMs);
-  const rtTaskTiming: RtTiming = {
-    trialDurationMs: rtTrialDurationMs,
-    fixationOnsetMs: toNonNegativeNumber(rtTaskTimingRaw?.fixationOnsetMs, 0),
-    fixationDurationMs: toNonNegativeNumber(rtTaskTimingRaw?.fixationDurationMs, timing.fixationDurationMs),
-    stimulusOnsetMs: rtStimulusOnsetMs,
-    stimulusDurationMs: toNonNegativeNumber(
-      rtTaskTimingRaw?.stimulusDurationMs,
-      Math.max(0, rtTrialDurationMs - rtStimulusOnsetMs),
-    ),
-    responseWindowStartMs: toNonNegativeNumber(rtTaskTimingRaw?.responseWindowStartMs, timing.responseWindowStartMs),
-    responseWindowEndMs: toNonNegativeNumber(rtTaskTimingRaw?.responseWindowEndMs, timing.responseWindowEndMs),
-  };
-  const rtTask = {
-    enabled: rtTaskRaw ? rtTaskRaw.enabled !== false : false,
-    timing: rtTaskTiming,
-    responseTerminatesTrial: rtTaskRaw ? rtTaskRaw.responseTerminatesTrial === true : false,
-  };
+  const rtTask = resolveRtTaskConfig({
+    baseTiming: {
+      trialDurationMs: timing.trialDurationMs,
+      fixationOnsetMs: 0,
+      fixationDurationMs: timing.fixationDurationMs,
+      stimulusOnsetMs: timing.stimulusOnsetMs,
+      stimulusDurationMs: Math.max(0, timing.trialDurationMs - timing.stimulusOnsetMs),
+      responseWindowStartMs: timing.responseWindowStartMs,
+      responseWindowEndMs: timing.responseWindowEndMs,
+    },
+    override: rtTaskRaw,
+    defaultEnabled: false,
+    defaultResponseTerminatesTrial: false,
+  });
   const drtRaw = resolveNbackDrtOverride(taskRaw);
   const drt = resolveNbackDrtConfig(
     {
@@ -1025,6 +1107,7 @@ function parseNbackConfig(
       null,
       variableResolver,
       feedbackDefaults,
+      rtTask,
       drt,
     ),
   );
@@ -1038,6 +1121,7 @@ function parseNbackConfig(
   ensureStimulusCategories(stimuliByCategory, referencedCategories);
 
   const instructionsRaw = asObject(config.instructions);
+  const rawInstructions = asObject(rawConfig?.instructions);
   const instructionSlots = resolveInstructionFlowPages({
     title: asString(taskRaw?.title) || "NBack Task",
     instructions: instructionsRaw,
@@ -1089,7 +1173,10 @@ function parseNbackConfig(
       preBlockPages: instructionSlots.preBlock,
       postBlockPages: instructionSlots.postBlock,
       endPages: instructionSlots.end,
-      blockIntroTemplate: asString(instructionsRaw?.blockIntroTemplate) || "This is a {nLevel}-back block.",
+      blockIntroTemplate:
+        asString(rawInstructions?.blockIntroTemplate) ||
+        asString(instructionsRaw?.blockIntroTemplate) ||
+        "This is a {nLevel}-back block.",
       showBlockLabel: instructionsRaw?.showBlockLabel !== false,
       preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
     },
@@ -1111,6 +1198,7 @@ function parseBlock(
   isPractice: boolean | null,
   variableResolver: VariableResolver,
   feedbackFallback?: TrialFeedbackConfig,
+  rtTaskFallback?: ResolvedRtTaskConfig,
   drtFallback?: NbackDrtConfig,
 ): NbackBlockConfig {
   const b = asObject(entry);
@@ -1139,11 +1227,37 @@ function parseBlock(
   const resolvedFeedbackRaw = variableResolver.resolveToken(b.feedback, scope);
   const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
   const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
+  const rawRepeatAfterBlockScreens = b.repeatAfterBlockScreens ?? b.repeatPostBlockScreens;
+  const rawBlockSummary = b.blockSummary;
+  const rawRepeatUntil = b.repeatUntil;
+  const rawRtTask = b.rtTask;
   const rawDrt = resolveNbackDrtOverride(b);
   const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
   const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
+  const resolvedRepeatAfterBlockScreens = variableResolver.resolveInValue(rawRepeatAfterBlockScreens, scope);
+  const resolvedBlockSummary = variableResolver.resolveToken(rawBlockSummary, scope);
+  const resolvedRepeatUntil = variableResolver.resolveToken(rawRepeatUntil, scope);
+  const resolvedRtTask = variableResolver.resolveToken(rawRtTask, scope);
   const resolvedDrt = variableResolver.resolveToken(rawDrt, scope);
   const feedback = parseTrialFeedbackConfig(asObject(resolvedFeedbackRaw), feedbackFallback ?? null);
+  const rtTask = mergeRtTaskConfig(
+    rtTaskFallback ??
+      resolveRtTaskConfig({
+        baseTiming: {
+          trialDurationMs: 5000,
+          fixationOnsetMs: 0,
+          fixationDurationMs: 500,
+          stimulusOnsetMs: 1000,
+          stimulusDurationMs: 4000,
+          responseWindowStartMs: 1000,
+          responseWindowEndMs: 5000,
+        },
+        override: null,
+        defaultEnabled: false,
+        defaultResponseTerminatesTrial: false,
+      }),
+    resolvedRtTask,
+  );
   const drt = resolveNbackDrtConfig(
     drtFallback ??
       resolveNbackDrtConfig(
@@ -1196,8 +1310,12 @@ function parseBlock(
       ? Math.max(1, Math.floor(Number(resolvedStimulusVariant)))
       : null,
     feedback,
+    rtTask,
+    blockSummary: asObject(resolvedBlockSummary),
+    repeatUntil: asObject(resolvedRepeatUntil),
     beforeBlockScreens: toStringScreens(resolvedBeforeBlockScreens),
     afterBlockScreens: toStringScreens(resolvedAfterBlockScreens),
+    repeatAfterBlockScreens: toStringScreens(resolvedRepeatAfterBlockScreens),
     drt,
     variables: asObject(b.variables) ?? {},
   };
@@ -1333,8 +1451,12 @@ function buildBlockPlanAttempt(
     stimulusVariant,
     trials,
     feedback: block.feedback,
+    rtTask: block.rtTask,
+    blockSummary: block.blockSummary,
+    repeatUntil: block.repeatUntil,
     beforeBlockScreens: block.beforeBlockScreens,
     afterBlockScreens: block.afterBlockScreens,
+    repeatAfterBlockScreens: block.repeatAfterBlockScreens,
     drt: block.drt,
     variables: block.variables,
   };
@@ -1462,6 +1584,39 @@ async function preloadNbackStimulus(item: string): Promise<PreloadedStimulus> {
   const image = await loadImageIfLikelyVisualStimulus(item, NBACK_IMAGE_CACHE);
   return { image };
 }
+
+function applyNbackRootPresentation(root: HTMLElement): RootPresentationState {
+  const prior: RootPresentationState = {
+    maxWidth: root.style.maxWidth,
+    margin: root.style.margin,
+    fontFamily: root.style.fontFamily,
+    lineHeight: root.style.lineHeight,
+    hadCenteredClass: root.classList.contains("exp-jspsych-canvas-centered"),
+  };
+  root.style.maxWidth = "1000px";
+  root.style.margin = "0 auto";
+  root.style.fontFamily = "system-ui";
+  root.style.lineHeight = "1.4";
+  ensureJsPsychCanvasCentered(root);
+  return prior;
+}
+
+function restoreNbackRootPresentation(root: HTMLElement, prior: RootPresentationState | null): void {
+  root.style.maxWidth = prior?.maxWidth ?? "";
+  root.style.margin = prior?.margin ?? "";
+  root.style.fontFamily = prior?.fontFamily ?? "";
+  root.style.lineHeight = prior?.lineHeight ?? "";
+  if (!(prior?.hadCenteredClass ?? false)) {
+    root.classList.remove("exp-jspsych-canvas-centered");
+  }
+}
+
+export const __testing__ = {
+  appendJsPsychNbackTrial,
+  readNbackTrialResponseRow,
+  applyNbackRootPresentation,
+  restoreNbackRootPresentation,
+};
 
 function drawSizedImage(
   ctx: CanvasRenderingContext2D,

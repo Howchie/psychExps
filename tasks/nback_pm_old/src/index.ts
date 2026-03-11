@@ -302,7 +302,12 @@ interface PmRuntimeState {
 }
 
 async function preparePmRuntime(context: TaskAdapterContext): Promise<PmRuntimeState> {
-  const parsed = parsePmConfig(context.taskConfig, context.selection, context.resolver);
+  const parsed = parsePmConfig(
+    context.taskConfig,
+    context.selection,
+    context.resolver,
+    context.rawTaskConfig,
+  );
   parsed.stimuliByCategory = await loadCategorizedStimulusPools({
     inlinePools: parsed.stimuliByCategory,
     csvConfig: parsed.stimuliCsv,
@@ -935,6 +940,7 @@ function parsePmConfig(
   config: JSONObject,
   selection: TaskAdapterContext["selection"] | undefined,
   variableResolver: VariableResolver,
+  rawConfig?: JSONObject,
 ): ParsedPmConfig {
   const mappingRaw = asObject(config.mapping);
   const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
@@ -1062,12 +1068,13 @@ function parsePmConfig(
 
   const pmCategories = Array.from(new Set(mergedBlocks.flatMap((b) => b.activePmCategories)));
   const instructionsRaw = asObject(config.instructions);
+  const rawInstructions = asObject(rawConfig?.instructions);
   const instructionSlots = resolveInstructionPageSlots(instructionsRaw, {
     intro: [
       "Respond M for n-back targets, Z for non-targets, and SPACE for PM items.",
     ],
   });
-  const pmTemplateConfig = instructionsRaw?.pmTemplate;
+  const pmTemplateConfig = rawInstructions?.pmTemplate ?? instructionsRaw?.pmTemplate;
   const pmTemplate = typeof pmTemplateConfig === "string"
     ? (pmTemplateConfig.trim() ? pmTemplateConfig.trim() : null)
     : "PM categories for this session: {pmCategoryText}";
@@ -1114,9 +1121,11 @@ function parsePmConfig(
       preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
       pmTemplate,
       blockIntroControlTemplate:
+        asString(rawInstructions?.blockIntroControlTemplate) ||
         asString(instructionsRaw?.blockIntroControlTemplate) ||
         "This is a {nLevel}-back block. There are no PM trials in this block.",
       blockIntroPmTemplate:
+        asString(rawInstructions?.blockIntroPmTemplate) ||
         asString(instructionsRaw?.blockIntroPmTemplate) ||
         "This is a {nLevel}-back PM block. Watch for {pmCategoryText}.",
     },

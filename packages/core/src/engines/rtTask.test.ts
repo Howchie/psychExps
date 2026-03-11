@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from "vitest";
-import { runCustomRtTrial } from "./rtTask";
+import { mergeRtTaskConfig, resolveRtTaskConfig, runCustomRtTrial } from "./rtTask";
 
 describe("runCustomRtTrial", () => {
   it("should execute a sequence of stages and capture response", async () => {
@@ -34,5 +34,69 @@ describe("runCustomRtTrial", () => {
     expect(result.rtMs).toBeGreaterThanOrEqual(150);
     expect(render1).toHaveBeenCalled();
     expect(render2).toHaveBeenCalled();
+  });
+});
+
+describe("resolveRtTaskConfig", () => {
+  const baseTiming = {
+    trialDurationMs: 3000,
+    fixationDurationMs: 500,
+    stimulusOnsetMs: 750,
+    responseWindowStartMs: 750,
+    responseWindowEndMs: 3000,
+  };
+
+  it("should resolve task-level rtTask with defaults", () => {
+    const resolved = resolveRtTaskConfig({
+      baseTiming,
+      override: {
+        timing: {
+          trialDurationMs: 4500,
+          responseWindowEndMs: 4200,
+        },
+      },
+      defaultEnabled: false,
+      defaultResponseTerminatesTrial: false,
+    });
+
+    expect(resolved.enabled).toBe(false);
+    expect(resolved.responseTerminatesTrial).toBe(false);
+    expect(resolved.timing.trialDurationMs).toBe(4500);
+    expect(resolved.timing.responseWindowEndMs).toBe(4200);
+    expect(resolved.timing.fixationDurationMs).toBe(500);
+    expect(resolved.timing.fixationOnsetMs).toBe(0);
+  });
+
+  it("should merge block-level rtTask overrides over base config", () => {
+    const base = resolveRtTaskConfig({
+      baseTiming,
+      override: {
+        enabled: true,
+        responseTerminatesTrial: false,
+        timing: {
+          trialDurationMs: 3000,
+          fixationDurationMs: 500,
+          stimulusOnsetMs: 750,
+          responseWindowStartMs: 750,
+          responseWindowEndMs: 3000,
+        },
+      },
+      defaultEnabled: false,
+      defaultResponseTerminatesTrial: false,
+    });
+
+    const merged = mergeRtTaskConfig(base, {
+      timing: {
+        trialDurationMs: 5000,
+        responseWindowEndMs: 5000,
+      },
+    });
+
+    expect(merged.enabled).toBe(true);
+    expect(merged.responseTerminatesTrial).toBe(false);
+    expect(merged.timing.trialDurationMs).toBe(5000);
+    expect(merged.timing.responseWindowEndMs).toBe(5000);
+    expect(merged.timing.stimulusOnsetMs).toBe(750);
+    expect(merged.timing.fixationDurationMs).toBe(500);
   });
 });

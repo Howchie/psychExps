@@ -1,3 +1,6 @@
+# Code to build and copy:
+npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/c5656012-6f1b-4714-852f-42def6f3266e/
+
 # Experiments Workspace
 
 Unified experiment framework with a shared TypeScript core and task adapters.

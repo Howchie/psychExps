@@ -9,6 +9,7 @@ export * from "./engines/drt";
 export * from "./engines/staircase";
 export * from "./engines/rtTask";
 export * from "./engines/prospectiveMemory";
+export * from "./engines/stimulusInjector";
 
 // Infrastructure
 export * from "./infrastructure/config";
@@ -55,6 +56,9 @@ export * from "./web/sceneRenderer";
 export * from "./web/moduleScopes";
 export * from "./web/stimulusExport";
 export * from "./web/orchestrator";
+export * from "./web/dataSink";
+export * from "./web/blockSummary";
+export * from "./web/blockRepeat";
 
 // Utils
 export * from "./utils/coerce";

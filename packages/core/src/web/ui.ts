@@ -19,6 +19,16 @@ export interface ContinuePromptOptions {
   buttonLabel?: string;
 }
 
+export interface ContinueChoiceOption {
+  id: string;
+  label: string;
+  action: "continue" | "exit";
+}
+
+export interface ContinueChoicePromptOptions {
+  buttons: ContinueChoiceOption[];
+}
+
 export interface CenteredNoticeOptions {
   title: string;
   message?: string;
@@ -208,11 +218,48 @@ export function installGlobalScrollBlocker(
   };
 }
 
+/**
+ * Lock page scrolling during active task execution.
+ * Returns a disposer that restores prior overflow styles.
+ */
+export function lockPageScroll(): () => void {
+  const docEl = document.documentElement;
+  const body = document.body;
+  if (!docEl || !body) return () => {};
+  const prevDocOverflow = docEl.style.overflow;
+  const prevBodyOverflow = body.style.overflow;
+  docEl.style.overflow = "hidden";
+  body.style.overflow = "hidden";
+  return () => {
+    docEl.style.overflow = prevDocOverflow;
+    body.style.overflow = prevBodyOverflow;
+  };
+}
+
 export function installFullscreenOnFirstInteraction(container: HTMLElement): () => void {
   let isActive = true;
   let requestInFlight = false;
   let attempts = 0;
   const maxAttempts = 3;
+  let pendingContinueButton: HTMLButtonElement | null = null;
+
+  const captureContinueButton = (target: EventTarget | null): void => {
+    if (!(target instanceof Element)) {
+      pendingContinueButton = null;
+      return;
+    }
+    const button = target.closest("button.exp-continue-btn");
+    pendingContinueButton = button instanceof HTMLButtonElement ? button : null;
+  };
+
+  const replayPendingContinueButtonClick = (): void => {
+    const button = pendingContinueButton;
+    pendingContinueButton = null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    // If the original click already fired, the button/screen is usually removed.
+    if (!button.isConnected) return;
+    button.click();
+  };
 
   const dispatchFullscreenResize = () => {
     // Some embedded/kiosk browsers do not emit a reliable resize on fullscreen
@@ -242,21 +289,27 @@ export function installFullscreenOnFirstInteraction(container: HTMLElement): () 
       requestInFlight = false;
       if (document.fullscreenElement) {
         dispatchFullscreenResize();
+        replayPendingContinueButtonClick();
         cleanup();
       }
     }
   };
 
-  const onPointer = () => {
+  const onPointer = (event: PointerEvent) => {
+    captureContinueButton(event.target);
     void request();
   };
   const onKey = () => {
+    pendingContinueButton = null;
     void request();
   };
   const onFullscreenChange = () => {
     const isFullscreenActive = !!document.fullscreenElement;
     dispatchFullscreenResize();
-    if (isFullscreenActive) cleanup();
+    if (isFullscreenActive) {
+      replayPendingContinueButtonClick();
+      cleanup();
+    }
   };
 
   const cleanup = () => {
@@ -302,9 +355,12 @@ export async function waitForContinue(
   if (isAutoResponderEnabled()) {
     const delayMs = sampleAutoContinueDelayMs() ?? 0;
     await sleep(delayMs);
-    btn.click();
+    container.innerHTML = "";
     return;
   }
+  const clearScreen = () => {
+    container.innerHTML = "";
+  };
   await new Promise<void>((resolve) => {
     const onKey = (ev: KeyboardEvent) => {
       if (normalizeKey(ev.key) !== "space") return;
@@ -323,6 +379,79 @@ export async function waitForContinue(
     btn.addEventListener("click", onClick);
     window.addEventListener("keydown", onKey);
     btn.focus();
+  });
+  clearScreen();
+}
+
+export async function waitForContinueChoice(
+  container: HTMLElement,
+  html: string,
+  options: ContinueChoicePromptOptions,
+): Promise<ContinueChoiceOption> {
+  const buttons = options.buttons ?? [];
+  if (buttons.length === 0) {
+    return { id: "continue", label: "Continue", action: "continue" };
+  }
+  const buttonsHtml = buttons
+    .map(
+      (button) =>
+        `<button id="${escapeHtml(button.id)}" class="exp-continue-btn" type="button" data-action="${escapeHtml(button.action)}">${escapeHtml(button.label)}</button>`,
+    )
+    .join(" ");
+  container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:980px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;">${buttonsHtml}</p></div></div>`;
+
+  if (isAutoResponderEnabled()) {
+    const preferred = buttons.find((b) => b.action === "continue") ?? buttons[0];
+    const delayMs = sampleAutoContinueDelayMs() ?? 0;
+    await sleep(delayMs);
+    container.innerHTML = "";
+    return preferred;
+  }
+
+  return await new Promise<ContinueChoiceOption>((resolve) => {
+    const clearScreen = () => {
+      container.innerHTML = "";
+    };
+    const cleanup = () => {
+      window.removeEventListener("keydown", onKey);
+      for (const button of buttons) {
+        const node = container.querySelector(`#${button.id}`);
+        if (node instanceof HTMLButtonElement) {
+          node.removeEventListener("click", onClick);
+        }
+      }
+    };
+    const submit = (selected: ContinueChoiceOption) => {
+      cleanup();
+      clearScreen();
+      resolve(selected);
+    };
+    const onClick = (event: Event) => {
+      const target = event.currentTarget;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const selected = buttons.find((b) => b.id === target.id);
+      if (!selected) return;
+      submit(selected);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (normalizeKey(event.key) !== "space") return;
+      if (!isEditableKeyTarget(event.target)) event.preventDefault();
+      const preferred = buttons.find((b) => b.action === "continue") ?? buttons[0];
+      submit(preferred);
+    };
+
+    for (const button of buttons) {
+      const node = container.querySelector(`#${button.id}`);
+      if (node instanceof HTMLButtonElement) {
+        node.addEventListener("click", onClick);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+
+    const firstButton = container.querySelector(`#${buttons[0]?.id ?? ""}`);
+    if (firstButton instanceof HTMLButtonElement) {
+      firstButton.focus();
+    }
   });
 }
 
@@ -618,7 +747,6 @@ export function ensureJsPsychCanvasCentered(container: HTMLElement): void {
   width: 100%;
 }
 .exp-jspsych-canvas-centered.jspsych-display-element {
-  height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
 }
@@ -641,7 +769,7 @@ export function ensureJsPsychCanvasCentered(container: HTMLElement): void {
   justify-content: center;
   align-items: center;
   width: 100%;
-  min-height: 100%;
+  min-height: 0;
 }
 .exp-jspsych-canvas-centered #jspsych-canvas-stimulus {
   display: block;

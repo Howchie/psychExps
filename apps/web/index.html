@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Experiments Shell</title>
+    <script>
+      (function loadJatosScript() {
+        const candidates = [
+          "/assets/lib/jatos-publix/javascripts/jatos.js",
+          "/jatos/assets/lib/jatos-publix/javascripts/jatos.js",
+          "/jatos/jatos.js",
+          "/jatos.js",
+          "jatos.js",
+        ];
+        const seen = new Set();
+        window.__jatosScriptAttempts = [];
+        const tryNext = () => {
+          const src = candidates.shift();
+          if (!src || seen.has(src)) return;
+          seen.add(src);
+          window.__jatosScriptAttempts.push(src);
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => {
+            window.__jatosScriptLoadedFrom = src;
+          };
+          script.onerror = () => tryNext();
+          document.head.appendChild(script);
+        };
+        tryNext();
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

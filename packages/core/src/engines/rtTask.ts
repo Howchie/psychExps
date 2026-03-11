@@ -36,6 +36,19 @@ export interface RtPhaseOptions {
   responseTerminatesTrial?: boolean;
 }
 
+export interface ResolvedRtTaskConfig {
+  enabled: boolean;
+  timing: RtTiming;
+  responseTerminatesTrial: boolean;
+}
+
+export interface ResolveRtTaskOptions {
+  baseTiming: RtTiming;
+  override?: unknown;
+  defaultEnabled?: boolean;
+  defaultResponseTerminatesTrial?: boolean;
+}
+
 export interface RunBasicRtTrialArgs {
   container: HTMLElement;
   timing: RtTiming;
@@ -64,6 +77,58 @@ const toPositive = (value: unknown, fallback = 1): number => {
   if (!Number.isFinite(numeric) || numeric <= 0) return Math.max(1, fallback);
   return numeric;
 };
+
+const asObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const hasOwn = (obj: Record<string, unknown> | null, key: string): boolean =>
+  Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
+
+function resolveRtTiming(
+  raw: Record<string, unknown> | null,
+  fallback: RtTiming,
+): RtTiming {
+  const trialDurationMs = toPositive(raw?.trialDurationMs, fallback.trialDurationMs);
+  const stimulusOnsetMs = toNonNegative(raw?.stimulusOnsetMs, fallback.stimulusOnsetMs);
+  return {
+    trialDurationMs,
+    fixationOnsetMs: toNonNegative(raw?.fixationOnsetMs, fallback.fixationOnsetMs ?? 0),
+    fixationDurationMs: toNonNegative(raw?.fixationDurationMs, fallback.fixationDurationMs),
+    stimulusOnsetMs,
+    stimulusDurationMs: toNonNegative(
+      raw?.stimulusDurationMs,
+      (fallback.stimulusDurationMs ?? Math.max(0, trialDurationMs - stimulusOnsetMs)),
+    ),
+    responseWindowStartMs: toNonNegative(raw?.responseWindowStartMs, fallback.responseWindowStartMs),
+    responseWindowEndMs: toNonNegative(raw?.responseWindowEndMs, fallback.responseWindowEndMs),
+  };
+}
+
+export function resolveRtTaskConfig(options: ResolveRtTaskOptions): ResolvedRtTaskConfig {
+  const { baseTiming, override, defaultEnabled = false, defaultResponseTerminatesTrial = false } = options;
+  const raw = asObject(override);
+  return {
+    enabled: hasOwn(raw, "enabled") ? raw!.enabled !== false : defaultEnabled,
+    timing: resolveRtTiming(asObject(raw?.timing), baseTiming),
+    responseTerminatesTrial: hasOwn(raw, "responseTerminatesTrial")
+      ? raw!.responseTerminatesTrial === true
+      : defaultResponseTerminatesTrial,
+  };
+}
+
+export function mergeRtTaskConfig(
+  base: ResolvedRtTaskConfig,
+  override?: unknown,
+): ResolvedRtTaskConfig {
+  return resolveRtTaskConfig({
+    baseTiming: base.timing,
+    override,
+    defaultEnabled: base.enabled,
+    defaultResponseTerminatesTrial: base.responseTerminatesTrial,
+  });
+}
 
 export function computeRtPhaseDurations(timing: RtTiming, options: RtPhaseOptions = {}): RtPhaseDurations {
   const trialDurationMs = toPositive(timing.trialDurationMs, 5000);

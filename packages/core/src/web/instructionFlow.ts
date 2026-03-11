@@ -1,5 +1,5 @@
-import { resolveInstructionPageSlots, toStringScreens } from "../utils/coerce";
-import { escapeHtml, waitForContinue } from "./ui";
+import { resolveInstructionPageSlots, toInstructionScreenSpecs, toStringScreens } from "../utils/coerce";
+import { escapeHtml, waitForContinue, waitForContinueChoice } from "./ui";
 
 export interface InstructionFlowPages {
   intro: string[];
@@ -17,15 +17,29 @@ export interface InstructionFlowConfig {
 export interface InstructionScreenRenderContext {
   title: string | null;
   pageText: string;
-  section: keyof InstructionFlowPages;
+  pageHtml?: string;
+  pageTitle?: string;
+  pageActions?: Array<{ id?: string; label: string; action?: "continue" | "exit" }>;
+  section: string;
   pageIndex: number;
   blockLabel?: string | null;
 }
 
+export class InstructionFlowExitRequestedError extends Error {
+  constructor(message = "Instruction flow requested exit") {
+    super(message);
+    this.name = "InstructionFlowExitRequestedError";
+  }
+}
+
+export function isInstructionFlowExitRequestedError(value: unknown): value is InstructionFlowExitRequestedError {
+  return value instanceof InstructionFlowExitRequestedError;
+}
+
 export interface RunInstructionScreensArgs {
   container: HTMLElement;
-  pages: string[];
-  section: keyof InstructionFlowPages;
+  pages: unknown;
+  section: string;
   title?: string | null;
   blockLabel?: string | null;
   buttonIdPrefix: string;
@@ -43,7 +57,11 @@ export function resolveInstructionFlowPages(config: InstructionFlowConfig): Inst
 }
 
 export function renderInstructionScreenHtml(ctx: InstructionScreenRenderContext): string {
-  const headerText = ctx.blockLabel || ctx.title;
+  const headerText = ctx.pageTitle ?? ctx.blockLabel ?? ctx.title;
+  if (ctx.pageHtml) {
+    if (!headerText) return ctx.pageHtml;
+    return `<h3>${escapeHtml(headerText)}</h3>${ctx.pageHtml}`;
+  }
   if (!headerText) return `<p>${escapeHtml(ctx.pageText)}</p>`;
   return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
 }
@@ -68,26 +86,34 @@ export function renderTaskIntroCardHtml(args: TaskIntroCardArgs): string {
 export interface BlockIntroCardArgs {
   blockLabel: string;
   introText?: string | null;
+  showBlockLabel?: boolean;
 }
 
 export function renderBlockIntroCardHtml(args: BlockIntroCardArgs): string {
   const introText = args.introText ?? "";
-  return `<h3>${escapeHtml(args.blockLabel)}</h3><p>${escapeHtml(introText || "Press continue when ready.")}</p>`;
+  const showBlockLabel = args.showBlockLabel !== false;
+  const titleHtml = showBlockLabel ? `<h3>${escapeHtml(args.blockLabel)}</h3>` : "";
+  return `${titleHtml}<p>${escapeHtml(introText || "Press continue when ready.")}</p>`;
 }
 
 export function buildInstructionScreens(args: {
-  pages: string[];
-  section: keyof InstructionFlowPages;
+  pages: unknown;
+  section: string;
   title?: string | null;
   blockLabel?: string | null;
   buttonIdPrefix: string;
 }): BuiltInstructionScreen[] {
+  const pages = toInstructionScreenSpecs(args.pages);
   const screens: BuiltInstructionScreen[] = [];
-  for (let pageIndex = 0; pageIndex < args.pages.length; pageIndex += 1) {
-    const pageText = args.pages[pageIndex] ?? "";
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const page = pages[pageIndex] ?? {};
+    const pageText = page.text ?? "";
     const ctx: InstructionScreenRenderContext = {
       title: args.title ?? null,
       pageText,
+      ...(page.html ? { pageHtml: page.html } : {}),
+      ...(page.title ? { pageTitle: page.title } : {}),
+      ...(page.actions ? { pageActions: page.actions } : {}),
       section: args.section,
       pageIndex,
       blockLabel: args.blockLabel ?? null,
@@ -109,10 +135,20 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
     buttonIdPrefix: args.buttonIdPrefix,
   });
   for (const screen of screens) {
-    await waitForContinue(
-      args.container,
-      args.renderHtml ? args.renderHtml(screen.ctx) : renderInstructionScreenHtml(screen.ctx),
-      { buttonId: screen.buttonId },
-    );
+    const html = args.renderHtml ? args.renderHtml(screen.ctx) : renderInstructionScreenHtml(screen.ctx);
+    const actions = screen.ctx.pageActions ?? [];
+    if (actions.length === 0) {
+      await waitForContinue(args.container, html, { buttonId: screen.buttonId });
+      continue;
+    }
+    const buttons = actions.map((action, index): { id: string; label: string; action: "continue" | "exit" } => ({
+      id: `${screen.buttonId}-action-${action.id ?? index + 1}`,
+      label: action.label,
+      action: action.action === "exit" ? "exit" : "continue",
+    }));
+    const selected = await waitForContinueChoice(args.container, html, { buttons });
+    if (selected.action === "exit") {
+      throw new InstructionFlowExitRequestedError();
+    }
   }
 }

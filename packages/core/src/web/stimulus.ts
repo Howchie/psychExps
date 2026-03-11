@@ -1,4 +1,5 @@
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
+import { isJatosAvailable } from "../infrastructure/jatos";
 
 export interface CsvSourceSpec {
   path: string;
@@ -73,10 +74,15 @@ export function resolveTemplatedString(args: TemplateResolveArgs): string {
 
 export function resolveAssetPath(args: ResolveAssetPathArgs): string {
   const rendered = resolveTemplatedString(args).replace(/^\/+/, "");
-  const base = String(args.basePath ?? "").replace(/\/+$/, "");
+  const rawBase = String(args.basePath ?? "").replace(/\/+$/, "");
+  const base = isJatosAvailable() ? rawBase.replace(/^\/+/, "") : rawBase;
   if (!base) return rendered;
   if (rendered.startsWith("http://") || rendered.startsWith("https://")) return rendered;
-  if (String(args.template).startsWith("/")) return `/${rendered}`;
+  if (String(args.template).startsWith("/")) {
+    // In JATOS, component assets are served below the component route; absolute paths bypass that route.
+    if (isJatosAvailable()) return rendered;
+    return `/${rendered}`;
+  }
   return `${base}/${rendered}`;
 }
 
