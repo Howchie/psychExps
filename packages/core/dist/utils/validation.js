@@ -1,8 +1,8 @@
 const asObject = (value) => Boolean(value && typeof value === "object" && !Array.isArray(value));
 const forbiddenByTask = {
-    sft: ["pm", "bricks"],
-    pm: ["sft", "bricks"],
-    bricks: ["sft", "pm"],
+    sft: ["nback_pm_old", "bricks"],
+    nback_pm_old: ["sft", "bricks"],
+    bricks: ["sft", "nback_pm_old"],
 };
 export function validateTaskConfigIsolation(taskId, config, knownTaskIds) {
     const task = asObject(config.task) ? config.task : {};

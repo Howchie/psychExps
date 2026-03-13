@@ -8,5 +8,6 @@ declare class PmTaskAdapter implements TaskAdapter {
     execute(): Promise<unknown>;
     terminate(): Promise<void>;
 }
+export declare const nbackPmOldAdapter: PmTaskAdapter;
 export declare const pmAdapter: PmTaskAdapter;
 export {};

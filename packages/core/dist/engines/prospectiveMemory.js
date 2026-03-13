@@ -10,11 +10,9 @@ export class ProspectiveMemoryModule {
             .map((t) => t.idx);
         if (eligibleIndices.length === 0)
             return block;
-        const pmPositions = generateProspectiveMemoryPositions(context.rng, trials.length, config.schedule);
-        // Filter PM positions to only those that fall on eligible trials
-        const validPmPositions = pmPositions.filter(pos => eligibleIndices.includes(pos));
+        const pmPositions = generateProspectiveMemoryPositions(context.rng, trials.length, config.schedule, new Set(eligibleIndices));
         const newTrials = [...trials];
-        for (const pos of validPmPositions) {
+        for (const pos of pmPositions) {
             // Pick a rule and an item
             const ruleIndex = context.rng.int(0, config.rules.length - 1);
             const rule = config.rules[ruleIndex];
@@ -40,36 +38,30 @@ export class ProspectiveMemoryModule {
         }
         return { ...block, trials: newTrials };
     }
-    start(config, _address, _context) {
-        const responses = [];
-        const allowedKeys = new Set(config.rules.map(r => r.responseKey));
+    getModularSemantics(config) {
+        if (!config.enabled)
+            return {};
+        const keys = Array.from(new Set(config.rules.map((r) => r.responseKey))).filter(Boolean);
+        if (keys.length === 0)
+            return {};
+        return { pm: keys };
+    }
+    start(_config, _address, _context) {
         return {
-            handleKey: (key, now) => {
-                if (allowedKeys.has(key)) {
-                    responses.push({ key, timestamp: now });
-                    return true;
-                }
-                return false;
-            },
-            getData: () => ({
-                responses
-            }),
             stop: () => ({
-                responses
-            })
+                responses: [],
+            }),
         };
     }
 }
-export function generateProspectiveMemoryPositions(rng, nTrials, schedule) {
+export function generateProspectiveMemoryPositions(rng, nTrials, schedule, eligibleIndices) {
     const nPm = Math.max(0, Math.floor(schedule.count));
     const minSep = Math.max(1, Math.floor(schedule.minSeparation));
     const maxSep = Math.max(minSep, Math.floor(schedule.maxSeparation));
     if (nPm <= 0)
         return [];
-    if (nPm * minSep > nTrials - 1) {
-        throw new Error(`Cannot place ${nPm} PM trials in ${nTrials} trials.`);
-    }
     const positions = [];
+    // Match legacy PM semantics: first PM is constrained by minSeparation from trial 0.
     let lastPos = 0;
     for (let i = 0; i < nPm; i += 1) {
         const remaining = nPm - i - 1;
@@ -78,9 +70,20 @@ export function generateProspectiveMemoryPositions(rng, nTrials, schedule) {
         const latestByRemaining = nTrials - 1 - remaining * minSep;
         const maxPos = Math.min(latestByMaxGap, latestByRemaining);
         if (minPos > maxPos) {
-            throw new Error(`Cannot place PM trial ${i + 1}/${nPm}.`);
+            throw new Error(`Cannot place PM trial ${i + 1}/${nPm}: spacing constraints impossible.`);
         }
-        const pos = rng.int(minPos, maxPos);
+        const possiblePos = [];
+        for (let p = minPos; p <= maxPos; p++) {
+            if (!eligibleIndices || eligibleIndices.has(p)) {
+                possiblePos.push(p);
+            }
+        }
+        if (possiblePos.length === 0) {
+            // If no eligible positions in current window, we have a violation of either min/max or eligible pool
+            throw new Error(`Cannot place PM trial ${i + 1}/${nPm}: no eligible trials found between indices ${minPos} and ${maxPos}.`);
+        }
+        // Pick one of the possible positions
+        const pos = possiblePos[rng.int(0, possiblePos.length - 1)];
         positions.push(pos);
         lastPos = pos;
     }

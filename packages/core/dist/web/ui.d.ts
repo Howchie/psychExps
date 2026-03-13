@@ -12,6 +12,31 @@ export interface CaptureTimedResponseArgs {
 export interface ContinuePromptOptions {
     buttonId?: string;
     buttonLabel?: string;
+    buttonStyle?: ButtonStyleOverrides;
+    autoFocusButton?: boolean;
+}
+export interface ContinueChoiceOption {
+    id: string;
+    label: string;
+    action: "continue" | "exit";
+}
+export interface ContinueChoicePromptOptions {
+    buttons: ContinueChoiceOption[];
+    buttonStyle?: ButtonStyleOverrides;
+    autoFocusFirstButton?: boolean;
+}
+export interface ButtonStyleOverrides {
+    padding?: string;
+    fontSize?: string;
+    fontWeight?: string | number;
+    border?: string;
+    borderRadius?: string;
+    color?: string;
+    background?: string;
+    minWidth?: string;
+    minHeight?: string;
+    outline?: string;
+    boxShadow?: string;
 }
 export interface CenteredNoticeOptions {
     title: string;
@@ -107,10 +132,18 @@ export declare function installKeyScrollBlocker(allowedKeys: string[]): () => vo
  * without moving the page.
  */
 export declare function installGlobalScrollBlocker(blockedKeys?: string[]): () => void;
+/**
+ * Lock page scrolling during active task execution.
+ * Returns a disposer that restores prior overflow styles.
+ */
+export declare function lockPageScroll(): () => void;
 export declare function installFullscreenOnFirstInteraction(container: HTMLElement): () => void;
 export declare function escapeHtml(value: string): string;
 export declare function sleep(ms: number): Promise<void>;
+export declare function resolveButtonStyleOverrides(raw: unknown): ButtonStyleOverrides | undefined;
+export declare function applyButtonStyleOverrides(button: HTMLButtonElement, style: ButtonStyleOverrides | undefined): void;
 export declare function waitForContinue(container: HTMLElement, html: string, options?: ContinuePromptOptions): Promise<void>;
+export declare function waitForContinueChoice(container: HTMLElement, html: string, options: ContinueChoicePromptOptions): Promise<ContinueChoiceOption>;
 export declare function captureTimedResponse(args: CaptureTimedResponseArgs): Promise<TimedResponse>;
 export declare function renderFixedTrialFrame(options: FixedTrialFrameOptions): string;
 export declare function renderCenteredMessageFrame(options: CenteredMessageFrameOptions): string;

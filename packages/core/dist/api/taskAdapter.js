@@ -3,6 +3,7 @@ import { createVariableResolver } from "../infrastructure/variables";
 import { TaskModuleRunner } from "./taskModule";
 import { DrtModule } from "../engines/drt";
 import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
+import { StimulusInjectorModule } from "../engines/stimulusInjector";
 /**
  * Manages the full lifecycle of a task adapter.
  */
@@ -48,6 +49,7 @@ export class LifecycleManager {
         const moduleRunner = new TaskModuleRunner([
             new DrtModule(),
             new ProspectiveMemoryModule(),
+            new StimulusInjectorModule(),
         ]);
         const resolvedContext = {
             ...context,

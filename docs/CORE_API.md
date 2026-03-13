@@ -77,6 +77,36 @@ Accepted URL keys:
 - `task`, `variant`, `config`, `overrides`, `cc`
 - participant keys: `PROLIFIC_PID`, `STUDY_ID`, `SESSION_ID`, `SONA_ID`, `participant`, `survey_code`
 
+### `resolveSelectionWithJatosRetry(coreConfig, maxWaitMs?): Promise<SelectionContext>`
+
+Retries selection resolution for JATOS launches where selection payloads may arrive slightly after app boot.
+- Default max wait: `10000ms`
+- Stops early when JATOS selection becomes available
+- Skips retry when URL already provides `task`
+
+### `loadJatosScriptCandidates(candidates?): Promise<{ loaded, loadedFrom, attempts }>`
+
+Attempts to load JATOS runtime script from a candidate list (in order), returning:
+- `loaded`: whether a candidate succeeded
+- `loadedFrom`: source URL used when loaded
+- `attempts`: all attempted candidate URLs
+
+### `waitForJatosReady(timeoutMs?): Promise<void>`
+
+Waits for JATOS readiness via `jatos.onLoad(...)` when available, with polling fallback for
+`componentJsonInput` / `studySessionData`.
+
+### `resolveRuntimePath(path: string): string`
+
+Normalizes relative-vs-absolute launch paths for local/dev and JATOS:
+- preserves absolute URLs (`https://...`, `data:...`, etc.)
+- rewrites leading-slash app paths to component-relative paths under JATOS
+- keeps local paths local-friendly outside JATOS
+
+Runtime path tokens supported by templated stimulus/config helpers:
+- `{runtime.assetsBase}`
+- `{runtime.configsBase}`
+
 ### `buildMergedConfig(base, taskDefault, variantOverride, runtimeOverride?)`
 
 Deep merge order:
@@ -383,11 +413,17 @@ Provides `.emit(eventType, eventData?, meta?)` and accumulated `.events`.
   - independent probe `displayDurationMs` and `responseWindowMs`
   - `responseTerminatesStimulus` control
   - optional online parameter transforms (`parameterTransforms`) that consume `drt_response` events and emit per-update estimates via `onTransformEstimate`.
-  - row-level export linking each `drt_response` to zero/one/many transform estimates (`exportResponseRows()`).
+  - transform persistence control (`transformPersistence`):
+    - `"scope"`: reset transform state at each DRT scope boundary (default)
+    - `"session"`: persist transform state across all DRT scopes within one task run/session
+  - row-level export linking each `drt_response` to transform output (`exportResponseRows()`), including:
+    - `estimate`: primary estimate object for the response (or `null`)
+    - `transformColumns`: flattened scalar columns for long-format analysis (`drift_rate`, `threshold`, `t0`, CI bounds, etc.)
+    - `estimates`: full estimate list (kept for backward compatibility)
   - built-in presentation modes:
-    - `visual` (default: top-center red square on viewport)
+    - `visual` (default: top-center red square anchored to task display area when available; otherwise viewport)
     - `auditory` (WebAudio tone)
-    - `border` (flash outline around target display element)
+    - `border` (flash outline around target display element only; does not fall back to full-screen viewport border when target bounds are unavailable)
 
 ### Continuous tracking helpers
 
@@ -408,7 +444,12 @@ Core now exports reusable tracking primitives (`tracking.ts`):
 - Included first transform type: `wald_conjugate`:
   - Moving-window analytic shifted-Wald fit from RT observations.
   - Configurable priors (`mu0`, `precision0`, `kappa0`, `beta0`), window sizes, and credible interval bounds.
+  - Non-decision-time (`t0`) supports:
+    - `t0Mode: "fixed"` (default): uses `t0` as constant milliseconds.
+    - `t0Mode: "min_rt_multiplier"`: uses `t0 = t0Multiplier * minObservedRtMs`, where `minObservedRtMs` is tracked across all finite observed RTs for that transform instance (not just the moving fit window).
+  - With `transformPersistence: "session"`, that min-RT tracking persists across DRT scope boundaries in a run; with `"scope"`, it resets each scope.
   - Optional trial-varying prior mean shift mode (`priorUpdate.mode: "shift_means"`) matching the provided R/Python pattern.
+  - Transform configs are object entries in `parameterTransforms[]` (for example `{ "type": "wald_conjugate" }`), not string shorthands.
 
 ### `evaluateTrialOutcome(args): TrialOutcome`
 

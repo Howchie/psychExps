@@ -1,5 +1,5 @@
-import { normalizeKey } from "../web/ui";
-import { runTrialTimeline, type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "../web/trial";
+import { normalizeKey } from "../infrastructure/keys";
+import { runTrialTimeline, type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "./trial";
 
 export interface RtTiming {
   trialDurationMs: number;

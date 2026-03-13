@@ -1,5 +1,5 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "./autoresponder";
-import { escapeHtml, sleep } from "./ui";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "../runtime/autoresponder";
+import { applyButtonStyleOverrides, escapeHtml, sleep } from "./ui";
 export async function runSurvey(container, survey, options = {}) {
     const startedAt = Date.now();
     const buttonId = options.buttonId ?? `exp-survey-submit-${sanitizeId(survey.id)}`;
@@ -10,7 +10,8 @@ export async function runSurvey(container, survey, options = {}) {
     if (!(submitButton instanceof HTMLButtonElement)) {
         throw new Error(`Survey submit button missing: ${buttonId}`);
     }
-    const answers = await waitForSurveySubmit(container, survey, submitButton);
+    applyButtonStyleOverrides(submitButton, options.submitButtonStyle ?? survey.submitButtonStyle);
+    const answers = await waitForSurveySubmit(container, survey, submitButton, options.autoFocusSubmitButton ?? survey.autoFocusSubmitButton);
     const completedAt = Date.now();
     const scores = survey.computeScores?.(answers);
     return {
@@ -23,7 +24,7 @@ export async function runSurvey(container, survey, options = {}) {
         ...(scores ? { scores } : {}),
     };
 }
-function waitForSurveySubmit(container, survey, submitButton) {
+function waitForSurveySubmit(container, survey, submitButton, autoFocusSubmitButton) {
     return new Promise((resolve) => {
         const errors = container.querySelector('[data-exp-survey-errors]');
         const errorsNode = errors instanceof HTMLElement ? errors : null;
@@ -60,7 +61,9 @@ function waitForSurveySubmit(container, survey, submitButton) {
         };
         submitButton.addEventListener("click", onClick);
         window.addEventListener("keydown", onKey);
-        submitButton.focus();
+        if (autoFocusSubmitButton !== false) {
+            submitButton.focus();
+        }
         if (isAutoResponderEnabled()) {
             const autoAnswers = autoFillSurvey(container, survey);
             if (autoAnswers > 0) {
@@ -150,13 +153,15 @@ function buildSurveyHtml(survey, buttonId, rootClass) {
     const description = survey.description ? `<p style="margin:0 0 1rem 0;">${escapeHtml(survey.description)}</p>` : "";
     const showQuestionNumbers = survey.showQuestionNumbers !== false;
     const showRequiredAsterisk = survey.showRequiredAsterisk !== false;
+    const questionBorder = resolveInlineStyleValue(survey.questionBorder, "1px solid #e5e7eb");
+    const questionBorderRadius = resolveInlineStyleValue(survey.questionBorderRadius, "8px");
     const questionsHtml = survey.questions
-        .map((question, index) => renderQuestion(question, index + 1, showQuestionNumbers, showRequiredAsterisk))
+        .map((question, index) => renderQuestion(question, index + 1, showQuestionNumbers, showRequiredAsterisk, questionBorder, questionBorderRadius))
         .join("");
     const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
     return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div style="width:min(900px,96vw);padding:1rem 1.25rem;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1rem 0 0 0;"><button id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
-function renderQuestion(question, index, showQuestionNumbers, showRequiredAsterisk) {
+function renderQuestion(question, index, showQuestionNumbers, showRequiredAsterisk, questionBorder, questionBorderRadius) {
     const required = question.required !== false;
     const star = required && showRequiredAsterisk ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
     const promptPrefix = showQuestionNumbers ? `${index}. ` : "";
@@ -164,7 +169,7 @@ function renderQuestion(question, index, showQuestionNumbers, showRequiredAsteri
     const help = question.helpText ? `<p style="margin:0 0 0.6rem 0;color:#374151;">${escapeHtml(question.helpText)}</p>` : "";
     const inner = question.type === "single_choice" ? renderSingleChoice(question) : renderSlider(question);
     const legend = showQuestionNumbers ? `<legend style="padding:0 0.3rem;">Q${index}</legend>` : "";
-    return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;">${legend}${prompt}${help}${inner}</fieldset>`;
+    return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:${questionBorder};border-radius:${questionBorderRadius};">${legend}${prompt}${help}${inner}</fieldset>`;
 }
 function renderSingleChoice(question) {
     const isHorizontal = question.layout !== "vertical";
@@ -271,6 +276,8 @@ export function createAtwitSurvey(options = {}) {
         title: options.title ?? "Workload Rating",
         showQuestionNumbers: options.showQuestionNumbers,
         showRequiredAsterisk: options.showRequiredAsterisk,
+        questionBorder: options.questionBorder,
+        questionBorderRadius: options.questionBorderRadius,
         questions: [
             {
                 id: questionId,
@@ -285,6 +292,8 @@ export function createAtwitSurvey(options = {}) {
             },
         ],
         submitLabel: "Continue",
+        submitButtonStyle: options.submitButtonStyle,
+        autoFocusSubmitButton: options.autoFocusSubmitButton,
         computeScores: (answers) => {
             const value = answers[questionId];
             if (typeof value !== "number")
@@ -305,6 +314,8 @@ export function createNasaTlxSurvey(options = {}) {
         description: options.description,
         showQuestionNumbers: options.showQuestionNumbers,
         showRequiredAsterisk: options.showRequiredAsterisk,
+        questionBorder: options.questionBorder,
+        questionBorderRadius: options.questionBorderRadius,
         questions: selectedSubscales.map((subscale) => ({
             id: subscale.id,
             type: "slider",
@@ -320,6 +331,8 @@ export function createNasaTlxSurvey(options = {}) {
             required: options.required !== false,
         })),
         submitLabel: "Continue",
+        submitButtonStyle: options.submitButtonStyle,
+        autoFocusSubmitButton: options.autoFocusSubmitButton,
         computeScores: (answers) => {
             const numericValues = selectedSubscales
                 .map((subscale) => answers[subscale.id])
@@ -342,6 +355,10 @@ function resolveNasaSubscales(subscales) {
             resolved.push(entry);
     }
     return resolved.length > 0 ? resolved : NASA_SUBSCALES.slice();
+}
+function resolveInlineStyleValue(raw, fallback) {
+    const value = typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : fallback;
+    return escapeHtml(value);
 }
 export function createSurveyFromPreset(spec) {
     if (spec.preset === "atwit") {

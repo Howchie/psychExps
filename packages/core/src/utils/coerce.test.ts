@@ -53,7 +53,7 @@ describe('coerce utilities', () => {
         {
           id: 'x',
           at: 'block_start_after_intro',
-          pages: ['A', 'B'],
+          pages: [{ text: 'A' }, { text: 'B' }],
           when: { blockIndex: [1], blockType: ['main'], isPractice: false },
         },
       ]);
@@ -67,7 +67,7 @@ describe('coerce utilities', () => {
           { at: 'task_intro_after', pages: ['ok'] },
         ]),
       ).toEqual([
-        { at: 'task_intro_after', pages: ['ok'] },
+        { at: 'task_intro_after', pages: [{ text: 'ok' }] },
       ]);
     });
   });

@@ -7,6 +7,7 @@ export interface ConveyorTrialRunArgs {
     trialIndex: number;
     config: Record<string, unknown>;
     drtRuntime?: ConveyorTrialDrtRuntime;
+    hudBaseStats?: Partial<Record<'spawned' | 'cleared' | 'dropped' | 'points', number>>;
 }
 export interface ConveyorTrialData {
     block_label: string;

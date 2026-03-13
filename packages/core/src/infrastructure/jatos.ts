@@ -6,6 +6,7 @@ declare global {
       submitResultData: (payload: string | JSONObject) => Promise<void>;
       appendResultData?: (payload: string | JSONObject) => Promise<void>;
       endStudy: () => Promise<void>;
+      onLoad?: (cb: () => void) => void;
       componentJsonInput?: JSONObject | string;
       studySessionData?: JSONObject | string;
     };
@@ -14,7 +15,7 @@ declare global {
 
 declare const jatos: Window["jatos"] | undefined;
 
-function getJatosApi(): Window["jatos"] | undefined {
+export function getJatosApi(): Window["jatos"] | undefined {
   if (typeof window === "undefined") return undefined;
   if (window.jatos) return window.jatos;
   try {

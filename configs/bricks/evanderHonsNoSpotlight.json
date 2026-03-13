@@ -1,0 +1,561 @@
+{
+  "task": {
+    "implementation": "native_bricks",
+    "runner": "native",
+    "title": "Bricks Task",
+    "modules": {
+      "drt": {
+        "enabled": true,
+        "scope": "trial",
+        "key": " ",
+        "audio": {
+          "volume": 0.0
+        },
+        "stimMode": "border",
+        "border": {
+            "widthPx": 10,
+            "radiusPx": 0,
+            "target": "display"
+        },
+        "isiSampler": {
+          "type": "uniform",
+          "min": 3000,
+          "max": 5000
+        },
+        "transformPersistence": "session",
+        "responseDeadlineMs": 2500,
+        "parameterTransforms": [
+          {
+            "type": "wald_conjugate",
+            "t0Mode": "min_rt_multiplier",
+            "t0Multiplier": 0.5,
+            "priorUpdate": {
+              "enabled": true,
+              "mode": "shift_means"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "display": {
+    "canvasWidth": 800,
+    "canvasHeight": 600,
+    "viewportPaddingPx": 24,
+    "backgroundColor": "#7f858a",
+    "beltColor": "#e5e7eb",
+    "beltHeight": 56,
+    "beltGap": 50,
+    "brickHeight": 36,
+    "brickCornerRadius": 3,
+    "beltTexture": {
+        "scrollSnapMode": "screen",
+        "scrollRenderMode": "auto"
+    },
+    "brickTextureOverlay": {
+      "enable": true,
+      "alpha": 1,
+      "baseFillAlpha": 1,
+      "plankCount": 3,
+      "seamWidthPx": 1,
+      "grainCount": 4,
+      "nailRadiusPx": 1,
+      "insetPx": 2,
+      "styles": {
+        "present_orange_purple": {
+          "pattern": "gift_wrap",
+          "baseFillColor": "#FFA500",
+          "baseFillAlpha": 1,
+          "alpha": 1,
+          "ribbonColor": "#8c198c",
+          "ribbonAlpha": 1,
+          "ribbonWidthRatio": 0.2,
+          "ribbonInsetPx": 2
+        },
+        "present_green_blue": {
+          "pattern": "gift_wrap",
+          "baseFillColor": "#149214 ",
+          "baseFillAlpha": 1,
+          "alpha": 1,
+          "ribbonColor": "#15f4ee",
+          "ribbonAlpha": 1,
+          "ribbonWidthRatio": 0.2,
+          "ribbonInsetPx": 2
+        },
+        "present_blue_silver": {
+          "pattern": "gift_wrap",
+          "baseFillColor": "#2563eb",
+          "baseFillAlpha": 1,
+          "alpha": 1,
+          "ribbonColor": "#e2e8f0",
+          "ribbonAlpha": 1,
+          "ribbonWidthRatio": 0.2,
+          "ribbonInsetPx": 2
+        },
+        "present_purple_gold": {
+          "pattern": "gift_wrap",
+          "baseFillColor": "#7c3aed",
+          "baseFillAlpha": 1,
+          "alpha": 1,
+          "ribbonColor": "#ffc0cb",
+          "ribbonAlpha": 1,
+          "ribbonWidthRatio": 0.2,
+          "ribbonInsetPx": 2
+        },
+        "crate_light_brown": {
+          "pattern": "wood_planks",
+          "baseFillColor": "#c79a6a",
+          "baseFillAlpha": 1,
+          "alpha": 0.98,
+          "plankCount": 3,
+          "seamWidthPx": 1,
+          "grainCount": 5,
+          "nailRadiusPx": 1,
+          "insetPx": 2,
+          "seamColor": "#765636",
+          "highlightColor": "#f4e6d2"
+        },
+        "crate_mid_brown": {
+          "pattern": "wood_planks",
+          "baseFillColor": "#a77746",
+          "baseFillAlpha": 1,
+          "alpha": 0.96,
+          "plankCount": 3,
+          "seamWidthPx": 1,
+          "grainCount": 5,
+          "nailRadiusPx": 1,
+          "insetPx": 2,
+          "seamColor": "#5e4328",
+          "highlightColor": "#e7d1b3"
+        },
+        "crate_deep_brown": {
+          "pattern": "wood_planks",
+          "baseFillColor": "#6f4a2a",
+          "baseFillAlpha": 1,
+          "alpha": 0.94,
+          "plankCount": 3,
+          "seamWidthPx": 1,
+          "grainCount": 5,
+          "nailRadiusPx": 1,
+          "insetPx": 2,
+          "seamColor": "#3b2818",
+          "highlightColor": "#caa987"
+        },
+        "box_light_brown": {
+            "pattern": "cardboard_block",
+            "baseFillColor": "#b4936b",
+            "baseFillAlpha": 1,
+            "alpha": 0.96,
+            "plankCount": 0,
+            "insetPx": 2,
+            "speckleColor": "#7e5f40",
+            "speckleAlpha": 0.16,
+            "speckleCount": 25,
+            "tapeColor": "#d9c2a2",
+            "tapeAlpha": 0.5,
+            "tapeWidthRatio": 0.10,
+            "tapeOrientation": "horizontal"
+        },
+        "box_dark_brown": {
+            "pattern": "cardboard_block",
+            "baseFillColor": "#9A7651",
+            "baseFillAlpha": 1,
+            "alpha": 0.96,
+            "plankCount": 0,
+            "insetPx": 2,
+            "speckleColor": "#7e5f40",
+            "speckleAlpha": 0.16,
+            "speckleCount": 25,
+            "tapeColor": "#d9c2a2",
+            "tapeAlpha": 0.5,
+            "tapeWidthRatio": 0.10,
+            "tapeOrientation": "horizontal"
+        },
+        "box_med_brown": {
+            "pattern": "cardboard_block",
+            "baseFillColor": "#A7855E",
+            "baseFillAlpha": 1,
+            "alpha": 0.96,
+            "plankCount": 0,
+            "insetPx": 2,
+            "speckleColor": "#7e5f40",
+            "speckleAlpha": 0.16,
+            "speckleCount": 25,
+            "tapeColor": "#d9c2a2",
+            "tapeAlpha": 0.5,
+            "tapeWidthRatio": 0.10,
+            "tapeOrientation": "horizontal"
+        }
+      }
+    },
+    "ui": {
+      "showHUD": true,
+      "hudFontFamily": "\"Segoe UI\", \"Helvetica Neue\", Arial, sans-serif",
+      "hudFontSize": 16,
+      "hudFontWeight": 600,
+      "hudPanel": true,
+      "hudPanelColor": "#0f172a",
+      "hudPanelAlpha": 0.38,
+      "showTimer": false,
+      "showRemainingBlocks": false,
+      "showDroppedBlocks": true,
+      "showPoints": true,
+      "showDRT": false
+    },
+    "dueDateMarker": {
+      "enable": true,
+      "color": "#111827",
+      "widthPx": 4,
+      "heightPx": 44,
+      "alpha": 0.95
+    },
+    "missAnimation": {
+      "mode": "disintegrate",
+      "durationMs": 240,
+      "markerFlashMs": 150,
+      "flashColor": "#ef4444",
+      "disintegrate": {
+        "shardCount": 30,
+        "durationMs": 400,
+        "gravityPxPerSec2": 620,
+        "speedMinPxPerSec": 120,
+        "speedMaxPxPerSec": 250,
+        "furnaceBias": 0.15
+      }
+    },
+    "clearAnimation": {
+      "enable": true,
+      "timeoutMs": 1000,
+      "risePx": 28,
+      "startOffsetYPx": 10,
+      "textColor": "#ffe082",
+      "textStrokeColor": "#4a2f05",
+      "textStrokeThickness": 4,
+      "textMinSizePx": 16,
+      "textMaxSizePx": 40,
+      "textSizeFactor": 0.62,
+      "coin": {
+        "enable": true,
+        "showInPointsAnimation": true,
+        "showInHud": true,
+        "sizePx": 20,
+        "gapPx": 6,
+        "ridgeCount": 18
+      }
+    },
+    "endFurnace": {
+      "enable": true,
+      "offsetX": 2
+    },
+    "preset": {
+      "mode": "fixed",
+      "id": "warehouse_concrete_checker"
+    }
+  },
+  "conveyors": {
+    "nConveyors": 4,
+    "lengthPx": {
+      "type": "uniform",
+      "min": 520,
+      "max": 680
+    },
+    "speedPxPerSec": {
+      "type": "fixed",
+      "value": 26
+    }
+  },
+  "bricks": {
+    "completionMode": "hover_to_clear",
+    "interaction": {
+      "targetingArea": "conveyor"
+    },
+    "completionParams": {
+      "hover_process_rate_px_s": 12
+    },
+    "textureCategories": [
+      {
+        "id": "Target",
+        "label": "High Value",
+        "textureStyle": {
+          "type": "list",
+          "values": [
+            "present_orange_purple",
+            "present_green_blue",
+            "present_blue_silver",
+            "present_purple_gold"
+          ]
+        },
+        "value": {
+          "type": "poisson",
+          "lambda": 5,
+          "min": 3,
+          "max": 8
+        }
+      },
+      {
+        "id": "Other",
+        "label": "Distractor",
+        "textureStyle": {
+          "type": "list",
+          "values": [
+            "box_light_brown",
+            "crate_light_brown",
+            "box_med_brown",
+            "crate_med_brown",
+            "box_dark_brown",
+            "crate_dark_brown"
+          ],
+          "without_replacement": true
+        },
+        "value": {
+          "type": "poisson",
+          "lambda": 1,
+          "min": 1,
+          "max": 3
+        }
+      }
+    ],
+    "initialBricks": {
+      "type": "fixed",
+      "value": 0
+    },
+    "forcedSet": [],
+    "forcedSetPlan": {
+      "enable": true,
+      "count": 4,
+      "defaults": {
+        "width": {
+          "type": "uniform",
+          "min": 30,
+          "max": 70
+        }
+      },
+      "fields": {
+        "conveyorIndex": {
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "draw": "without_replacement"
+        },
+        "rightEdge": 150,
+        "textureCategoryId": {
+          "values": [
+            "Other",
+            "Other",
+            "Other",
+            "Other"
+          ],
+          "draw": "without_replacement"
+        }
+      }
+    },
+    "maxBricksPerTrial": 4,
+    "spawn": {
+      "ratePerSec": {
+        "type": "fixed",
+        "value": 0
+      },
+      "interSpawnDist": null,
+      "minSpacingPx": 0,
+      "byConveyor": true,
+      "maxActivePerConveyor": 1
+    }
+  },
+  "difficultyModel": {
+    "holdQualityMean": 0.6
+  },
+  "trial": {
+    "mode": "max_bricks",
+    "maxTimeSec": null
+  },
+  "experiment": {
+    "startTrialsOn": "click",
+    "startOverlay": {
+      "text": "Click to begin.",
+      "padding": "0",
+      "background": "transparent",
+      "border": "none",
+      "borderRadius": "0",
+      "boxShadow": "none",
+      "buttonStyle": {
+          "background": "black",
+          "border": "none",
+          "borderRadius": "200px",
+          "padding": "18px 32px",
+          "fontSize": "24px",
+          "outline": "none",
+          "boxShadow": "none"
+       }
+     },
+    "statsPresentation": {
+      "scopeByMetric": {
+        "points": "experiment",
+        "cleared": "trial",
+        "dropped": "trial"
+      },
+      "reset": [
+        {
+          "at": "block_end",
+          "scope": "experiment",
+          "metrics": ["points"],
+          "when": { "isPractice": true }
+        }
+      ]
+    }
+  },
+  "surveys": {
+    "postTrial": [
+      {
+        "preset": "atwit",
+        "showQuestionNumbers": false,
+        "showRequiredAsterisk": false,
+        "questionBorder": "none",
+        "questionBorderRadius": "0",
+        "prompt": "Rate your overall workload during the just-completed trial (1-10).",
+        "title": ""
+      }
+    ]
+  },
+  "manipulations": [
+    {
+      "id": "difficulty_low",
+      "label": "Low speed",
+      "overrides": {
+        "conveyors": {
+          "speedPxPerSec": {
+            "type": "fixed",
+            "value": 28
+          }
+        }
+      }
+    },
+    {
+      "id": "difficulty_high",
+      "label": "High speed",
+      "overrides": {
+        "conveyors": {
+          "speedPxPerSec": {
+            "type": "fixed",
+            "value": 34
+          }
+        }
+      }
+    },
+    {
+      "id": "condition_plan",
+      "label": "Trial-wise target presence/order plan",
+      "overrides": {},
+      "trialPlan": {
+        "schedule": {
+          "mode": "quota_shuffle"
+        },
+        "variants": [
+          {
+            "id": "control",
+            "label": "Control: no high-value brick",
+            "overrides": {
+              "bricks": {
+                "forcedSetPlan": {
+                  "fields": {
+                    "textureCategoryId": {
+                      "values": [
+                        "Other",
+                        "Other",
+                        "Other",
+                        "Other"
+                      ],
+                      "draw": "without_replacement"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "target",
+            "label": "High-value",
+            "overrides": {
+              "bricks": {
+                "forcedSetPlan": {
+                  "fields": {
+                    "textureCategoryId": {
+                      "values": [
+                        "Target",
+                        "Other",
+                        "Other",
+                        "Other"
+                      ],
+                      "draw": "without_replacement"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+        }
+    }
+  ],
+  "blocks": [
+    {
+      "label": "Practice1",
+      "phase": "practice",
+      "trials": 1,
+      "overrides": {
+              "task": {
+                  "modules": {
+                    "drt": { "enabled": false }
+                  }
+            }
+       },
+       "manipulations": [
+        "difficulty_low",
+        "condition_plan"
+      ],
+     "afterBlockScreens": [{"html": "Well done!<p>As part of this experiment, you will also be asked to respond to a flashing stimulus called the DRT.<p>Whenever you see the border of the experiment window flash red, like this<p><img src='assets/drt_border.png' alt='DRT example' style='max-width: 480px; width: 100%; height: auto;'/><p>You should press the SPACEBAR as quickly as possible. This will happen repeatedly throughout the conveyor task.<p>"},"We will now do some practice trials putting both tasks together. Remember, use your mouse cursor to open boxes by highlighting the conveyor, and press SPACEBAR whenever you see the red square."]
+    },
+    {
+      "label": "Practice2",
+      "phase": "practice",
+      "trials": 1,
+      "manipulations": [
+        "difficulty_low",
+        "condition_plan"
+      ],
+     "afterBlockScreens": ["Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes."]
+    },
+    {
+      "label": "Block1",
+      "phase": "main",
+      "trials": 4,
+      "manipulations": [
+        "difficulty_low",
+        "condition_plan"
+      ],
+      "afterBlockScreens": ["The conveyors will move a little faster now."]
+    },
+    {
+      "label": "High Difficulty",
+      "phase": "main",
+      "trials": 4,
+      "manipulations": [
+        "difficulty_high",
+        "condition_plan"
+      ]
+    }
+  ],
+  "instructions": {
+    "introPages": [
+        {"html": "Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit.<p>Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward."
+        },
+        "To open a box you can hover your mouse cursor anywhere on the conveyor belt.\nYou will see the box deteriorate and eventually once it is gone you will receive the reward.\nOpen as many boxes as possible before their deadlines.\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+    ],
+   "blockSummary": {
+      "enabled": false
+   },
+   "endPages": "That concludes the experiment.\nThank you very much for participating."
+  }
+}

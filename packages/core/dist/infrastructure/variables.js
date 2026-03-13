@@ -27,6 +27,7 @@ const SAMPLER_KEYS = new Set([
 const SAMPLE_TOKEN_RE = /^\$sample\.([A-Za-z0-9_.-]+)(?::(\d+))?$/;
 const VAR_TOKEN_RE = /^\$var\.([A-Za-z0-9_.-]+)$/;
 const NAMESPACE_TOKEN_RE = /^\$([A-Za-z_][A-Za-z0-9_]*)\.(.+)$/;
+const TEMPLATE_EXPR_RE = /\$\{([^{}]+)\}/g;
 function hasSamplerShape(value) {
     return Object.keys(value).some((key) => SAMPLER_KEYS.has(key));
 }
@@ -269,6 +270,20 @@ export function createVariableResolver(args = {}) {
                         return nested;
                 }
             }
+        }
+        if (text.includes("${")) {
+            return text.replace(TEMPLATE_EXPR_RE, (full, rawExpr) => {
+                const expr = String(rawExpr || "").trim();
+                if (!expr)
+                    return full;
+                // Allow ${var.foo} / ${sample.foo} / ${between.bar} / ${foo}
+                const normalizedExpr = expr.startsWith("$") ? expr : `$${expr}`;
+                const resolvedExpr = resolveTokenInternal(normalizedExpr, context, stack);
+                if (resolvedExpr === normalizedExpr || typeof resolvedExpr === "undefined" || resolvedExpr === null) {
+                    return full;
+                }
+                return String(resolvedExpr);
+            });
         }
         return token;
     };

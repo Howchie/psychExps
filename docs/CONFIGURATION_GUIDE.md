@@ -133,6 +133,50 @@ Task override (`configs/pm/annikaHons.json`):
 
 ---
 
+## 4.1 UI Surface: Continue Button Styling
+
+Core instruction/progression buttons (`waitForContinue`, instruction actions, block start/end, task end) can be styled globally from config.
+
+Keys:
+- `taskConfig.ui.buttonStyle` (or `taskConfig.ui.continueButtonStyle`)
+- `taskConfig.ui.autoFocusContinueButton` (default `true`)
+
+Example:
+
+```json
+{
+  "ui": {
+    "continueButtonStyle": {
+      "fontSize": "22px",
+      "padding": "14px 26px",
+      "borderRadius": "999px",
+      "outline": "none",
+      "boxShadow": "none"
+    },
+    "autoFocusContinueButton": false
+  }
+}
+```
+
+Supported style fields:
+- `padding`
+- `fontSize`
+- `fontWeight`
+- `border`
+- `borderRadius`
+- `color`
+- `background`
+- `minWidth`
+- `minHeight`
+- `outline`
+- `boxShadow`
+
+Survey submit buttons support analogous per-survey controls via survey definition:
+- `submitButtonStyle`
+- `autoFocusSubmitButton`
+
+---
+
 ## 5. Redirect Templates
 
 The framework supports dynamic redirect URLs upon completion. These are configured in the `completion.redirect` section of the core config.
@@ -519,3 +563,25 @@ Setter fields:
 - `set.itemCategory` (optional)
 - `set.correctResponse` (optional)
 - `set.responseCategory` (optional semantic label used for module response semantics)
+
+---
+
+## 11. Runtime Path Tokens
+
+For path fields that are resolved through core stimulus/config helpers (for example `basePath` + `path`), you can use:
+
+- `{runtime.assetsBase}`
+- `{runtime.configsBase}`
+
+Example:
+
+```json
+{
+  "stimuliCsv": {
+    "basePath": "{runtime.assetsBase}/pm-words",
+    "categories": {
+      "practice": "practice.csv"
+    }
+  }
+}
+```

@@ -1,6 +1,6 @@
 import { asArray, asObject, asString } from "../utils/coerce";
-import { loadTokenListFromCsvColumn } from "../web/semantics";
-import { loadStimuliPoolsFromCsv, } from "../web/stimulus";
+import { loadTokenListFromCsvColumn } from "../stimuli/semantics";
+import { loadStimuliPoolsFromCsv, } from "../stimuli/stimulus";
 const DEFAULT_POOL_DRAW = {
     mode: "without_replacement",
     shuffle: true,

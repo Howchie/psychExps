@@ -9,6 +9,7 @@ export interface FinalizeTaskRunArgs {
     } | null;
     completionStatus?: "complete" | "incomplete";
     endJatosOnSubmit?: boolean;
+    jatosHandledBySink?: boolean;
 }
 export interface FinalizeTaskRunResult {
     submittedToJatos: boolean;

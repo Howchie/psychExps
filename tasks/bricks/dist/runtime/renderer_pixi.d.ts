@@ -27,14 +27,27 @@ export declare class ConveyorRenderer {
     _resolveWarehouseProceduralStyleConfig(texCfg: any): any;
     _prepareBeltTexture(): Promise<void>;
     _buildProceduralTopdownBeltTexture(styleCfg?: {}): any;
+    _drawProceduralTopdownBeltGraphics(target: any, { beltLength, beltHeight, phaseX, styleCfg, styleScaleX, styleScaleY }?: {
+        phaseX?: number | undefined;
+        styleCfg?: {} | undefined;
+        styleScaleX?: number | undefined;
+        styleScaleY?: number | undefined;
+    }): void;
     _buildProceduralWarehouseTexture(styleCfg?: {}): any;
     _drawBelts(): void;
+    _isInteractionToggleEnabled(setting: any): boolean;
+    _getInteractionTargetMode(): "spotlight" | "conveyor" | "brick";
     _isConveyorHitAreaEnabled(): boolean;
+    _isSpotlightHitAreaEnabled(): boolean;
     _extractPointerPosition(e: any): {
         x: any;
         y: any;
     };
     _getConveyorTargetBrickId(conveyorId: any): any;
+    _syncSpotlightHoverTarget(completionMode: any): void;
+    _clearSpotlightZoneInteraction(): void;
+    _teardownSpotlightZone(): void;
+    _ensureSpotlightZone(holeX: any, holeY: any, holeW: any, holeH: any, cornerRadius: any): void;
     _drawConveyorZone(conveyorId: any, beltY: any, beltLength: any, beltHeight: any): void;
     _drawEndFurnace(conveyorId: any, beltY: any, beltHeight: any, beltLength: any): void;
     /**
@@ -45,6 +58,40 @@ export declare class ConveyorRenderer {
     updateFurnaces(dtMs: any): void;
     clampFrameDelta(dtMs: any): number;
     updateBackground(dtMs: any): void;
+    _resolveClearAnimationConfig(): {
+        enable: boolean;
+        timeoutMs: number;
+        risePx: number;
+        startOffsetYPx: number;
+        textColor: any;
+        textStrokeColor: any;
+        textStrokeThickness: number;
+        textFontFamily: string;
+        textFontWeight: string;
+        textMinSizePx: number;
+        textMaxSizePx: number;
+        textSizeFactor: number;
+        textShadowColor: any;
+        textShadowBlur: number;
+        textShadowDistance: number;
+        coin: {
+            enable: boolean;
+            showInPointsAnimation: boolean;
+            showInHud: boolean;
+            sizePx: number;
+            gapPx: number;
+            rimColor: any;
+            bodyColor: any;
+            shineColor: any;
+            shadowColor: any;
+            symbolColor: any;
+            ridgeCount: number;
+        };
+    };
+    _seedFromValue(input: any, fallback?: number): number;
+    _drawCoinPrimitive(target: any, sizePx: any, coinCfg: any, seed?: number): void;
+    _resolveHudCoinSize(text: any, uiCfg: any, clearCfg: any): number;
+    queueClearEffects(clearEvents?: never[]): void;
     queueDropEffects(dropEvents?: never[]): void;
     updateEffects(dtMs: any): void;
     _setupHUD(): void;
@@ -75,6 +122,7 @@ export declare class ConveyorRenderer {
     _drawBrickPrimitive(sprite: any, shape: any, width: any, height: any, cornerRadius: any): void;
     _buildBrickHitArea(shape: any, width: any, height: any): PIXI.Rectangle | PIXI.Ellipse | PIXI.Polygon;
     _updateSpotlight(focusState: any): void;
+    _updateHudPointsAdornment(lines: any, text: any, uiCfg: any, clearCfg?: null, layout?: null): void;
     updateHUD(stats: any, remainingMs: any, blockInfo: any): void;
     /**
      * Shows or hides the visual DRT indicator.

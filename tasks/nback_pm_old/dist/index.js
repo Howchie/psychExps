@@ -1,11 +1,11 @@
-import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, finalizeTaskRun, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, toJsPsychChoices, waitForContinue, resolveTemplate, createResponseSemantics, computeRtPhaseDurations, coerceCategoryDrawConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createCategoryPoolDrawer, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, asObject, asArray, asString, asPositiveNumberArray, toStringScreens, resolveInstructionPageSlots, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, } from "@experiments/core";
+import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, finalizeTaskRun, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, toJsPsychChoices, waitForContinue, resolveTemplate, createResponseSemantics, computeRtPhaseDurations, coerceCategoryDrawConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createCategoryPoolDrawer, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, asObject, asArray, asString, asPositiveNumberArray, toStringScreens, resolveInstructionPageSlots, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, isStimulusExportOnly, exportStimulusRows, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 class PmTaskAdapter {
     manifest = {
-        taskId: "pm",
-        label: "PM",
+        taskId: "nback_pm_old",
+        label: "NBack PM (Old)",
         variants: [
             { id: "modern", label: "NBack PM Modern", configPath: "pm/modern" },
             { id: "nirvanaExp1", label: "NBack PM Images", configPath: "pm/nirvanaExp1" },
@@ -24,6 +24,9 @@ class PmTaskAdapter {
         if (!this.context || !this.runtime) {
             throw new Error("PM Task not initialized");
         }
+        if (isStimulusExportOnly(this.context.taskConfig)) {
+            return exportPmStimulusList(this.context, this.runtime);
+        }
         await runPmJsPsychTask(this.context, this.runtime);
         return { success: true };
     }
@@ -35,7 +38,39 @@ class PmTaskAdapter {
         }
     }
 }
-export const pmAdapter = new PmTaskAdapter();
+export const nbackPmOldAdapter = new PmTaskAdapter();
+export const pmAdapter = nbackPmOldAdapter;
+function toTrialCode(trialType) {
+    if (trialType === "PM")
+        return "pm";
+    if (trialType === "N")
+        return "target";
+    if (trialType === "F")
+        return "non_target";
+    if (/^L\d+$/i.test(trialType))
+        return `lure_${trialType.slice(1)}`;
+    return trialType.toLowerCase();
+}
+async function exportPmStimulusList(context, runtime) {
+    const rows = runtime.plan.flatMap((block) => block.trials.map((trial) => ({
+        block_label: block.label,
+        block_index: block.blockIndex,
+        block_type: block.blockType,
+        n_level: block.nLevel,
+        trial_index: trial.trialIndex,
+        trial_type: trial.trialType,
+        trial_code: toTrialCode(trial.trialType),
+        item: trial.item,
+        source_category: trial.sourceCategory,
+        item_category: trial.itemCategory,
+        correct_response: trial.correctResponse,
+    })));
+    return exportStimulusRows({
+        context,
+        rows,
+        suffix: "nback_pm_old_stimulus_list",
+    });
+}
 function shouldHideCursorForPhase(phase) {
     if (typeof phase !== "string")
         return false;
@@ -43,7 +78,7 @@ function shouldHideCursorForPhase(phase) {
 }
 const PM_IMAGE_CACHE = new Map();
 async function preparePmRuntime(context) {
-    const parsed = parsePmConfig(context.taskConfig, context.selection, context.resolver);
+    const parsed = parsePmConfig(context.taskConfig, context.selection, context.resolver, context.rawTaskConfig);
     parsed.stimuliByCategory = await loadCategorizedStimulusPools({
         inlinePools: parsed.stimuliByCategory,
         csvConfig: parsed.stimuliCsv,
@@ -71,7 +106,7 @@ async function runPmJsPsychTask(context, runtime) {
     root.style.fontFamily = "system-ui";
     root.style.lineHeight = "1.4";
     ensureJsPsychCanvasCentered(root);
-    eventLogger.emit("task_start", { task: "pm", runner: "jspsych" });
+    eventLogger.emit("task_start", { task: "nback_pm_old", runner: "jspsych" });
     const timeline = [];
     pushJsPsychContinueScreen(timeline, CallFunctionPlugin, root, `<h2>${escapeHtml(parsed.title)}</h2><p>Participant: <code>${escapeHtml(runtime.participantId)}</code></p>`, "intro_start", "pm-continue-intro_start");
     for (let introIndex = 0; introIndex < parsed.instructions.introPages.length; introIndex += 1) {
@@ -183,7 +218,7 @@ async function runPmJsPsychTask(context, runtime) {
     await finalizePmRun(context, runtime, records, { runner: "jspsych", jsPsychData: jsPsychRef.data.get().values() });
 }
 async function finalizePmRun(context, runtime, records, extras) {
-    runtime.eventLogger.emit("task_complete", { task: "pm", runner: extras.runner ?? "unknown", nTrials: records.length });
+    runtime.eventLogger.emit("task_complete", { task: "nback_pm_old", runner: extras.runner ?? "unknown", nTrials: records.length });
     const payload = {
         selection: context.selection,
         mapping: runtime.parsed.mapping,
@@ -196,7 +231,7 @@ async function finalizePmRun(context, runtime, records, extras) {
         coreConfig: context.coreConfig,
         selection: context.selection,
         payload,
-        csv: { contents: recordsToCsv(records), suffix: "pm" },
+        csv: { contents: recordsToCsv(records), suffix: "nback_pm_old" },
         completionStatus: "complete",
     });
     const completeTemplate = runtime.parsed.redirectCompleteTemplate;
@@ -208,7 +243,7 @@ async function finalizePmRun(context, runtime, records, extras) {
         }
     }
     context.container.innerHTML = renderCenteredNotice({
-        title: "PM complete",
+        title: "NBack PM Old complete",
         message: "Data saved locally.",
     });
 }
@@ -529,7 +564,7 @@ function collectPmRecords(rows, participantId, variantId) {
 function getPmResponseRowsFromValues(rows, blockIndex) {
     return collectPmRecords(rows, "", "").filter((row) => row.blockIndex === blockIndex);
 }
-function parsePmConfig(config, selection, variableResolver) {
+function parsePmConfig(config, selection, variableResolver, rawConfig) {
     const mappingRaw = asObject(config.mapping);
     const targetKey = normalizeKey(asString(mappingRaw?.targetKey) || "m");
     const nonTargetKey = normalizeKey(asString(mappingRaw?.nonTargetKey) || "z");
@@ -634,12 +669,13 @@ function parsePmConfig(config, selection, variableResolver) {
     ensureStimulusCategories(stimuliByCategory, referencedCategories);
     const pmCategories = Array.from(new Set(mergedBlocks.flatMap((b) => b.activePmCategories)));
     const instructionsRaw = asObject(config.instructions);
+    const rawInstructions = asObject(rawConfig?.instructions);
     const instructionSlots = resolveInstructionPageSlots(instructionsRaw, {
         intro: [
             "Respond M for n-back targets, Z for non-targets, and SPACE for PM items.",
         ],
     });
-    const pmTemplateConfig = instructionsRaw?.pmTemplate;
+    const pmTemplateConfig = rawInstructions?.pmTemplate ?? instructionsRaw?.pmTemplate;
     const pmTemplate = typeof pmTemplateConfig === "string"
         ? (pmTemplateConfig.trim() ? pmTemplateConfig.trim() : null)
         : "PM categories for this session: {pmCategoryText}";
@@ -684,9 +720,11 @@ function parsePmConfig(config, selection, variableResolver) {
             showBlockLabel: instructionsRaw?.showBlockLabel !== false,
             preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
             pmTemplate,
-            blockIntroControlTemplate: asString(instructionsRaw?.blockIntroControlTemplate) ||
+            blockIntroControlTemplate: asString(rawInstructions?.blockIntroControlTemplate) ||
+                asString(instructionsRaw?.blockIntroControlTemplate) ||
                 "This is a {nLevel}-back block. There are no PM trials in this block.",
-            blockIntroPmTemplate: asString(instructionsRaw?.blockIntroPmTemplate) ||
+            blockIntroPmTemplate: asString(rawInstructions?.blockIntroPmTemplate) ||
+                asString(instructionsRaw?.blockIntroPmTemplate) ||
                 "This is a {nLevel}-back PM block. Watch for {pmCategoryText}.",
         },
         practiceBlocks: parsedPracticeBlocks,

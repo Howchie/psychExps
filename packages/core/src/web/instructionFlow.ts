@@ -1,5 +1,5 @@
 import { resolveInstructionPageSlots, toInstructionScreenSpecs, toStringScreens } from "../utils/coerce";
-import { escapeHtml, waitForContinue, waitForContinueChoice } from "./ui";
+import { escapeHtml, waitForContinue, waitForContinueChoice, type ButtonStyleOverrides } from "./ui";
 
 export interface InstructionFlowPages {
   intro: string[];
@@ -43,6 +43,8 @@ export interface RunInstructionScreensArgs {
   title?: string | null;
   blockLabel?: string | null;
   buttonIdPrefix: string;
+  continueButtonStyle?: ButtonStyleOverrides;
+  autoFocusContinueButton?: boolean;
   renderHtml?: (ctx: InstructionScreenRenderContext) => string;
 }
 
@@ -138,7 +140,11 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
     const html = args.renderHtml ? args.renderHtml(screen.ctx) : renderInstructionScreenHtml(screen.ctx);
     const actions = screen.ctx.pageActions ?? [];
     if (actions.length === 0) {
-      await waitForContinue(args.container, html, { buttonId: screen.buttonId });
+      await waitForContinue(args.container, html, {
+        buttonId: screen.buttonId,
+        buttonStyle: args.continueButtonStyle,
+        autoFocusButton: args.autoFocusContinueButton,
+      });
       continue;
     }
     const buttons = actions.map((action, index): { id: string; label: string; action: "continue" | "exit" } => ({
@@ -146,7 +152,11 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
       label: action.label,
       action: action.action === "exit" ? "exit" : "continue",
     }));
-    const selected = await waitForContinueChoice(args.container, html, { buttons });
+    const selected = await waitForContinueChoice(args.container, html, {
+      buttons,
+      buttonStyle: args.continueButtonStyle,
+      autoFocusFirstButton: args.autoFocusContinueButton,
+    });
     if (selected.action === "exit") {
       throw new InstructionFlowExitRequestedError();
     }

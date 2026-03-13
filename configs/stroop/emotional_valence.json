@@ -38,13 +38,13 @@
   "stimuli": {
     "responseColorTokens": ["red", "green"],
     "wordsCsv": {
-      "basePath": "/configs/stroop",
+      "basePath": "{runtime.configsBase}/stroop",
       "path": "emotional_words.csv",
       "column": "neutral"
     },
     "valenceLists": {
       "csv": {
-        "basePath": "/configs/stroop",
+        "basePath": "{runtime.configsBase}/stroop",
         "path": "emotional_words.csv",
         "columns": {
           "positive": "positive",

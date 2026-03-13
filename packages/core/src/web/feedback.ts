@@ -1,5 +1,5 @@
 import { asObject, asString, toNonNegativeNumber, toPositiveNumber } from "../utils/coerce";
-import { resolveTemplatedString } from "../web/stimulus";
+import { resolveTemplatedString } from "../stimuli/stimulus";
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
 import { drawCenteredCanvasMessage, type CanvasFrameLayout, sleep } from "./ui";
 

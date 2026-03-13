@@ -89,6 +89,7 @@ class NbackTaskAdapter implements TaskAdapter {
       { id: "pm_module_demo", label: "NBack PM Module Demo", configPath: "nback/pm_module_demo" },
       { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
       { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
+      { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
     ],
   };
 
@@ -203,6 +204,7 @@ class NbackTaskAdapter implements TaskAdapter {
         eventLogger.emit("task_start", { task: "nback", runner: "jspsych" });
       },
       onBlockStart: (ctx) => {
+        primeUpcomingBlockStimuli(parsed, ctx.block, 0, runtime.variableResolver, 10);
         eventLogger.emit("block_start", { label: ctx.block.label, nLevel: ctx.block.nLevel }, { blockIndex: ctx.blockIndex });
       },
       runTrial: async (ctx) => {
@@ -210,6 +212,7 @@ class NbackTaskAdapter implements TaskAdapter {
         const { block, trial } = ctx;
         const timeline: any[] = [];
 
+        primeUpcomingBlockStimuli(parsed, block, trial.trialIndex + 1, runtime.variableResolver, 10);
         const resolvedStimulus = resolveStimulusPath(parsed, block, trial.item, trial.trialIndex, runtime.variableResolver);
         const preloaded = await preloadNbackStimulus(resolvedStimulus);
         
@@ -1560,6 +1563,27 @@ function resolveStimulusPath(
       },
     },
   });
+}
+
+function primeUpcomingBlockStimuli(
+  parsed: ParsedNbackConfig,
+  block: PlannedBlock,
+  startTrialIndex: number,
+  resolver: VariableResolver,
+  lookaheadCount: number,
+): void {
+  if (!parsed.imageAssets.enabled) return;
+  if (lookaheadCount <= 0) return;
+  const start = Math.max(0, Math.floor(startTrialIndex));
+  const endExclusive = Number.isFinite(lookaheadCount)
+    ? Math.min(block.trials.length, start + Math.floor(lookaheadCount))
+    : block.trials.length;
+  for (let idx = start; idx < endExclusive; idx += 1) {
+    const trial = block.trials[idx];
+    if (!trial) continue;
+    const resolved = resolveStimulusPath(parsed, block, trial.item, trial.trialIndex, resolver);
+    void preloadNbackStimulus(resolved);
+  }
 }
 
 function resolveBlockStimulusVariant(

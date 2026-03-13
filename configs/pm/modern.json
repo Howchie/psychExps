@@ -30,7 +30,7 @@
     "imageUpscale": false
   },
   "stimuliCsv": {
-    "basePath": "/assets/nback-pm-modern",
+    "basePath": "{runtime.assetsBase}/nback-pm-modern",
     "idColumn": "file",
     "categories": {
       "food": "food.csv",
@@ -76,7 +76,7 @@
   },
   "imageAssets": {
     "enabled": true,
-    "basePath": "/assets/nback-pm-modern/images",
+    "basePath": "{runtime.assetsBase}/nback-pm-modern/images",
     "filenameTemplate": "{id}{variant}-photo-colour.png",
     "practiceVariant": 3,
     "mainVariants": [1, 2],

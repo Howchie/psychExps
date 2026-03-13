@@ -172,5 +172,6 @@ export declare class GameState {
      */
     forceEnd(): void;
     consumeDroppedVisuals(): any;
+    consumeClearedVisuals(): any;
 }
 export { BRICK_STATUS };

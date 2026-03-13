@@ -1,0 +1,86 @@
+{
+  "task": {
+    "implementation": "native_bricks",
+    "runner": "native",
+    "title": "Capture Present vs Crate"
+  },
+  "display": {
+    "canvasWidth": 1000,
+    "canvasHeight": 520,
+    "backgroundColor": "#7f858a",
+    "beltColor": "#e5e7eb",
+    "beltHeight": 72,
+    "beltGap": 26,
+    "brickHeight": 54,
+    "brickCornerRadius": 6,
+    "brickTextureOverlay": {
+      "enable": true,
+      "alpha": 1,
+      "baseFillAlpha": 1
+    },
+    "ui": {
+      "showHUD": false,
+      "showTimer": false,
+      "showDroppedBlocks": false,
+      "showPoints": false,
+      "showDRT": false
+    },
+    "dueDateMarker": {
+      "enable": false
+    },
+    "endFurnace": {
+      "enable": false
+    },
+    "preset": {
+      "mode": "fixed",
+      "id": "warehouse_concrete_checker"
+    }
+  },
+  "conveyors": {
+    "nConveyors": 2,
+    "lengthPx": 760,
+    "speedPxPerSec": {
+      "type": "fixed",
+      "value": 0
+    }
+  },
+  "bricks": {
+    "completionMode": "single_click",
+    "textureCategories": [
+      { "id": "TargetTex", "textureStyle": "present", "value": 15, "label": "Present" },
+      { "id": "OtherTex", "textureStyle": "crate", "value": 5, "label": "Crate" }
+    ],
+    "initialBricks": { "type": "fixed", "value": 0 },
+    "forcedSet": [
+      { "conveyorIndex": 0, "x": 170, "width": 220, "textureCategoryId": "TargetTex", "label": "Present" },
+      { "conveyorIndex": 1, "x": 170, "width": 220, "textureCategoryId": "OtherTex", "label": "Crate" }
+    ],
+    "maxBricksPerTrial": 2,
+    "spawn": {
+      "ratePerSec": { "type": "fixed", "value": 0 },
+      "interSpawnDist": null,
+      "minSpacingPx": 0,
+      "byConveyor": true,
+      "maxActivePerConveyor": 1
+    }
+  },
+  "trial": {
+    "mode": "fixed_time",
+    "maxTimeSec": 999
+  },
+  "experiment": {
+    "startTrialsOn": "click",
+    "startOverlay": {
+      "text": "Start"
+    }
+  },
+  "blocks": [
+    { "label": "Capture", "trials": 1, "manipulation": "baseline" }
+  ],
+  "manipulations": [
+    { "id": "baseline", "overrides": {} }
+  ],
+  "instructions": {
+    "introPages": []
+  }
+}

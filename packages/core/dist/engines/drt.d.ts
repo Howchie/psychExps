@@ -1,4 +1,4 @@
-import { OnlineParameterTransformRunner, type OnlineParameterTransformConfig, type OnlineParameterTransformEstimate, type OnlineTransformObservation, type OnlineTransformRuntimeData } from "../web/parameterTransforms";
+import { OnlineParameterTransformRunner, type OnlineParameterTransformConfig, type OnlineParameterTransformEstimate, type OnlineTransformObservation, type OnlineTransformRuntimeData } from "./parameterTransforms";
 import type { TaskModule, TaskModuleHandle, TaskModuleAddress, TaskModuleContext } from "../api/taskModule";
 /**
  * CORE DRT ENGINE LOGIC
@@ -163,6 +163,8 @@ export interface DrtResponseTransformRow {
     response: DrtEvent;
     observation: OnlineTransformObservation;
     estimates: OnlineParameterTransformEstimate[];
+    estimate: OnlineParameterTransformEstimate | null;
+    transformColumns: Record<string, string | number | null>;
 }
 export declare class DrtController {
     readonly enabled: boolean;
@@ -189,6 +191,7 @@ export declare class DrtController {
     stop(): DrtEngineData;
     static asTaskModule(config: ScopedDrtConfig & {
         onControllerCreated?: (c: DrtController) => void;
+        transformRunner?: OnlineParameterTransformRunner | null;
     }): TaskModule;
     handleKey(eventKey: unknown): boolean;
     exportData(): DrtEngineData;
@@ -196,6 +199,8 @@ export declare class DrtController {
     exportResponseRows(): DrtResponseTransformRow[];
     private elapsedNowMs;
     private handleEngineEvent;
+    private cloneEstimate;
+    private flattenEstimateColumns;
     private mapResponseEventToObservation;
     private scheduleNextFrame;
     private handleStimStart;
@@ -225,5 +230,6 @@ export declare class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleR
     private options;
     readonly id = "drt";
     constructor(options?: Omit<DrtControllerOptions, "transformRunner">);
+    getModularSemantics(config: ScopedDrtConfig): Record<string, string | string[]>;
     start(config: ScopedDrtConfig, address: TaskModuleAddress, context: TaskModuleContext): TaskModuleHandle<DrtModuleResult>;
 }

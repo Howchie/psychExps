@@ -21,6 +21,8 @@ The NBack task is implemented using the standardized `TaskAdapter` interface.
   - `nback/drt_block_demo`
   - `nback/pm_module_demo`
   - `nback/pm_module_export_demo`
+  - `nback/annikaHons`
+  - `nback/nirvanaExp1`
 
 ## Response mapping
 
@@ -168,7 +170,7 @@ Behavior:
 - `scope: "trial"` starts/stops DRT per trial.
 - DRT events are emitted into the task event stream and included in final payload extras (`payload.drt.scopeRecords`).
 - Transform updates are emitted as `drt_transform_estimate` events and each scope record includes transform runtime export (`scopeRecords[].transforms`).
-- DRT scope records also include row-aligned transform linkage for each DRT response (`scopeRecords[].responseRows`).
+- DRT scope records also include row-aligned transform linkage for each DRT response (`scopeRecords[].responseRows`), with per-response `estimate` and flattened `transformColumns`.
 - Visual default is a red square shown at top-center of the monitor viewport (`position: fixed`), not constrained to the task canvas.
 - Border mode applies a flashing outline to the inner framed stimulus area (the square where n-back items are drawn), not the full task host/container.
 - Block-level RT overrides are supported in `plan.blocks[].rtTask` so practice and main blocks can run different response timings.

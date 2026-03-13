@@ -92,6 +92,8 @@
       "alpha": 1,
       "scale": 1,
       "scrollFactor": 1,
+      "scrollSnapMode": "none",
+      "scrollRenderMode": "auto",
       "proceduralTopdown": {
         "tileSizePx": 120,
         "ribStepPx": 12,
@@ -128,6 +130,26 @@
         "speedMinPxPerSec": 120,
         "speedMaxPxPerSec": 250,
         "furnaceBias": 0.76
+      }
+    },
+    "clearAnimation": {
+      "enable": true,
+      "timeoutMs": 720,
+      "risePx": 28,
+      "startOffsetYPx": 10,
+      "textColor": "#ffe082",
+      "textStrokeColor": "#4a2f05",
+      "textStrokeThickness": 4,
+      "textMinSizePx": 16,
+      "textMaxSizePx": 40,
+      "textSizeFactor": 0.62,
+      "coin": {
+        "enable": true,
+        "showInPointsAnimation": true,
+        "showInHud": true,
+        "sizePx": 20,
+        "gapPx": 6,
+        "ridgeCount": 18
       }
     },
     "endFurnace": {
@@ -336,7 +358,7 @@
     }
   ],
   "instructions": {
-    "pages": [
+    "introPages": [
       {
         "title": "Task",
         "html": "<p>Four moving blocks represent four tasks. Block length indicates required processing time.</p><p>Each line ends at a vertical marker, which is that task's deadline.</p>"

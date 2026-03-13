@@ -131,7 +131,7 @@
     "endPages": "That concludes the experiment.\nThank you very much for participating.\n\nPlease read the debrief form on the next screen, then click Continue and Done so your completion can be finalized."
   },
   "stimuliCsv": {
-    "basePath": "/assets/pm-words",
+    "basePath": "{runtime.assetsBase}/pm-words",
     "idColumn": "word",
     "categories": {
       "animals": "pm_animals.csv",

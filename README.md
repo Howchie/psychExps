@@ -1,5 +1,22 @@
-# Code to build and copy:
-npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/c5656012-6f1b-4714-852f-42def6f3266e/
+# Code to build and copy (change paths):
+cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/annikaHons/
+For JATOS deployment, make a single component, add the repo directory with the above commands, set the html to index.html and the component json to:
+```
+{
+  "taskId": "nback",
+  "variantId": "annikaHons",
+  "auto": true,
+  "overrides": {
+    "data": {
+      "localSave": false
+    }
+  }
+}
+```
+Replacing the values as required. Disabling local save ensures no csv is downloaded on the participant side.
+
+# Code to run bricks difficulty estimate (from root):
+npm run difficulty -w @experiments/task-bricks --config evanderHons --trials 10000 --seed 123456 --no-by-trial-type --no-by-block-trial-type
 
 # Experiments Workspace
 
@@ -54,6 +71,19 @@ Auto-responder launch example:
 ```text
 http://localhost:5173/?task=sft&variant=default&auto=true
 ```
+
+Long-run JATOS auto-responder (headless, focus-independent):
+
+```bash
+npm run autoresponder:url -- \
+  --url "https://<your-jatos-host>/jatos/run?..." \
+  --max-minutes 130 \
+  --done-text "Thank you very much for participating"
+```
+
+Notes:
+- If `auto` is missing in the URL, the runner injects `auto=true` by default.
+- Artifacts are written to `temp/autoresponder-runs/<timestamp>/` (`result.json`, screenshot, HTML).
 
 ## Design stance
 

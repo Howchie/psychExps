@@ -121,6 +121,22 @@ export class TaskModuleRunner {
         }
         return results;
     }
+    /**
+     * Aggregates modular response semantics from all registered modules.
+     */
+    getModularSemantics(moduleConfigs, context) {
+        const combined = {};
+        for (const module of this.modules) {
+            if (module.getModularSemantics) {
+                const config = moduleConfigs[module.id];
+                if (config && config.enabled !== false) {
+                    const semantics = module.getModularSemantics(config, context);
+                    Object.assign(combined, semantics);
+                }
+            }
+        }
+        return combined;
+    }
     createScopeId(moduleId, address) {
         return `${moduleId}:${address.scope}:${address.blockIndex ?? -1}:${address.trialIndex ?? -1}`;
     }

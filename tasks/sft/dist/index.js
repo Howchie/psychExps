@@ -1,4 +1,4 @@
-import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createSurveyFromPreset, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, finalizeTaskRun, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, appendJsPsychInstructionScreens, appendJsPsychTaskIntroScreen, appendJsPsychBlockIntroScreen, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, computeRtPhaseDurations, toJsPsychChoices, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, runSurvey, createResponseSemantics, } from "@experiments/core";
+import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createSurveyFromPreset, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, finalizeTaskRun, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, appendJsPsychInstructionScreens, appendJsPsychTaskIntroScreen, appendJsPsychBlockIntroScreen, pushJsPsychContinueScreen, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, renderCenteredNotice, recordsToCsv, setCursorHidden, computeRtPhaseDurations, toJsPsychChoices, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, runSurvey, isStimulusExportOnly, exportStimulusRows, createResponseSemantics, coerceBlockSummaryConfig, buildBlockSummaryModel, renderBlockSummaryCardHtml, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
@@ -44,6 +44,28 @@ async function runSftTask(context) {
     const parsed = parseSftConfig(context.taskConfig, context.selection);
     const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
     const root = context.container;
+    const plan = buildBlockPlan(parsed, rng);
+    if (isStimulusExportOnly(context.taskConfig)) {
+        const rows = plan.flatMap((block, blockIndex) => block.trials.map((trial) => ({
+            block_index: blockIndex,
+            block_id: block.id,
+            block_label: block.label,
+            block_rule: block.rule,
+            trial_index: trial.trialIndex,
+            trial_id: trial.id,
+            rule: trial.rule,
+            layout: trial.layout,
+            stim_code: trial.stimCode,
+            trial_code: trial.stimCode.toLowerCase(),
+            stim_category: trial.stimCategory,
+            show_rule_cue: trial.showRuleCue,
+        })));
+        return exportStimulusRows({
+            context,
+            rows,
+            suffix: "sft_stimulus_list",
+        });
+    }
     root.style.maxWidth = "980px";
     root.style.margin = "0 auto";
     root.style.fontFamily = "system-ui";
@@ -89,7 +111,6 @@ async function runSftTask(context) {
             eventLogger,
         });
     }
-    const plan = buildBlockPlan(parsed, rng);
     appendBlockTimeline({
         timeline,
         container: root,
@@ -426,9 +447,28 @@ function appendBlockTimeline(args) {
             async: true,
             func: (done) => {
                 const stats = blockStatsMap.get(block.id);
-                const accuracy = stats?.accuracy ?? 0;
+                const summaryModel = buildBlockSummaryModel({
+                    config: config.blockSummary,
+                    block: {
+                        label: block.label,
+                        blockType: "main",
+                        isPractice: false,
+                    },
+                    blockIndex,
+                    fallbackStats: {
+                        total: stats?.total ?? 0,
+                        correct: stats?.correct ?? 0,
+                        accuracyPct: stats?.accuracy ?? 0,
+                    },
+                });
                 const host = resolveJsPsychContentHost(container);
-                void waitForContinue(host, `<h3>End of ${escapeHtml(block.label)}</h3><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`, { buttonId: `sft-end-${block.id}` }).then(done);
+                if (!summaryModel) {
+                    done();
+                    return;
+                }
+                void waitForContinue(host, renderBlockSummaryCardHtml(summaryModel), {
+                    buttonId: `sft-end-${block.id}`,
+                }).then(done);
             },
         });
         appendJsPsychInstructionScreens({
@@ -704,6 +744,14 @@ function parseSftConfig(config, selection) {
         responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
     };
     const rtTask = parseSftRtTaskConfig(config, legacyTiming);
+    const blockSummary = coerceBlockSummaryConfig(asObject(asObject(config.instructions)?.blockSummary)) ??
+        coerceBlockSummaryConfig({
+            enabled: true,
+            at: "before_post",
+            title: "End of {blockLabel}",
+            lines: ["Accuracy: {accuracyPct}% ({correct}/{total})"],
+            metrics: { correctField: "correct", rtField: "rt" },
+        });
     const responses = {
         orYes: asStringArray(asObject(keysRaw?.OR)?.yes, ["a"]),
         orNo: asStringArray(asObject(keysRaw?.OR)?.no, ["l"]),
@@ -768,6 +816,7 @@ function parseSftConfig(config, selection) {
         feedbackDefaults,
         rtTask,
         betweenTrialSurveys: parseBetweenTrialSurveys(config),
+        blockSummary,
     };
 }
 function parseBetweenTrialSurveys(config) {

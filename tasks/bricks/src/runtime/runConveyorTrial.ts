@@ -1,11 +1,13 @@
 // @ts-nocheck
 import {
+  applyButtonStyleOverrides,
   createDrtPresentationBridge,
   createScaledCanvasHost,
   DrtController,
   getAutoResponderProfile,
   isAutoResponderEnabled,
   normalizeKey,
+  resolveButtonStyleOverrides,
   sampleAutoHoldDurationMs,
   sampleAutoInteractionDelayMs,
 } from '@experiments/core';
@@ -23,6 +25,7 @@ export interface ConveyorTrialRunArgs {
   trialIndex: number;
   config: Record<string, unknown>;
   drtRuntime?: ConveyorTrialDrtRuntime;
+  hudBaseStats?: Partial<Record<'spawned' | 'cleared' | 'dropped' | 'points', number>>;
 }
 
 export interface ConveyorTrialData {
@@ -115,6 +118,12 @@ const resolveBricksDrtOverride = (raw: Record<string, unknown> | null | undefine
 export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<ConveyorTrialData> {
   const trial = args;
   const display_element = args.displayElement;
+  const hudBaseStats = {
+    spawned: Number(args.hudBaseStats?.spawned ?? 0),
+    cleared: Number(args.hudBaseStats?.cleared ?? 0),
+    dropped: Number(args.hudBaseStats?.dropped ?? 0),
+    points: Number(args.hudBaseStats?.points ?? 0),
+  };
   const cfg = trial.config as any;
   const baseSeed = materializeSeed(cfg.trial?.seed);
   const resolvedDisplayPresetId = resolveDisplayPresetId(cfg, {
@@ -222,21 +231,72 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   let animationFrameId: number | null = null;
   let ended = false;
   const activeAudioNodes = new Set<HTMLAudioElement>();
-  let trialStarted = !resolvedCfg.experiment?.startTrialsOnSpace;
+  const experimentCfg = (resolvedCfg?.experiment || {}) as Record<string, unknown>;
+  const explicitStartMode = typeof experimentCfg.startTrialsOn === 'string'
+    ? String(experimentCfg.startTrialsOn).trim().toLowerCase()
+    : null;
+  const startOnSpaceLegacy = Boolean(experimentCfg.startTrialsOnSpace);
+  const startOnClickLegacy = Boolean(experimentCfg.startTrialsOnClick);
+  const startTrigger: 'immediate' | 'space' | 'click' =
+    explicitStartMode === 'space' || explicitStartMode === 'click'
+      ? (explicitStartMode as 'space' | 'click')
+      : (startOnClickLegacy ? 'click' : (startOnSpaceLegacy ? 'space' : 'immediate'));
+  let trialStarted = startTrigger === 'immediate';
   const startOverlayCfg = resolvedCfg?.experiment?.startOverlay || {};
 
   let startOverlay: HTMLElement | null = null;
+  let startButton: HTMLButtonElement | null = null;
+  let clickStartHandler: (() => void) | null = null;
+  if (drtController && resolvedDrtConfig.scope === 'trial' && drtController.isRunning()) {
+    drtController.stop();
+  }
   if (!trialStarted) {
     startOverlay = document.createElement('div');
     startOverlay.className = 'trial-start-overlay';
-    startOverlay.textContent = String(startOverlayCfg.text ?? 'Press the space bar to begin.');
-    startOverlay.style.setProperty('--overlay-padding', String(startOverlayCfg.padding ?? '14px 18px'));
-    startOverlay.style.setProperty('--overlay-bg', String(startOverlayCfg.background ?? 'rgba(255, 255, 255, 0.92)'));
-    startOverlay.style.setProperty('--overlay-border', String(startOverlayCfg.border ?? '1px solid #d1d5db'));
-    startOverlay.style.setProperty('--overlay-radius', String(startOverlayCfg.borderRadius ?? '8px'));
+    if (startTrigger === 'click') {
+      startButton = document.createElement('button');
+      startButton.type = 'button';
+      startButton.className = 'exp-continue-btn';
+      startButton.textContent = String(startOverlayCfg.text ?? 'Click to begin.');
+      applyButtonStyleOverrides(
+        startButton,
+        resolveButtonStyleOverrides(
+          asRecord(startOverlayCfg.buttonStyle) ?? {
+            padding: startOverlayCfg.buttonPadding ?? startOverlayCfg.padding,
+            fontSize: startOverlayCfg.buttonFontSize,
+            fontWeight: startOverlayCfg.buttonFontWeight,
+            border: startOverlayCfg.buttonBorder,
+            borderRadius: startOverlayCfg.buttonBorderRadius,
+            color: startOverlayCfg.buttonColor,
+            background: startOverlayCfg.buttonBackground,
+            minWidth: startOverlayCfg.buttonMinWidth,
+            minHeight: startOverlayCfg.buttonMinHeight,
+            outline: startOverlayCfg.buttonOutline,
+            boxShadow: startOverlayCfg.buttonBoxShadow,
+          },
+        ),
+      );
+      startOverlay.appendChild(startButton);
+      startOverlay.style.pointerEvents = 'auto';
+    } else {
+      startOverlay.textContent = String(startOverlayCfg.text ?? 'Press the space bar to begin.');
+      startOverlay.style.pointerEvents = 'none';
+    }
+    const defaultOverlayPadding = startTrigger === 'click' ? '0' : '14px 18px';
+    const defaultOverlayBackground = startTrigger === 'click' ? 'transparent' : 'rgba(255, 255, 255, 0.92)';
+    const defaultOverlayBorder = startTrigger === 'click' ? 'none' : '1px solid #d1d5db';
+    const defaultOverlayRadius = startTrigger === 'click' ? '0' : '8px';
+    startOverlay.style.setProperty('--overlay-padding', String(startOverlayCfg.padding ?? defaultOverlayPadding));
+    startOverlay.style.setProperty('--overlay-bg', String(startOverlayCfg.background ?? defaultOverlayBackground));
+    startOverlay.style.setProperty('--overlay-border', String(startOverlayCfg.border ?? defaultOverlayBorder));
+    startOverlay.style.setProperty('--overlay-radius', String(startOverlayCfg.borderRadius ?? defaultOverlayRadius));
     startOverlay.style.setProperty('--overlay-color', String(startOverlayCfg.color ?? '#111827'));
     startOverlay.style.setProperty('--overlay-font-size', String(startOverlayCfg.fontSize ?? '18px'));
-    startOverlay.style.pointerEvents = 'none';
+    if (startOverlayCfg.boxShadow !== undefined) {
+      startOverlay.style.boxShadow = String(startOverlayCfg.boxShadow);
+    } else if (startTrigger === 'click') {
+      startOverlay.style.boxShadow = 'none';
+    }
     container.style.position = 'relative';
     container.appendChild(startOverlay);
   }
@@ -310,6 +370,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   const cleanup = (keyHandler: (e: KeyboardEvent) => void) => {
     ended = true;
     window.removeEventListener('keydown', keyHandler);
+    if (startButton && clickStartHandler) {
+      startButton.removeEventListener('click', clickStartHandler);
+    }
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
@@ -442,6 +505,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       renderer.updateBackground(dt);
       renderer.updateBelts(gameState.conveyors, dt);
       renderer.updateFurnaces(dt);
+      renderer.queueClearEffects(gameState.consumeClearedVisuals());
       renderer.queueDropEffects(gameState.consumeDroppedVisuals());
       renderer.updateEffects(dt);
 
@@ -449,14 +513,21 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       renderer.syncBricks(Array.from(gameState.bricks.values()), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
       const remainingMs = maxDuration !== null ? Math.max(0, maxDuration - gameState.elapsed) : null;
       const hudStats = gameState.getHUDStats();
+      const hudDisplayStats = {
+        ...hudStats,
+        spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? hudBaseStats.spawned : 0),
+        cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? hudBaseStats.cleared : 0),
+        dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
+        points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
+      };
       const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));
       const hudSignature = [
         String(hudStats.timeElapsedMs),
         String(hudStats.bricksActive),
-        String(hudStats.spawned),
-        String(hudStats.cleared),
-        String(hudStats.dropped),
-        String(hudStats.points),
+        String(hudDisplayStats.spawned),
+        String(hudDisplayStats.cleared),
+        String(hudDisplayStats.dropped),
+        String(hudDisplayStats.points),
         String(hudStats.focusBrickId ?? ''),
         String(hudStats.focusBrickValue ?? ''),
         String(focusState?.activeBrickId ?? ''),
@@ -468,7 +539,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       ].join('|');
       if (hudSignature !== lastHudSignature) {
         lastHudSignature = hudSignature;
-        renderer.updateHUD(hudStats, remainingMs, {
+        renderer.updateHUD(hudDisplayStats, remainingMs, {
           label: trial.blockLabel,
           drtStats: drtEnabled ? drtStatsSnapshot : undefined,
           focusInfo: focusState,
@@ -508,6 +579,17 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       }
     };
 
+    const beginTrial = () => {
+      if (trialStarted) return;
+      trialStarted = true;
+      if (startOverlay && startOverlay.parentNode) {
+        startOverlay.parentNode.removeChild(startOverlay);
+      }
+      drtController?.start(0);
+      nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
+      startLoop();
+    };
+
     if (trialStarted) {
       drtController?.start(0);
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
@@ -516,14 +598,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
 
     const keyHandler = (e: KeyboardEvent) => {
       const key = e.key;
-      if (!trialStarted && key === ' ') {
+      if (!trialStarted && startTrigger === 'space' && key === ' ') {
         e.preventDefault();
-        trialStarted = true;
-        if (startOverlay && startOverlay.parentNode) {
-          startOverlay.parentNode.removeChild(startOverlay);
-        }
-        drtController?.start(gameState.elapsed);
-        startLoop();
+        beginTrial();
         return;
       }
       if (normalizeKey(key) === normalizeKey(resolvedDrtConfig.key)) {
@@ -532,12 +609,28 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     };
 
     window.addEventListener('keydown', keyHandler);
+    clickStartHandler = () => {
+      if (trialStarted) return;
+      beginTrial();
+    };
+    if (startButton) {
+      startButton.addEventListener('click', clickStartHandler);
+      if (startOverlayCfg.buttonAutoFocus !== false) {
+        startButton.focus();
+      }
+    }
 
     if (autoEnabled && !trialStarted) {
       const autoStartDelayMs = Math.max(100, sampleAutoInteractionDelayMs() ?? 800);
       window.setTimeout(() => {
-        const event = new KeyboardEvent('keydown', { key: ' ' });
-        window.dispatchEvent(event);
+        if (startTrigger === 'click') {
+          startButton?.click();
+        } else if (startTrigger === 'space') {
+          const event = new KeyboardEvent('keydown', { key: ' ' });
+          window.dispatchEvent(event);
+        } else {
+          beginTrial();
+        }
       }, autoStartDelayMs);
     }
 

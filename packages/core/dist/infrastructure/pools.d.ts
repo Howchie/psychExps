@@ -1,4 +1,4 @@
-import { type CsvStimulusConfig } from "../web/stimulus";
+import { type CsvStimulusConfig } from "../stimuli/stimulus";
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
 export type PoolDrawMode = "ordered" | "with_replacement" | "without_replacement";
 export type CategoryDrawMode = PoolDrawMode | "round_robin";

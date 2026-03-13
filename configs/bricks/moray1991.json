@@ -2,15 +2,16 @@
   "task": {
     "implementation": "native_bricks",
     "runner": "native",
-    "title": "Bricks Moray 1991 VPT+VDD Baseline",
+    "title": "Bricks Moray 1991 VPT+VDD Test",
     "modules": {
       "drt": {
-        "enabled": false,
+        "enabled": true,
+        "scope": "trial",
         "key": " ",
         "audio": {
           "volume": 0.0
         },
-        "stimMode": "visual",
+        "stimMode": "border",
         "visual": {
           "shape": "square",
           "color": "#dc2626",
@@ -23,7 +24,19 @@
           "min": 3000,
           "max": 5000
         },
-        "responseDeadlineMs": 2500
+        "transformPersistence": "session",
+        "responseDeadlineMs": 2500,
+        "parameterTransforms": [
+          {
+            "type": "wald_conjugate",
+            "t0Mode": "min_rt_multiplier",
+            "t0Multiplier": 0.5,
+            "priorUpdate": {
+              "enabled": true,
+              "mode": "shift_means"
+            }
+          }
+        ]
       }
     }
   },
@@ -37,9 +50,16 @@
     "beltGap": 50,
     "brickHeight": 36,
     "brickCornerRadius": 3,
+    "beltTexture": {
+        "scrollSnapMode": "screen",
+        "scrollRenderMode": "auto"
+    },
     "brickTextureOverlay": {
       "enable": true,
-      "alpha": 0.14,
+      "alpha": 0.5,
+      "pattern": "wood_planks",
+      "baseFillAlpha": 1,
+      "baseFillColor": "#8b6f4e",
       "plankCount": 3,
       "seamWidthPx": 1,
       "grainCount": 4,
@@ -81,6 +101,26 @@
         "furnaceBias": 0.76
       }
     },
+    "clearAnimation": {
+      "enable": true,
+      "timeoutMs": 500,
+      "risePx": 28,
+      "startOffsetYPx": 10,
+      "textColor": "#ffe082",
+      "textStrokeColor": "#4a2f05",
+      "textStrokeThickness": 4,
+      "textMinSizePx": 16,
+      "textMaxSizePx": 40,
+      "textSizeFactor": 0.62,
+      "coin": {
+        "enable": true,
+        "showInPointsAnimation": true,
+        "showInHud": true,
+        "sizePx": 20,
+        "gapPx": 6,
+        "ridgeCount": 18
+      }
+    },
     "endFurnace": {
       "enable": true,
       "offsetX": 2
@@ -99,15 +139,18 @@
     },
     "speedPxPerSec": {
       "type": "fixed",
-      "value": 42
+      "value": 30
     }
   },
   "bricks": {
-    "completionMode": "hold_duration",
+    "completionMode": "hover_to_clear",
+    "interaction": {
+      "targetingArea": "conveyor"
+    },
     "completionParams": {
       "target_hold_ms": 1000,
-      "progress_per_perfect": 0.175,
-      "progress_curve": 1,
+      "progress_per_perfect": 0.25,
+      "progress_curve": 0.85,
       "overshoot_tolerance_ms": 180,
       "width_scaling": true,
       "width_reference_px": 80,
@@ -174,31 +217,7 @@
           ],
           "draw": "without_replacement"
         },
-        "xFraction": {
-          "values": [
-            {
-              "type": "uniform",
-              "min": 0.06,
-              "max": 0.1
-            },
-            {
-              "type": "uniform",
-              "min": 0.08,
-              "max": 0.12
-            },
-            {
-              "type": "uniform",
-              "min": 0.11,
-              "max": 0.15
-            },
-            {
-              "type": "uniform",
-              "min": 0.13,
-              "max": 0.15
-            }
-          ],
-          "draw": "without_replacement"
-        },
+        "rightEdge": 150,
         "colorCategoryId": {
           "values": [
             "Target",
@@ -234,15 +253,38 @@
   },
   "experiment": {
     "showBetweenBlockSummary": false,
-    "startTrialsOnSpace": true,
+    "startTrialsOn": "click",
     "startOverlay": {
-      "text": "Press the space bar to begin.",
-      "padding": "14px 18px",
-      "background": "rgba(255, 255, 255, 0.92)",
-      "border": "1px solid #d1d5db",
-      "borderRadius": "8px",
-      "color": "#111827",
-      "fontSize": "18px"
+      "text": "Click to begin.",
+      "padding": "0",
+      "background": "transparent",
+      "border": "none",
+      "borderRadius": "0",
+      "boxShadow": "none",
+      "buttonStyle": {
+          "background": "black",
+          "border": "none",
+          "borderRadius": "999px",
+          "padding": "18px 32px",
+          "fontSize": "24px",
+          "outline": "none",
+          "boxShadow": "none"
+       }
+     },
+    "statsPresentation": {
+      "scopeByMetric": {
+        "points": "experiment",
+        "cleared": "trial",
+        "dropped": "trial"
+      },
+      "reset": [
+        {
+          "at": "block_end",
+          "scope": "experiment",
+          "metrics": ["points"],
+          "when": { "isPractice": true }
+        }
+      ]
     }
   },
   "surveys": {
@@ -251,6 +293,8 @@
         "preset": "atwit",
         "showQuestionNumbers": false,
         "showRequiredAsterisk": false,
+        "questionBorder": "none",
+        "questionBorderRadius": "0",
         "prompt": "Rate your overall workload during the just-completed trial (1-10).",
         "title": ""
       }
@@ -271,7 +315,7 @@
     }
   ],
   "instructions": {
-    "pages": [
+    "introPages": [
       {
         "title": "Task",
         "html": "<p>Four moving blocks represent four tasks. Block length indicates required processing time.</p><p>Each line ends at a vertical marker, which is that task's deadline.</p>"
@@ -282,7 +326,7 @@
       },
       {
         "title": "Goal",
-        "html": "<p>Complete as many tasks as possible before their deadlines. No partial credit is awarded when a block reaches its deadline line.</p><p>Press the space bar to begin each trial.</p>"
+        "html": "<p>Complete as many tasks as possible before their deadlines. No partial credit is awarded when a block reaches its deadline line.</p><p>Click to begin each trial.</p>"
       }
     ]
   }

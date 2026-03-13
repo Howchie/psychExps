@@ -1,10 +1,10 @@
 import { asArray, asObject, asString } from "../utils/coerce";
-import { loadTokenListFromCsvColumn } from "../web/semantics";
+import { loadTokenListFromCsvColumn } from "../stimuli/semantics";
 import {
   loadStimuliPoolsFromCsv,
   type CsvSourceSpec,
   type CsvStimulusConfig,
-} from "../web/stimulus";
+} from "../stimuli/stimulus";
 import type { VariableResolver, VariableResolverContext } from "../infrastructure/variables";
 
 export type PoolDrawMode = "ordered" | "with_replacement" | "without_replacement";

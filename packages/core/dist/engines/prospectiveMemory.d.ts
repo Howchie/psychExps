@@ -45,6 +45,7 @@ export interface ProspectiveMemoryModuleConfig {
     schedule: ProspectiveMemoryScheduleConfig;
     rules: ProspectiveMemoryCueRule[];
     eligibleTrialTypes?: string[];
+    captureResponses?: boolean;
 }
 export interface ProspectiveMemoryModuleResult {
     responses: Array<{
@@ -55,7 +56,8 @@ export interface ProspectiveMemoryModuleResult {
 export declare class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModuleConfig, ProspectiveMemoryModuleResult> {
     readonly id = "pm";
     transformBlockPlan(block: any, config: ProspectiveMemoryModuleConfig, context: TaskModuleContext): any;
-    start(config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult>;
+    getModularSemantics(config: ProspectiveMemoryModuleConfig): Record<string, string | string[]>;
+    start(_config: ProspectiveMemoryModuleConfig, _address: TaskModuleAddress, _context: TaskModuleContext): TaskModuleHandle<ProspectiveMemoryModuleResult>;
 }
-export declare function generateProspectiveMemoryPositions(rng: SeededRandom, nTrials: number, schedule: ProspectiveMemoryScheduleConfig): number[];
+export declare function generateProspectiveMemoryPositions(rng: SeededRandom, nTrials: number, schedule: ProspectiveMemoryScheduleConfig, eligibleIndices?: Set<number>): number[];
 export declare function resolveProspectiveMemoryCueMatch(context: ProspectiveMemoryCueContext, rules: ProspectiveMemoryCueRule[]): ProspectiveMemoryCueMatch;

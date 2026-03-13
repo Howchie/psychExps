@@ -1,4 +1,4 @@
-import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createEventLogger, createMulberry32, createSemanticResolver, createResponseSemantics, appendJsPsychInstructionScreens, appendJsPsychTaskIntroScreen, appendJsPsychBlockIntroScreen, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, finalizeTaskRun, hashSeed, installKeyScrollBlocker, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, recordsToCsv, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, waitForContinue, ensureJsPsychCanvasCentered, } from "@experiments/core";
+import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createEventLogger, createMulberry32, createSemanticResolver, createResponseSemantics, appendJsPsychInstructionScreens, appendJsPsychTaskIntroScreen, appendJsPsychBlockIntroScreen, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, finalizeTaskRun, hashSeed, installKeyScrollBlocker, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, recordsToCsv, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, waitForContinue, ensureJsPsychCanvasCentered, isStimulusExportOnly, exportStimulusRows, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
@@ -48,6 +48,26 @@ async function runStroopTask(context) {
     const records = [];
     const root = context.container;
     const eventLogger = createEventLogger(selection);
+    const plannedBlocks = buildStroopPlan(parsed, baseRng);
+    if (isStimulusExportOnly(context.taskConfig)) {
+        const rows = plannedBlocks.flatMap((block, blockIndex) => block.trials.map((trial) => ({
+            block_index: blockIndex,
+            block_id: block.id,
+            block_label: block.label,
+            trial_index: trial.trialIndex,
+            trial_id: trial.id,
+            word: trial.word,
+            font_color_token: trial.fontColorToken,
+            condition_label: trial.conditionLabel,
+            trial_code: trial.conditionLabel,
+            correct_response: trial.correctResponse,
+        })));
+        return exportStimulusRows({
+            context,
+            rows,
+            suffix: "stroop_stimulus_list",
+        });
+    }
     root.style.maxWidth = "980px";
     root.style.margin = "0 auto";
     root.style.fontFamily = "system-ui";
@@ -56,7 +76,6 @@ async function runStroopTask(context) {
     if (stroopAdapter instanceof StroopTaskAdapter) {
         stroopAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
     }
-    const plannedBlocks = buildStroopPlan(parsed, baseRng);
     eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
     const timeline = [];
     appendJsPsychTaskIntroScreen({

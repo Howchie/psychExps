@@ -1,6 +1,7 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "./autoresponder";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "../runtime/autoresponder";
 import { asObject, asString } from "../utils/coerce";
 import type { CoreConfig, JSONObject } from "../api/types";
+import { normalizeKey as normalizeKeyBase } from "../infrastructure/keys";
 
 export interface TimedResponse {
   key: string | null;
@@ -17,6 +18,8 @@ export interface CaptureTimedResponseArgs {
 export interface ContinuePromptOptions {
   buttonId?: string;
   buttonLabel?: string;
+  buttonStyle?: ButtonStyleOverrides;
+  autoFocusButton?: boolean;
 }
 
 export interface ContinueChoiceOption {
@@ -27,6 +30,22 @@ export interface ContinueChoiceOption {
 
 export interface ContinueChoicePromptOptions {
   buttons: ContinueChoiceOption[];
+  buttonStyle?: ButtonStyleOverrides;
+  autoFocusFirstButton?: boolean;
+}
+
+export interface ButtonStyleOverrides {
+  padding?: string;
+  fontSize?: string;
+  fontWeight?: string | number;
+  border?: string;
+  borderRadius?: string;
+  color?: string;
+  background?: string;
+  minWidth?: string;
+  minHeight?: string;
+  outline?: string;
+  boxShadow?: string;
 }
 
 export interface CenteredNoticeOptions {
@@ -152,9 +171,7 @@ export function setCursorHidden(hidden: boolean): void {
 }
 
 export function normalizeKey(key: string): string {
-  const k = String(key || "").toLowerCase();
-  if (k === " " || k === "spacebar" || k === "space") return "space";
-  return k;
+  return normalizeKeyBase(key);
 }
 
 export function toJsPsychKey(key: string): string {
@@ -342,6 +359,51 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms)));
 }
 
+export function resolveButtonStyleOverrides(raw: unknown): ButtonStyleOverrides | undefined {
+  const node = asObject(raw);
+  if (!node) return undefined;
+  const style: ButtonStyleOverrides = {};
+  const assignString = (target: keyof ButtonStyleOverrides, ...keys: string[]) => {
+    for (const key of keys) {
+      const value = asString((node as Record<string, unknown>)[key]);
+      if (value && value.trim().length > 0) {
+        (style as Record<string, unknown>)[target] = value.trim();
+        return;
+      }
+    }
+  };
+  assignString("padding", "padding");
+  assignString("fontSize", "fontSize", "font_size");
+  assignString("border", "border");
+  assignString("borderRadius", "borderRadius", "border_radius");
+  assignString("color", "color");
+  assignString("background", "background");
+  assignString("minWidth", "minWidth", "min_width");
+  assignString("minHeight", "minHeight", "min_height");
+  assignString("outline", "outline");
+  assignString("boxShadow", "boxShadow", "box_shadow");
+  const fontWeightRaw = (node as Record<string, unknown>).fontWeight ?? (node as Record<string, unknown>).font_weight;
+  if (typeof fontWeightRaw === "string" || typeof fontWeightRaw === "number") {
+    style.fontWeight = fontWeightRaw;
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+export function applyButtonStyleOverrides(button: HTMLButtonElement, style: ButtonStyleOverrides | undefined): void {
+  if (!style) return;
+  if (style.padding !== undefined) button.style.padding = style.padding;
+  if (style.fontSize !== undefined) button.style.fontSize = style.fontSize;
+  if (style.fontWeight !== undefined) button.style.fontWeight = String(style.fontWeight);
+  if (style.border !== undefined) button.style.border = style.border;
+  if (style.borderRadius !== undefined) button.style.borderRadius = style.borderRadius;
+  if (style.color !== undefined) button.style.color = style.color;
+  if (style.background !== undefined) button.style.background = style.background;
+  if (style.minWidth !== undefined) button.style.minWidth = style.minWidth;
+  if (style.minHeight !== undefined) button.style.minHeight = style.minHeight;
+  if (style.outline !== undefined) button.style.outline = style.outline;
+  if (style.boxShadow !== undefined) button.style.boxShadow = style.boxShadow;
+}
+
 export async function waitForContinue(
   container: HTMLElement,
   html: string,
@@ -352,6 +414,7 @@ export async function waitForContinue(
   container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:900px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
   const btn = container.querySelector(`#${buttonId}`);
   if (!(btn instanceof HTMLButtonElement)) return;
+  applyButtonStyleOverrides(btn, options.buttonStyle);
   if (isAutoResponderEnabled()) {
     const delayMs = sampleAutoContinueDelayMs() ?? 0;
     await sleep(delayMs);
@@ -378,7 +441,9 @@ export async function waitForContinue(
     };
     btn.addEventListener("click", onClick);
     window.addEventListener("keydown", onKey);
-    btn.focus();
+    if (options.autoFocusButton !== false) {
+      btn.focus();
+    }
   });
   clearScreen();
 }
@@ -399,6 +464,12 @@ export async function waitForContinueChoice(
     )
     .join(" ");
   container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:980px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;">${buttonsHtml}</p></div></div>`;
+  for (const button of buttons) {
+    const node = container.querySelector(`#${button.id}`);
+    if (node instanceof HTMLButtonElement) {
+      applyButtonStyleOverrides(node, options.buttonStyle);
+    }
+  }
 
   if (isAutoResponderEnabled()) {
     const preferred = buttons.find((b) => b.action === "continue") ?? buttons[0];
@@ -449,7 +520,7 @@ export async function waitForContinueChoice(
     window.addEventListener("keydown", onKey);
 
     const firstButton = container.querySelector(`#${buttons[0]?.id ?? ""}`);
-    if (firstButton instanceof HTMLButtonElement) {
+    if (firstButton instanceof HTMLButtonElement && options.autoFocusFirstButton !== false) {
       firstButton.focus();
     }
   });

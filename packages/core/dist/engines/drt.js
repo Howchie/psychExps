@@ -1,8 +1,8 @@
 import { asArray, asObject, asString, toNonNegativeNumber, toPositiveNumber, toUnitNumber } from "../utils/coerce";
-import { normalizeKey } from "../web/ui";
+import { normalizeKey } from "../infrastructure/keys";
 import { SeededRandom } from "../infrastructure/random";
 import { createSampler } from "../infrastructure/sampling";
-import { OnlineParameterTransformRunner, } from "../web/parameterTransforms";
+import { OnlineParameterTransformRunner, } from "./parameterTransforms";
 const defaultStats = () => ({
     presented: 0,
     hits: 0,
@@ -133,6 +133,13 @@ export function coerceScopedDrtConfig(base, overrideRaw) {
     const audioRaw = asObject(overrideRaw.audio);
     const borderRaw = asObject(overrideRaw.border);
     const stimModesRaw = asArray(overrideRaw.stimModes).map((entry) => asString(entry)).filter((entry) => (entry === "visual" || entry === "auditory" || entry === "border"));
+    const hasStimModesOverride = Object.prototype.hasOwnProperty.call(overrideRaw, "stimModes");
+    const hasExplicitStimMode = Boolean(stimModeRaw) || legacyStimType === "audio" || legacyStimType === "border";
+    const resolvedStimMode = (stimModeRaw ||
+        (legacyStimType === "audio" ? "auditory" : legacyStimType === "border" ? "border" : base.stimMode));
+    const resolvedStimModes = hasStimModesOverride
+        ? (stimModesRaw.length > 0 ? stimModesRaw : undefined)
+        : (hasExplicitStimMode ? undefined : base.stimModes);
     return {
         ...base,
         enabled: typeof overrideRaw.enabled === "boolean" ? overrideRaw.enabled : base.enabled,
@@ -153,9 +160,8 @@ export function coerceScopedDrtConfig(base, overrideRaw) {
                 return [];
             return [parsed];
         }),
-        stimMode: (stimModeRaw ||
-            (legacyStimType === "audio" ? "auditory" : legacyStimType === "border" ? "border" : base.stimMode)),
-        stimModes: stimModesRaw.length > 0 ? stimModesRaw : base.stimModes,
+        stimMode: resolvedStimMode,
+        stimModes: resolvedStimModes,
         visual: {
             ...base.visual,
             ...(visualRaw
@@ -380,6 +386,7 @@ export class DrtController {
                     displayElement: context.displayElement,
                     borderTargetElement: context.borderTargetElement,
                     borderTargetRect: context.borderTargetRect,
+                    transformRunner: config.transformRunner ?? null,
                 });
                 config.onControllerCreated?.(controller);
                 controller.start(0);
@@ -430,6 +437,15 @@ export class DrtController {
                 intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
                 aux: estimate.aux ? { ...estimate.aux } : undefined,
             })),
+            estimate: row.estimate
+                ? {
+                    ...row.estimate,
+                    values: { ...row.estimate.values },
+                    intervals: row.estimate.intervals ? { ...row.estimate.intervals } : undefined,
+                    aux: row.estimate.aux ? { ...row.estimate.aux } : undefined,
+                }
+                : null,
+            transformColumns: { ...row.transformColumns },
         }));
     }
     elapsedNowMs() {
@@ -445,20 +461,52 @@ export class DrtController {
         if (!observation)
             return;
         const estimates = this.transformRunner.observe(observation);
+        const primaryEstimate = estimates.length > 0 ? this.cloneEstimate(estimates[0]) : null;
         this.responseRows.push({
             responseIndex: this.responseRows.length,
             response: { ...event },
             observation: { ...observation },
-            estimates: estimates.map((estimate) => ({
-                ...estimate,
-                values: { ...estimate.values },
-                intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
-                aux: estimate.aux ? { ...estimate.aux } : undefined,
-            })),
+            estimates: estimates.map((estimate) => this.cloneEstimate(estimate)),
+            estimate: primaryEstimate,
+            transformColumns: this.flattenEstimateColumns(primaryEstimate),
         });
         for (const estimate of estimates) {
             this.hooks.onTransformEstimate?.(estimate, { responseEvent: event, observation });
         }
+    }
+    cloneEstimate(estimate) {
+        return {
+            ...estimate,
+            values: { ...estimate.values },
+            intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
+            aux: estimate.aux ? { ...estimate.aux } : undefined,
+        };
+    }
+    flattenEstimateColumns(estimate) {
+        if (!estimate)
+            return {};
+        const out = {
+            transform_model_id: estimate.modelId,
+            transform_model_type: estimate.modelType,
+            transform_sample_size: estimate.sampleSize,
+        };
+        for (const [key, value] of Object.entries(estimate.values ?? {})) {
+            out[String(key)] = Number(value);
+        }
+        for (const [key, interval] of Object.entries(estimate.intervals ?? {})) {
+            out[`${String(key)}_ci_lower`] = Number(interval.lower);
+            out[`${String(key)}_ci_upper`] = Number(interval.upper);
+        }
+        for (const [key, value] of Object.entries(estimate.aux ?? {})) {
+            if (value === null) {
+                out[`aux_${String(key)}`] = null;
+                continue;
+            }
+            if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+                out[`aux_${String(key)}`] = typeof value === "boolean" ? String(value) : value;
+            }
+        }
+        return out;
     }
     mapResponseEventToObservation(event) {
         const hasStimulus = typeof event.stim_id === "string" && event.stim_id.length > 0;
@@ -565,6 +613,29 @@ export class DrtController {
         const element = this.ensureVisualElement();
         if (!element)
             return;
+        if (typeof this.config.visual.leftPx === "number") {
+            const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+            const leftPx = rect ? rect.left + this.config.visual.leftPx : this.config.visual.leftPx;
+            element.style.left = `${Math.round(leftPx)}px`;
+            element.style.transform = "";
+        }
+        else {
+            const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+            if (rect && rect.width > 0) {
+                element.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+            }
+            else {
+                element.style.left = "50%";
+            }
+            element.style.transform = "translateX(-50%)";
+        }
+        const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+        if (rect && rect.height > 0) {
+            element.style.top = `${Math.round(rect.top + this.config.visual.topPx)}px`;
+        }
+        else {
+            element.style.top = `${this.config.visual.topPx}px`;
+        }
         element.style.display = "block";
     }
     hideVisual() {
@@ -608,10 +679,8 @@ export class DrtController {
         else {
             const rect = this.borderTargetRect?.() ?? this.resolveBorderTarget()?.getBoundingClientRect();
             if (!rect || rect.width <= 0 || rect.height <= 0) {
-                overlay.style.left = "0px";
-                overlay.style.top = "0px";
-                overlay.style.width = "100vw";
-                overlay.style.height = "100vh";
+                overlay.style.display = "none";
+                return;
             }
             else {
                 overlay.style.left = `${Math.round(rect.left)}px`;
@@ -672,6 +741,11 @@ export class DrtModule {
     id = "drt";
     constructor(options = {}) {
         this.options = options;
+    }
+    getModularSemantics(config) {
+        if (!config.enabled || !config.key)
+            return {};
+        return { drt: [normalizeKey(config.key)] };
     }
     start(config, address, context) {
         const controller = new DrtController(config, {}, {

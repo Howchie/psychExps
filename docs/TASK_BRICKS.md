@@ -52,6 +52,8 @@ Top-level optional:
   - `surveys.postTrial[]` supports preset surveys (`"atwit"`, `"nasa_tlx"`)
   - use `showQuestionNumbers: false` to hide `Q1`/`1.` labels when rendering survey items
   - use `showRequiredAsterisk: false` to hide required `*` markers while keeping required validation
+  - use `questionBorder: "none"` to remove per-question border boxes
+  - optional `questionBorderRadius` sets per-question border radius (for example `"0"` or `"8px"`)
 
 ## 3. Runtime config sections
 
@@ -62,10 +64,36 @@ The merged per-trial config is passed to conveyor runtime. Common sections:
 - `drt`
 - `trial`
 - `experiment`
+- `experiment.statsPresentation` (optional HUD stats scoping + reset rules)
 - `debug`
 - `difficultyModel`
 - `selfReport`
 - `instructions`
+
+### DRT config (Bricks)
+
+Bricks reads DRT from `task.modules.drt` (and per-trial/per-block overrides via `modules.drt` on merged trial config).
+
+Key fields:
+- `enabled`: boolean
+- `scope`: `"trial"` or `"block"`
+- `parameterTransforms`: array of transform configs (for example `[{ "type": "wald_conjugate" }]`)
+- `transformPersistence`: `"scope"` (default) or `"session"`
+
+`wald_conjugate` transform options:
+- `t0Mode`: `"fixed"` (default) or `"min_rt_multiplier"` (aliases: `t0_mode`, `t0mod`)
+- `t0`: fixed non-decision time in ms when `t0Mode = "fixed"`
+- `t0Multiplier`: multiplier for minimum observed finite DRT RT when `t0Mode = "min_rt_multiplier"` (aliases: `t0_multiplier`, `t0mult`)
+
+`transformPersistence` controls moving-window/prior continuity for online transforms:
+- `"scope"`: reset transform window/priors when each DRT scope ends.
+- `"session"`: keep transform window/priors across all DRT scopes in the task run.
+
+How to get per-block vs per-experiment transform history:
+- Per-block moving window: set `scope: "block"` and `transformPersistence: "scope"`.
+- Per-experiment moving window: set `transformPersistence: "session"` (with either `scope: "block"` or `"trial"`).
+
+Important: `parameterTransforms` must be an array of objects. A string value like `"wald_conjugate"` is ignored by coercion.
 
 `instructions` supports either simple strings or rich page objects:
 - string page: `"Read this"`
@@ -77,6 +105,21 @@ Instruction text/html supports `{dot.path}` interpolation against the merged Bri
 For detailed runtime field definitions, use:
 - [bricks-runtime-config-schema.md](./bricks-runtime-config-schema.md)
 
+Completion-mode note (`hover_to_clear`):
+- Hover processing is rate-based.
+- Bricks keep moving while hovered, and visible width is depleted from the right edge at a processing rate (`completionParams.hover_process_rate_px_s`).
+- If that config key is omitted, the runtime default is the brick/conveyor progress-rate variable `brick.speed` (not a fixed constant).
+
+Interaction targeting note:
+- Default targeting is direct brick hit-testing.
+- Preferred selector is `bricks.interaction.targetingArea`:
+  - `"brick"` (default)
+  - `"conveyor"` (click/hover anywhere on a lane targets the front-most brick on that lane)
+  - `"spotlight"` (click/hover anywhere in spotlight area targets the currently spotlighted brick)
+- Legacy aliases remain supported:
+  - `bricks.interaction.conveyorWideHitArea: true` -> `"conveyor"`
+  - `bricks.interaction.spotlightWideHitArea: true` -> `"spotlight"`
+
 ## 4. Event/data outputs
 
 Per-trial conveyor output (`ConveyorTrialData`) is appended to `records`.
@@ -87,29 +130,72 @@ Final payload submitted/saved by `finalizeTaskRun`:
 {
   "selection": {},
   "records": [],
+  "drt_rows": [],
   "events": [],
   "drtScopes": []
 }
 ```
 
 Notes on `drt` outputs:
-- Trial-scoped DRT: `record.drt` reflects that trial scope snapshot; transform rows are attached as `drt_transforms` and `drt_response_rows`.
+- Trial-scoped DRT: `record.drt` reflects that trial scope snapshot (including `transform_latest` when available); response-level DRT rows are attached as `drt_response_rows`.
 - Block-scoped DRT: `record.drt.stats` is converted to per-trial deltas for accurate trial/block summaries, and cumulative snapshots are preserved in `record.drt_cumulative`.
+- For trial-scoped DRT, Bricks gates DRT onset to the active trial run window only (from trial start trigger to trial end), so post-trial survey screens are outside DRT scope.
+
+`drt_response_rows` now carries per-response transform data directly:
+- `estimate`: primary transform estimate for that response (or `null`)
+- `transformColumns`: flattened scalar columns for analysis-ready long format (for example `drift_rate`, `threshold`, `t0`, and CI bounds like `drift_rate_ci_lower`/`drift_rate_ci_upper`)
 
 Notes on runtime performance outputs:
-- Each trial record now includes `record.performance` with frame pacing summary (`avg_fps`, frame overrun ratios, tick cost) and renderer counters (active/peak effects, skipped effects at cap, active/peak brick sprites).
+- Each trial record now includes `record.performance` with frame pacing summary (`avg_fps`, frame overrun ratios, tick cost) and renderer counters (active/peak effects, skipped effects at cap, clear-point effects queued, active/peak brick sprites).
 
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.
 
-CSV export is task-specific and currently includes:
-- `block_label`
-- `block_index`
-- `trial_index`
-- `trial_duration_ms`
-- `end_reason`
-- `cleared`
-- `dropped`
-- `spawned`
-- `drt_hits`
-- `drt_misses`
+CSV export is DRT-row oriented (`bricks_drt_rows`) and includes:
+- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation)
+- spotlight context at response time (`spotlight_brick_id`, `spotlight_conveyor_id`) when available
+- all flattened columns from each `drt_response_rows` entry (including dynamic transform fields in `transformColumns`)
+
+## 5. HUD stats scope/reset
+
+Bricks supports config-driven HUD stat scoping via `experiment.statsPresentation`:
+
+- scopes: `trial`, `block`, `experiment`
+- per-metric override: `scopeByMetric.spawned|cleared|dropped|points`
+- optional reset rules (`reset[]`):
+  - `at: "block_start" | "block_end"`
+  - target `scope: "block" | "experiment"`
+  - optional metric subset (`metrics[]`)
+  - optional conditions (`when.isPractice`, `when.phaseIn`, `when.labelIn`, `when.manipulationIdIn`)
+
+Example pattern:
+- show `cleared`/`dropped` per trial
+- show `points` cumulative across experiment
+- then reset only experiment points after practice blocks
+
+## 6. Trial start trigger
+
+`experiment` supports click/space start trigger configuration:
+- `startTrialsOn: "space" | "click"` (preferred)
+- legacy aliases remain supported:
+  - `startTrialsOnSpace: true` -> `"space"`
+  - `startTrialsOnClick: true` -> `"click"`
+- click-start button styling can be set in `experiment.startOverlay.buttonStyle` (same style fields as core continue buttons).
+
+## 7. Pixi stimulus PNG capture (instructions assets)
+
+Use the capture script to export brick stimuli exactly as rendered by the Bricks Pixi runtime.
+
+Command:
+
+```bash
+npm run render:stimuli -w @experiments/task-bricks -- \
+  --styles present,crate,target_present \
+  --mode brick \
+  --output-dir apps/web/public/assets/bricks-stimuli
+```
+
+Notes:
+- `--mode brick` exports a crop around the brick (default), `--mode scene` exports the full canvas scene.
+- Script starts `@experiments/web` dev server automatically if needed.
+- Output filenames are `<style>.<mode>.png` (for example `present.brick.png`).

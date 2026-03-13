@@ -1,6 +1,7 @@
 import { deepClone, deepMerge } from "../infrastructure/deepMerge";
 import type { JSONObject } from "../api/types";
 import type { VariableResolver } from "./variables";
+import { resolveRuntimePath } from "./runtimePaths";
 
 /**
  * Manages loading and merging of experiment configurations.
@@ -10,13 +11,14 @@ export class ConfigurationManager {
    * Loads a JSON configuration file from the specified path.
    */
   async load(path: string): Promise<JSONObject> {
-    const response = await fetch(path, { cache: "no-store" });
+    const resolvedPath = resolveRuntimePath(path);
+    const response = await fetch(resolvedPath, { cache: "no-store" });
     if (!response.ok) {
-      throw new Error(`Failed to load config at ${path} (HTTP ${response.status})`);
+      throw new Error(`Failed to load config at ${resolvedPath} (HTTP ${response.status})`);
     }
     const parsed = (await response.json()) as JSONObject;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`Config is not an object: ${path}`);
+      throw new Error(`Config is not an object: ${resolvedPath}`);
     }
     return parsed;
   }

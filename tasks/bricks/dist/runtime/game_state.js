@@ -32,6 +32,7 @@ export class GameState {
         this.conveyorsById = new Map();
         this.spawnControllers = [];
         this.pendingDropVisuals = [];
+        this.pendingClearVisuals = [];
         this.nextBrickId = 0;
         this.globalInterSpawnSampler = this._makeInterSpawnSampler(this.config?.bricks?.spawn || {});
         this.nextGlobalSpawnAt = 0;
@@ -141,11 +142,17 @@ export class GameState {
             const maxX = Math.max(0, conveyor.length - entryWidth);
             const xRaw = Number(this._sampleField(entry?.x));
             const xFractionRaw = Number(this._sampleField(entry?.xFraction ?? entry?.x_fraction));
+            const rightEdgeRaw = Number(this._sampleField(entry?.rightEdge ?? entry?.right_edge));
+            const rightEdgeFractionRaw = Number(this._sampleField(entry?.rightEdgeFraction ?? entry?.right_edge_fraction));
             const x = Number.isFinite(xRaw)
                 ? Math.max(0, Math.min(maxX, xRaw))
-                : Number.isFinite(xFractionRaw)
-                    ? Math.max(0, Math.min(maxX, xFractionRaw * maxX))
-                    : (index + 1) / (set.length + 1) * maxX;
+                : Number.isFinite(rightEdgeRaw)
+                    ? Math.max(0, Math.min(maxX, rightEdgeRaw - entryWidth))
+                    : Number.isFinite(rightEdgeFractionRaw)
+                        ? Math.max(0, Math.min(maxX, rightEdgeFractionRaw * conveyor.length - entryWidth))
+                        : Number.isFinite(xFractionRaw)
+                            ? Math.max(0, Math.min(maxX, xFractionRaw * maxX))
+                            : (index + 1) / (set.length + 1) * maxX;
             const sampledValue = this._sampleField(entry?.value);
             const sampledWorkDeadlineMs = this._sampleField(entry?.workDeadlineMs ?? entry?.work_deadline_ms);
             const sampledTargetHoldMs = this._sampleField(entry?.targetHoldMs ?? entry?.target_hold_ms);
@@ -825,7 +832,17 @@ export class GameState {
         const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
         if (status === BRICK_STATUS.CLEARED) {
             this.stats.cleared += 1;
-            this.stats.points += Math.max(0, Number(brick.value ?? 0));
+            const gainedPoints = Math.max(0, Number(brick.value ?? 0));
+            this.stats.points += gainedPoints;
+            this.pendingClearVisuals.push({
+                brickId: brick.id,
+                conveyorId: brick.conveyorId,
+                x: brick.x,
+                y: brick.y,
+                width: brick.width,
+                height: brick.height,
+                value: gainedPoints,
+            });
         }
         else if (status === BRICK_STATUS.DROPPED) {
             this.stats.dropped += 1;
@@ -947,6 +964,12 @@ export class GameState {
                 note: 'Click ignored in hold_duration mode; use hold interactions.'
             });
         }
+        else if (mode === 'hover_to_clear') {
+            this._log('brick_click_progress', {
+                brick_id: brick.id,
+                note: 'Click ignored in hover_to_clear mode; progress is driven by hover exposure.'
+            });
+        }
         else {
             // Future modes can plug in here (e.g., cognitive tasks).
             this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
@@ -1044,13 +1067,12 @@ export class GameState {
             const speed = conveyor ? conveyor.speed : brick.speed;
             brick.speed = speed;
             const hoverCanProcess = completionMode === 'hover_to_clear' && brick.isHovered && this._canWorkOnBrick(brick).ok;
+            brick.x += speed * dt;
             if (hoverCanProcess) {
                 const referenceWidth = Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1));
-                const progressDelta = (speed * dt) / referenceWidth;
+                const processRatePxPerSec = Math.max(0, Number(this.config?.bricks?.completionParams?.hover_process_rate_px_s ?? speed) || speed);
+                const progressDelta = (processRatePxPerSec * dt) / referenceWidth;
                 brick.clearProgress = Math.max(0, Math.min(1, (brick.clearProgress ?? 0) + progressDelta));
-            }
-            else {
-                brick.x += speed * dt;
             }
             if (completionMode === 'hover_to_clear' && (brick.clearProgress ?? 0) >= 1) {
                 this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
@@ -1185,6 +1207,14 @@ export class GameState {
         }
         const output = this.pendingDropVisuals.slice();
         this.pendingDropVisuals.length = 0;
+        return output;
+    }
+    consumeClearedVisuals() {
+        if (!this.pendingClearVisuals.length) {
+            return [];
+        }
+        const output = this.pendingClearVisuals.slice();
+        this.pendingClearVisuals.length = 0;
         return output;
     }
 }

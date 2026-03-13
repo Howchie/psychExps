@@ -1,4 +1,4 @@
-import { escapeHtml, waitForContinue } from "./ui";
+import { escapeHtml, waitForContinue, type ButtonStyleOverrides } from "./ui";
 import { runInstructionScreens, renderTaskIntroCardHtml, renderBlockIntroCardHtml } from "./instructionFlow";
 import type { InstructionScreenSpec } from "../utils/coerce";
 
@@ -13,6 +13,8 @@ export interface RunTaskIntroFlowArgs {
   introPages: InstructionPage[];
   afterIntroPages?: InstructionPage[][];
   buttonIdPrefix: string;
+  continueButtonStyle?: ButtonStyleOverrides;
+  autoFocusContinueButton?: boolean;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -32,6 +34,8 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
       section: `taskIntroBefore_${idx}`,
       title: args.title,
       buttonIdPrefix: `${args.buttonIdPrefix}-intro-before-${idx}`,
+      continueButtonStyle: args.continueButtonStyle,
+      autoFocusContinueButton: args.autoFocusContinueButton,
       renderHtml: args.renderHtml,
     });
   }
@@ -39,7 +43,11 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
     await waitForContinue(
       args.container,
       renderTaskIntroCardHtml({ title: args.title, participantId: args.participantId }),
-      { buttonId: `${args.buttonIdPrefix}-intro-start` },
+      {
+        buttonId: `${args.buttonIdPrefix}-intro-start`,
+        buttonStyle: args.continueButtonStyle,
+        autoFocusButton: args.autoFocusContinueButton,
+      },
     );
   }
 
@@ -49,6 +57,8 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
     section: "intro",
     title: args.title,
     buttonIdPrefix: args.buttonIdPrefix,
+    continueButtonStyle: args.continueButtonStyle,
+    autoFocusContinueButton: args.autoFocusContinueButton,
     renderHtml: args.renderHtml,
   });
   for (let idx = 0; idx < (args.afterIntroPages ?? []).length; idx += 1) {
@@ -59,6 +69,8 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
       section: `taskIntroAfter_${idx}`,
       title: args.title,
       buttonIdPrefix: `${args.buttonIdPrefix}-intro-after-${idx}`,
+      continueButtonStyle: args.continueButtonStyle,
+      autoFocusContinueButton: args.autoFocusContinueButton,
       renderHtml: args.renderHtml,
     });
   }
@@ -79,6 +91,8 @@ export interface RunBlockUiFlowArgs {
   postBlockPages?: InstructionPage[];
   beforePostInsertions?: InstructionPage[][];
   afterPostInsertions?: InstructionPage[][];
+  continueButtonStyle?: ButtonStyleOverrides;
+  autoFocusContinueButton?: boolean;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -101,6 +115,8 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         section: `${sectionPrefix}_${idx}`,
         blockLabel,
         buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}-${sectionPrefix}-${idx}`,
+        continueButtonStyle: args.continueButtonStyle,
+        autoFocusContinueButton: args.autoFocusContinueButton,
         renderHtml: args.renderHtml,
       });
     }
@@ -113,7 +129,11 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         introText: args.introText,
         showBlockLabel: args.showBlockLabel,
       }),
-      { buttonId: `${args.buttonIdPrefix}-block-start-${args.blockIndex}` },
+      {
+        buttonId: `${args.buttonIdPrefix}-block-start-${args.blockIndex}`,
+        buttonStyle: args.continueButtonStyle,
+        autoFocusButton: args.autoFocusContinueButton,
+      },
     );
   };
   const runPreScreens = async (): Promise<void> => {
@@ -123,6 +143,8 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
       section: "preBlock",
       blockLabel,
       buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
+      continueButtonStyle: args.continueButtonStyle,
+      autoFocusContinueButton: args.autoFocusContinueButton,
       renderHtml: args.renderHtml,
     });
   };
@@ -154,6 +176,8 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
         section: `${sectionPrefix}_${idx}`,
         blockLabel,
         buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}-${sectionPrefix}-${idx}`,
+        continueButtonStyle: args.continueButtonStyle,
+        autoFocusContinueButton: args.autoFocusContinueButton,
         renderHtml: args.renderHtml,
       });
     }
@@ -165,6 +189,8 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
     section: "postBlock",
     blockLabel,
     buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
+    continueButtonStyle: args.continueButtonStyle,
+    autoFocusContinueButton: args.autoFocusContinueButton,
     renderHtml: args.renderHtml,
   });
   await runInsertionGroups(args.afterPostInsertions, "blockEndAfterPost");
@@ -179,6 +205,8 @@ export interface RunTaskEndFlowArgs {
   completeTitle?: string;
   completeMessage?: string;
   doneButtonLabel?: string;
+  continueButtonStyle?: ButtonStyleOverrides;
+  autoFocusContinueButton?: boolean;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -198,6 +226,8 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       section: `taskEndBefore_${idx}`,
       title: args.completeTitle ?? "Complete",
       buttonIdPrefix: `${args.buttonIdPrefix}-end-before-${idx}`,
+      continueButtonStyle: args.continueButtonStyle,
+      autoFocusContinueButton: args.autoFocusContinueButton,
       renderHtml: args.renderHtml,
     });
   }
@@ -207,6 +237,8 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
     section: "end",
     title: args.completeTitle ?? "Complete",
     buttonIdPrefix: args.buttonIdPrefix,
+    continueButtonStyle: args.continueButtonStyle,
+    autoFocusContinueButton: args.autoFocusContinueButton,
     renderHtml: args.renderHtml ?? ((ctx) => `<h3>${escapeHtml(args.completeTitle ?? "Complete")}</h3><p>${escapeHtml(ctx.pageText)}</p>`),
   });
   for (let idx = 0; idx < (args.afterEndPages ?? []).length; idx += 1) {
@@ -217,6 +249,8 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       section: `taskEndAfter_${idx}`,
       title: args.completeTitle ?? "Complete",
       buttonIdPrefix: `${args.buttonIdPrefix}-end-after-${idx}`,
+      continueButtonStyle: args.continueButtonStyle,
+      autoFocusContinueButton: args.autoFocusContinueButton,
       renderHtml: args.renderHtml,
     });
   }
@@ -227,6 +261,8 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
     {
       buttonId: `${args.buttonIdPrefix}-complete`,
       buttonLabel: args.doneButtonLabel ?? "Done",
+      buttonStyle: args.continueButtonStyle,
+      autoFocusButton: args.autoFocusContinueButton,
     },
   );
 }

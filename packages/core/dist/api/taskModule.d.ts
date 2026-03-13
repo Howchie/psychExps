@@ -36,6 +36,10 @@ export interface TaskModule<TConfig = any, TResult = any> {
      */
     transformBlockPlan?(block: any, config: TConfig, context: TaskModuleContext): any;
     /**
+     * Optional: Called during initialization to retrieve modular response mappings.
+     */
+    getModularSemantics?(config: TConfig, context: TaskModuleContext): Record<string, string | string[]>;
+    /**
      * Called when the module's scope starts.
      * Returns a handle to the active module instance.
      */
@@ -116,6 +120,10 @@ export declare class TaskModuleRunner {
      * Stops all modules at the specified scope.
      */
     stopScopedModules(address: TaskModuleAddress): TaskModuleResult[];
+    /**
+     * Aggregates modular response semantics from all registered modules.
+     */
+    getModularSemantics(moduleConfigs: Record<string, any>, context: TaskModuleContext): Record<string, string | string[]>;
     private createScopeId;
     /**
      * Standardized start method for a module instance.

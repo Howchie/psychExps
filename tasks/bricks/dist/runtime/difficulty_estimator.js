@@ -38,19 +38,15 @@ const holdDurationDemand = (brick, config) => {
     };
 };
 const hoverToClearDemand = (brick, conveyor, config) => {
-    const difficultyModel = config?.difficultyModel || {};
     const width = Math.max(1, finiteOr(brick?.width, finiteOr(config?.display?.brickWidth, 160)));
     const speed = Math.max(1e-6, finiteOr(conveyor?.speed, finiteOr(brick?.speed, 1)));
-    const hoverAcquireMs = Math.max(0, finiteOr(difficultyModel.hoverAcquireMs, 120));
-    const hoverTrackingEfficiency = Math.max(0.1, finiteOr(difficultyModel.hoverTrackingEfficiency, 0.9));
-    const pureHoverMs = (width / speed) * 1000;
-    const expectedClearMs = hoverAcquireMs + (pureHoverMs / hoverTrackingEfficiency);
+    const processRatePxPerSec = Math.max(0, finiteOr(config?.bricks?.completionParams?.hover_process_rate_px_s, speed)) || speed;
+    const expectedClearMs = (width / processRatePxPerSec) * 1000;
     return {
         mode: 'hover_to_clear',
         width_px: width,
         speed_px_per_sec: speed,
-        hover_acquire_ms: hoverAcquireMs,
-        hover_tracking_efficiency: hoverTrackingEfficiency,
+        hover_process_rate_px_s: processRatePxPerSec,
         expected_clear_ms: expectedClearMs
     };
 };
@@ -93,13 +89,32 @@ const brickDemandEstimate = (brick, conveyor, config) => {
         }
     });
 };
-const brickSupplyEstimate = (brick, conveyor) => {
+const hoverToClearAvailableMs = (brick, conveyor, config) => {
+    const speed = Math.max(1e-6, finiteOr(conveyor?.speed, finiteOr(brick?.speed, 1)));
+    const length = Math.max(0, finiteOr(conveyor?.length, 0));
+    const x = Math.max(0, finiteOr(brick?.x, 0));
+    const width = Math.max(1, finiteOr(brick?.width, 1));
+    const rightEdgeDistance = length - (x + width);
+    const processRatePxPerSec = Math.max(0, finiteOr(config?.bricks?.completionParams?.hover_process_rate_px_s, speed)) || speed;
+    const edgeVelocityPxPerSec = speed - processRatePxPerSec;
+    if (rightEdgeDistance <= 0) {
+        return 0;
+    }
+    if (edgeVelocityPxPerSec <= 0) {
+        return Number.POSITIVE_INFINITY;
+    }
+    return (rightEdgeDistance / edgeVelocityPxPerSec) * 1000;
+};
+const brickSupplyEstimate = (brick, conveyor, config) => {
     const speed = Math.max(1e-6, finiteOr(conveyor?.speed, finiteOr(brick?.speed, 1)));
     const length = Math.max(0, finiteOr(conveyor?.length, 0));
     const x = Math.max(0, finiteOr(brick?.x, 0));
     const width = Math.max(1, finiteOr(brick?.width, 1));
     const remainingDistancePx = Math.max(0, length - (x + width));
-    const availableMs = (remainingDistancePx / speed) * 1000;
+    const completionMode = config?.bricks?.completionMode;
+    const availableMs = completionMode === 'hover_to_clear'
+        ? hoverToClearAvailableMs(brick, conveyor, config)
+        : (remainingDistancePx / speed) * 1000;
     return {
         speed_px_per_sec: speed,
         conveyor_length_px: length,
@@ -114,7 +129,7 @@ export const estimateTrialDifficulty = (gameState, config) => {
     const perBrick = bricks.map((brick) => {
         const conveyor = conveyorById.get(brick.conveyorId);
         const demand = brickDemandEstimate(brick, conveyor, config);
-        const supply = brickSupplyEstimate(brick, conveyor);
+        const supply = brickSupplyEstimate(brick, conveyor, config);
         const localLoad = demand.expected_clear_ms / Math.max(1e-6, supply.available_ms);
         return {
             brick_id: brick.id,

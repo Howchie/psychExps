@@ -1,3 +1,4 @@
+import { type ButtonStyleOverrides } from "./ui";
 export type SurveyAnswerValue = string | number | null;
 export type SurveyAnswerMap = Record<string, SurveyAnswerValue>;
 export interface SurveyOption {
@@ -32,8 +33,12 @@ export interface SurveyDefinition {
     description?: string;
     showQuestionNumbers?: boolean;
     showRequiredAsterisk?: boolean;
+    questionBorder?: string;
+    questionBorderRadius?: string;
     questions: SurveyQuestion[];
     submitLabel?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
     computeScores?: (answers: SurveyAnswerMap) => Record<string, number> | undefined;
 }
 export interface SurveyRunResult {
@@ -48,6 +53,8 @@ export interface SurveyRunResult {
 export interface RunSurveyOptions {
     buttonId?: string;
     className?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
 }
 export declare function runSurvey(container: HTMLElement, survey: SurveyDefinition, options?: RunSurveyOptions): Promise<SurveyRunResult>;
 export type NasaTlxSubscaleId = "mental_demand" | "physical_demand" | "temporal_demand" | "performance" | "effort" | "frustration";
@@ -59,6 +66,10 @@ export interface AtwitSurveyOptions {
     max?: number;
     showQuestionNumbers?: boolean;
     showRequiredAsterisk?: boolean;
+    questionBorder?: string;
+    questionBorderRadius?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
     required?: boolean;
 }
 export declare function createAtwitSurvey(options?: AtwitSurveyOptions): SurveyDefinition;
@@ -73,6 +84,10 @@ export interface NasaTlxSurveyOptions {
     initial?: number;
     showQuestionNumbers?: boolean;
     showRequiredAsterisk?: boolean;
+    questionBorder?: string;
+    questionBorderRadius?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
     showValue?: boolean;
     required?: boolean;
 }
@@ -86,6 +101,10 @@ export type SurveyPresetSpec = {
     max?: number;
     showQuestionNumbers?: boolean;
     showRequiredAsterisk?: boolean;
+    questionBorder?: string;
+    questionBorderRadius?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
     required?: boolean;
 } | {
     preset: "nasa_tlx";
@@ -99,6 +118,10 @@ export type SurveyPresetSpec = {
     initial?: number;
     showQuestionNumbers?: boolean;
     showRequiredAsterisk?: boolean;
+    questionBorder?: string;
+    questionBorderRadius?: string;
+    submitButtonStyle?: ButtonStyleOverrides;
+    autoFocusSubmitButton?: boolean;
     showValue?: boolean;
     required?: boolean;
 };

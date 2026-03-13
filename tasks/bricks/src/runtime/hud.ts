@@ -7,6 +7,7 @@ export const buildHUDLines = ({ stats, remainingMs, blockLabel, drtStats, focusI
   const showRemainingBlocks = uiConfig.showRemainingBlocks !== false;
   const showDroppedBlocks = uiConfig.showDroppedBlocks !== false;
   const showPoints = uiConfig.showPoints === true;
+  const pointsLabel = String(uiConfig.pointsLabel ?? 'Points');
   const showDRT = drtEnabled && uiConfig.showDRT !== false;
   const hasTimer = showTimer && Number.isFinite(remainingMs);
   const timeSec = hasTimer ? Math.max(0, remainingMs) / 1000 : null;
@@ -20,17 +21,16 @@ export const buildHUDLines = ({ stats, remainingMs, blockLabel, drtStats, focusI
   }
   perfParts.push(`Cleared: ${stats.cleared}`);
   if (showDroppedBlocks) {
-    perfParts.push(`Dropped: ${stats.dropped}`);
+    perfParts.push(`Lost: ${stats.dropped}`);
   }
   if (showPoints) {
-    perfParts.push(`Points: ${stats.points ?? 0}`);
+    perfParts.push(`${pointsLabel}: ${stats.points ?? 0}`);
   }
   lines.push(perfParts.join(' | '));
   if (showDRT) {
     lines.push(`DRT Hits: ${drtStats?.hits ?? 0} | Misses: ${drtStats?.misses ?? 0}`);
   }
   if (focusInfo?.enabled) {
-    lines.push(`Focus brick: ${stats.focusBrickId ?? '--'} | Value: ${stats.focusBrickValue ?? 0}`);
     if (focusInfo.ammoLabel) {
       lines.push(`Current cue: ${focusInfo.ammoLabel}`);
     }

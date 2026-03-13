@@ -27,7 +27,7 @@ const normalizeTextureStyleId = (value) => {
   if (typeof value !== 'string') {
     return '';
   }
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
 };
 
 const BUILTIN_BRICK_TEXTURE_STYLES = {
@@ -41,34 +41,6 @@ const BUILTIN_BRICK_TEXTURE_STYLES = {
     seamColor: '#3b2f22',
     highlightColor: '#f5e9d8',
   },
-  other_crate: {
-    pattern: 'wood_planks',
-    baseFillColor: '#7a6044',
-    baseFillAlpha: 1,
-    alpha: 0.96,
-    plankCount: 3,
-    seamWidthPx: 1,
-    grainCount: 5,
-    nailRadiusPx: 1.1,
-    insetPx: 2,
-    topSheenAlpha: 0.16,
-    seamColor: '#2f261c',
-    highlightColor: '#eadcc8',
-  },
-  other_steel_case: {
-    pattern: 'wood_planks',
-    baseFillColor: '#596677',
-    baseFillAlpha: 1,
-    alpha: 0.9,
-    plankCount: 4,
-    seamWidthPx: 1,
-    grainCount: 1,
-    nailRadiusPx: 0.7,
-    insetPx: 2,
-    topSheenAlpha: 0.2,
-    seamColor: '#1f2937',
-    highlightColor: '#dbe7f5',
-  },
   present: {
     pattern: 'gift_wrap',
     baseFillColor: '#ff2d2d',
@@ -80,47 +52,7 @@ const BUILTIN_BRICK_TEXTURE_STYLES = {
     ribbonInsetPx: 2,
     topSheenAlpha: 0.08,
     paperPatternColor: '#ffffff',
-    paperPatternAlpha: 0.2,
-  },
-  target_present: {
-    pattern: 'gift_wrap',
-    baseFillColor: '#1e40ff',
-    baseFillAlpha: 1,
-    alpha: 1,
-    ribbonColor: '#ffe14d',
-    ribbonAlpha: 1,
-    ribbonWidthRatio: 0.21,
-    ribbonInsetPx: 2,
-    topSheenAlpha: 0.1,
-    paperPatternColor: '#ffffff',
-    paperPatternAlpha: 0.2,
-  },
-  target_teal_present: {
-    pattern: 'gift_wrap',
-    baseFillColor: '#00a34a',
-    baseFillAlpha: 1,
-    alpha: 1,
-    ribbonColor: '#ff3b30',
-    ribbonAlpha: 0.96,
-    ribbonWidthRatio: 0.2,
-    ribbonInsetPx: 2,
-    topSheenAlpha: 0.1,
-    paperPatternColor: '#ffffff',
-    paperPatternAlpha: 0.2,
-  },
-  neutral_tote: {
-    pattern: 'wood_planks',
-    baseFillColor: '#6b7280',
-    baseFillAlpha: 0.86,
-    alpha: 0.5,
-    plankCount: 2,
-    seamWidthPx: 1,
-    grainCount: 2,
-    nailRadiusPx: 0.8,
-    insetPx: 3,
-    topSheenAlpha: 0.26,
-    seamColor: '#374151',
-    highlightColor: '#e5e7eb',
+    paperPatternAlpha: 0.38,
   },
   pizza: {
     pattern: 'pizza',
@@ -135,79 +67,49 @@ const BUILTIN_BRICK_TEXTURE_STYLES = {
     toppingColor: '#7f1d1d',
     sliceLineColor: '#7c2d12',
   },
-  target_pizza: {
-    pattern: 'pizza',
-    baseFillColor: '#e2b07b',
-    baseFillAlpha: 1,
-    alpha: 1,
-    sliceCount: 8,
-    toppingCount: 9,
-    crustColor: '#92400e',
-    sauceColor: '#b91c1c',
-    cheeseColor: '#fde047',
-    toppingColor: '#7f1d1d',
-    sliceLineColor: '#7c2d12',
-  },
   box: {
-    pattern: 'wood_planks',
-    baseFillColor: '#8a6b4d',
+    pattern: 'checkerboard',
+    baseFillColor: '#b4936b',
+    checkerColorA: '#9a7651',
+    checkerColorB: '#5f6976',
+    checkerCellPx: 2,
     baseFillAlpha: 1,
-    alpha: 0.95,
-    plankCount: 2,
-    seamWidthPx: 1,
-    grainCount: 4,
-    nailRadiusPx: 1,
+    alpha: 0.9,
     insetPx: 2,
-    topSheenAlpha: 0.2,
-    seamColor: '#382b1f',
-    highlightColor: '#ecddc8',
+    topSheenAlpha: 0,
+    highlightColor: '#f1e5d5',
   },
-  crate_damaged: {
-    pattern: 'wood_planks',
-    baseFillColor: '#74583d',
+  checkerboard: {
+    pattern: 'checkerboard',
+    baseFillColor: '#7d8794',
+    checkerColorA: '#a9b4c2',
+    checkerColorB: '#7e5f40',
+    checkerCellPx: 12,
     baseFillAlpha: 1,
-    alpha: 0.96,
-    plankCount: 3,
-    seamWidthPx: 2,
-    grainCount: 7,
-    nailRadiusPx: 1.2,
+    alpha: 0.9,
     insetPx: 2,
-    topSheenAlpha: 0.12,
-    seamColor: '#2a2118',
-    highlightColor: '#dbcab2',
+    topSheenAlpha: 0,
+    highlightColor: '#f8fafc',
   },
   parcel_label: {
-    pattern: 'wood_planks',
-    baseFillColor: '#8a7a63',
+    pattern: 'cardboard_block',
+    baseFillColor: '#b4936b',
     baseFillAlpha: 1,
-    alpha: 0.92,
-    plankCount: 2,
-    seamWidthPx: 1,
-    grainCount: 3,
-    nailRadiusPx: 0.9,
+    alpha: 0.96,
     insetPx: 2,
-    topSheenAlpha: 0.2,
-    seamColor: '#4b3f30',
-    highlightColor: '#f0e8dc',
+    topSheenAlpha: 0,
+    highlightColor: '#f1e5d5',
+    fiberColor: '#9a7651',
+    fiberAlpha: 0,
+    fiberStepPx: 6,
+    speckleColor: '#7e5f40',
+    speckleAlpha: 0,
+    speckleCount: 0,
     labelPatch: true,
-    labelPatchColor: '#f8fafc',
-    labelPatchAlpha: 0.82,
-    labelPatchBorderColor: '#334155',
+    labelPatchColor: '#fbfdff',
+    labelPatchAlpha: 0.86,
+    labelPatchBorderColor: '#475569',
     labelBarcodeColor: '#111827',
-  },
-  parcel_damaged: {
-    pattern: 'wood_planks',
-    baseFillColor: '#7a6a54',
-    baseFillAlpha: 1,
-    alpha: 0.94,
-    plankCount: 3,
-    seamWidthPx: 1,
-    grainCount: 6,
-    nailRadiusPx: 1.1,
-    insetPx: 2,
-    topSheenAlpha: 0.1,
-    seamColor: '#3f3428',
-    highlightColor: '#e2d5c4',
   },
   chest: {
     pattern: 'wood_planks',
@@ -519,8 +421,10 @@ export class ConveyorRenderer {
     this.brickSprites = new Map();
     this.hudElements = {};
     this.hudBackground = null;
+    this.hudPointsAdornment = null;
     this._lastHudText = '';
     this._lastHudPanelSignature = '';
+    this._lastHudPointsAdornmentSignature = '';
     this.drtGraphics = null;
     this.backgroundTexture = null;
     this.backgroundTextureOwned = false;
@@ -535,6 +439,11 @@ export class ConveyorRenderer {
     this.conveyorHovered = new Set();
     this.conveyorHoverTarget = new Map();
     this.conveyorPointerPos = new Map();
+    this.spotlightZone = null;
+    this.spotlightHoldStart = null;
+    this.spotlightHoveredBrickId = null;
+    this.spotlightPointerPos = { x: null, y: null };
+    this.spotlightPointerInside = false;
     this.effectVisuals = [];
     this.dueMarkerAnchors = new Map();
     this.furnaceAnchors = new Map();
@@ -554,6 +463,7 @@ export class ConveyorRenderer {
     this.perfStats = {
       effectDropsSkipped: 0,
       effectsDestroyed: 0,
+      clearEffectsQueued: 0,
       peakActiveEffects: 0,
       peakBrickSprites: 0
     };
@@ -727,6 +637,14 @@ export class ConveyorRenderer {
         return;
       }
       const renderMode = String(texCfg.renderMode ?? 'image').toLowerCase();
+      const scrollRenderMode = String(texCfg.scrollRenderMode ?? 'auto').trim().toLowerCase();
+      const useProceduralRedraw = renderMode === 'procedural_topdown' && scrollRenderMode !== 'tiling';
+      if (useProceduralRedraw) {
+        // Redraw mode does not sample from a texture atlas.
+        this.beltTexture = null;
+        this.beltTextureOwned = false;
+        return;
+      }
       if (renderMode === 'procedural_topdown') {
         const styleCfg = this._resolveBeltProceduralStyleConfig(texCfg);
         const key = makeMaterialKey(
@@ -840,6 +758,156 @@ export class ConveyorRenderer {
     });
     g.destroy();
     return texture;
+  }
+
+  _drawProceduralTopdownBeltGraphics(target, {
+    beltLength,
+    beltHeight,
+    phaseX = 0,
+    styleCfg = {},
+    styleScaleX = 1,
+    styleScaleY = 1
+  } = {}) {
+    if (!target) {
+      return;
+    }
+    const length = Math.max(1, Number(beltLength) || 1);
+    const height = Math.max(1, Number(beltHeight) || 1);
+    const pixelStep = (() => {
+      const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
+      return 1 / resolution;
+    })();
+    const snap = (value) => Math.round((Number(value) || 0) / pixelStep) * pixelStep;
+    const snapSize = (value, min = pixelStep) => Math.max(min, snap(value));
+
+    const tileSize = Math.max(48, Number(styleCfg.tileSizePx ?? 120));
+    const patternScaleX = Math.max(1e-6, (height / tileSize) * Math.max(0.01, Number(styleScaleX) || 1));
+    const patternScaleY = Math.max(1e-6, (height / tileSize) * Math.max(0.01, Number(styleScaleY) || 1));
+    const ribStep = Math.max(pixelStep * 2, snapSize(Number(styleCfg.ribStepPx ?? 12) * patternScaleX, pixelStep * 2));
+    const ribWidthRaw = snapSize(Number(styleCfg.ribWidthPx ?? 8) * patternScaleX, pixelStep);
+    const ribWidth = Math.max(pixelStep, Math.min(ribStep - pixelStep, ribWidthRaw));
+    const sideBand = Math.max(pixelStep, snapSize(Number(styleCfg.sideBandPx ?? Math.round(tileSize * 0.16)) * patternScaleY, pixelStep));
+    const sideCleatStep = Math.max(pixelStep * 2, snapSize(Number(styleCfg.sideCleatStepPx ?? 16) * patternScaleX, pixelStep * 2));
+    const sideCleatLen = Math.max(pixelStep, snapSize(Number(styleCfg.sideCleatLengthPx ?? Math.round((Number(styleCfg.sideCleatStepPx ?? 16)) * 0.75)) * patternScaleX, pixelStep));
+    const shadeAlpha = Math.max(0, Math.min(1, Number(styleCfg.shadeAlpha ?? 0.55)));
+    const beltBase = toPixiColor(styleCfg.baseColor ?? '#2a323b');
+    const beltShade = toPixiColor(styleCfg.shadeColor ?? '#202730');
+    const ribColor = toPixiColor(styleCfg.ribColor ?? '#4d5863');
+    const grooveColor = toPixiColor(styleCfg.grooveColor ?? '#2b333c');
+    const sideLineDark = toPixiColor(styleCfg.sideLineDarkColor ?? '#111827');
+    const sideLineLight = toPixiColor(styleCfg.sideLineLightColor ?? '#9ca3af');
+    const cleatColor = toPixiColor(styleCfg.sideCleatColor ?? '#6b7280');
+    const scuffColor = toPixiColor(styleCfg.scuffColor ?? '#cbd5e1');
+    const patchColor = toPixiColor(styleCfg.patchColor ?? '#111827');
+    const scuffCount = Math.max(0, Math.floor(Number(styleCfg.scuffCount ?? 0)));
+    const patchCount = Math.max(0, Math.floor(Number(styleCfg.patchCount ?? 0)));
+    const workingHeight = Math.max(pixelStep, snapSize(height - sideBand * 2 - (4 * patternScaleY), pixelStep));
+    // Procedural redraw uses screen-space phase so belt texture speed can match brick advection.
+    // Keep sign so visual direction matches prior belt motion convention.
+    const phase = snap(-(Number(phaseX) || 0));
+
+    const wrappedOffset = (step) => {
+      const s = Math.max(1, Number(step) || 1);
+      const rem = ((phase % s) + s) % s;
+      return -rem;
+    };
+
+    target.clear();
+    target.beginFill(beltBase, 1);
+    target.drawRect(0, 0, length, height);
+    target.endFill();
+
+    if (shadeAlpha > 0) {
+      target.beginFill(beltShade, shadeAlpha);
+      target.drawRect(0, Math.floor(height * 0.5), length, Math.ceil(height * 0.5));
+      target.endFill();
+    }
+
+    for (let x = wrappedOffset(ribStep); x < length + ribStep; x += ribStep) {
+      target.beginFill(ribColor, 0.9);
+      const xPos = snap(x);
+      target.drawRect(xPos, snap(sideBand + 2), ribWidth, workingHeight);
+      target.endFill();
+
+      target.beginFill(grooveColor, 0.92);
+      const grooveX = snap(xPos + ribWidth);
+      const grooveW = Math.max(pixelStep, snapSize(ribStep - ribWidth, pixelStep));
+      target.drawRect(grooveX, snap(sideBand + 2), grooveW, workingHeight);
+      target.endFill();
+    }
+
+    for (let x = wrappedOffset(sideCleatStep); x < length + sideCleatStep; x += sideCleatStep) {
+      const xPos = snap(x);
+      const cleatH = Math.max(pixelStep, snapSize(6 * patternScaleY, pixelStep));
+      const cleatYTop = snap(Math.max(pixelStep, sideBand - (8 * patternScaleY)));
+      const cleatYBottom = snap(Math.min(height - (7 * patternScaleY), height - sideBand + (2 * patternScaleY)));
+      target.beginFill(cleatColor, 0.7);
+      target.drawRoundedRect(xPos, cleatYTop, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
+      target.drawRoundedRect(xPos, cleatYBottom, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
+      target.endFill();
+    }
+
+    const lineH = Math.max(pixelStep, snapSize(2 * patternScaleY, pixelStep));
+    target.beginFill(sideLineDark, 0.65);
+    target.drawRect(0, snap(sideBand - (2 * patternScaleY)), length, lineH);
+    target.drawRect(0, snap(height - sideBand), length, lineH);
+    target.endFill();
+
+    target.beginFill(sideLineLight, 0.2);
+    target.drawRect(0, snap(sideBand), length, lineH);
+    target.drawRect(0, snap(height - sideBand - (2 * patternScaleY)), length, lineH);
+    target.endFill();
+
+    const tileSpanX = Math.max(pixelStep, snapSize(tileSize * patternScaleX, pixelStep));
+    const tileSpanY = Math.max(pixelStep, snapSize(tileSize * patternScaleY, pixelStep));
+    const tileStart = wrappedOffset(tileSpanX) - tileSpanX;
+    const prand = (seed) => {
+      let x = (seed >>> 0) || 1;
+      x ^= (x << 13) >>> 0;
+      x ^= x >>> 17;
+      x ^= (x << 5) >>> 0;
+      return (x >>> 0) / 0x100000000;
+    };
+
+    // Re-apply procedural wear accents so preset styles (e.g. damaged belts) stay distinguishable.
+    if (scuffCount > 0) {
+      for (let tx = tileStart; tx < length + tileSpanX; tx += tileSpanX) {
+        for (let i = 0; i < scuffCount; i += 1) {
+          const s0 = (i * 73856093) ^ 0x1f123bb5;
+          const s1 = (i * 19349663) ^ 0x7a4d4c95;
+          const s2 = (i * 83492791) ^ 0x12b9b0a1;
+          const s3 = (i * 2654435761) ^ 0x4f1bbcdc;
+          const px = snap(tx + (prand(s0) * tileSize * patternScaleX));
+          const py = snap(prand(s1) * tileSpanY);
+          const w = snapSize((6 + prand(s2) * 16) * patternScaleX, pixelStep);
+          const h = snapSize((1 + prand(s3) * 2) * patternScaleY, pixelStep);
+          target.beginFill(scuffColor, 0.08 + prand(s1 ^ 0x9e3779b9) * 0.18);
+          target.drawRoundedRect(px, py, w, h, Math.max(pixelStep, h * 0.4));
+          target.endFill();
+        }
+      }
+    }
+
+    if (patchCount > 0) {
+      for (let tx = tileStart; tx < length + tileSpanX; tx += tileSpanX) {
+        for (let i = 0; i < patchCount; i += 1) {
+          const s0 = (i * 2654435761) ^ 0x55aaff11;
+          const s1 = (i * 374761393) ^ 0x9b93f6d5;
+          const s2 = (i * 1103515245) ^ 0x3c6ef372;
+          const s3 = (i * 668265263) ^ 0xda3e39cb;
+          const w = snapSize((10 + prand(s2) * 16) * patternScaleX, pixelStep);
+          const h = snapSize((5 + prand(s3) * 6) * patternScaleY, pixelStep);
+          const px = snap(tx + (prand(s0) * Math.max(pixelStep, tileSpanX - w)));
+          const py = snap(prand(s1) * Math.max(pixelStep, tileSpanY - h));
+          target.beginFill(patchColor, 0.14 + prand(s2 ^ 0x6a09e667) * 0.22);
+          target.drawRect(px, py, w, h);
+          target.endFill();
+          target.beginFill(sideLineLight, 0.18);
+          target.drawRect(px + pixelStep, py + pixelStep, Math.max(pixelStep, w - pixelStep * 2), pixelStep);
+          target.endFill();
+        }
+      }
+    }
   }
 
   _buildProceduralWarehouseTexture(styleCfg = {}) {
@@ -1043,11 +1111,20 @@ export class ConveyorRenderer {
     this.beltLayer.removeChildren();
     this.interactionLayer?.removeChildren?.();
     this.conveyorZones.clear();
+    this.spotlightZone = null;
+    this.spotlightHoldStart = null;
+    this.spotlightHoveredBrickId = null;
+    this.spotlightPointerInside = false;
     this.beltVisuals = [];
     this.dueMarkerAnchors.clear();
     this.furnaceAnchors.clear();
     this.furnaceVisuals.clear();
     const useTexture = !!this.beltTexture && (this.config?.display?.beltTexture?.enable === true);
+    const beltTexCfg = this.config?.display?.beltTexture || {};
+    const beltRenderMode = String(beltTexCfg.renderMode ?? 'image').toLowerCase();
+    const scrollRenderMode = String(beltTexCfg.scrollRenderMode ?? 'auto').trim().toLowerCase();
+    const useProceduralRedraw = beltRenderMode === 'procedural_topdown' && scrollRenderMode !== 'tiling';
+    const proceduralStyleCfg = useProceduralRedraw ? this._resolveBeltProceduralStyleConfig(beltTexCfg) : null;
     const alpha = Number(this.config?.display?.beltTexture?.alpha ?? 1);
     const scaleX = Number(this.config?.display?.beltTexture?.scaleX ?? this.config?.display?.beltTexture?.scale ?? 1);
     const scaleY = Number(this.config?.display?.beltTexture?.scaleY ?? this.config?.display?.beltTexture?.scale ?? 1);
@@ -1060,7 +1137,34 @@ export class ConveyorRenderer {
           ? runtimeLengths[i]
           : fallbackLength;
       const length = Math.max(0, sampledLength);
-      if (useTexture) {
+      if (useProceduralRedraw) {
+        const g = new PIXI.Graphics();
+        g.x = 0;
+        const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
+        const pixelStep = 1 / resolution;
+        g.y = pixelSnap ? Math.round(y / pixelStep) * pixelStep : y;
+        g.roundPixels = pixelSnap;
+        this._drawProceduralTopdownBeltGraphics(g, {
+          beltLength: length,
+          beltHeight,
+          phaseX: 0,
+          styleCfg: proceduralStyleCfg,
+          styleScaleX: scaleX,
+          styleScaleY: scaleY
+        });
+        this.beltLayer.addChild(g);
+        this.beltVisuals.push({
+          type: 'procedural_redraw',
+          node: g,
+          offsetX: 0,
+          pixelSnap,
+          beltLength: length,
+          beltHeight,
+          styleCfg: proceduralStyleCfg,
+          styleScaleX: scaleX,
+          styleScaleY: scaleY
+        });
+      } else if (useTexture) {
         let sprite;
         try {
           sprite = new PIXI.TilingSprite({ texture: this.beltTexture, width: length, height: beltHeight });
@@ -1122,9 +1226,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _isConveyorHitAreaEnabled() {
-    const interactionCfg = this.config?.bricks?.interaction || {};
-    const setting = interactionCfg.conveyorWideHitArea;
+  _isInteractionToggleEnabled(setting) {
     if (typeof setting === 'boolean') {
       return setting;
     }
@@ -1132,6 +1234,31 @@ export class ConveyorRenderer {
       return setting.enable === true;
     }
     return false;
+  }
+
+  _getInteractionTargetMode() {
+    const interactionCfg = this.config?.bricks?.interaction || {};
+    const explicitMode = String(
+      interactionCfg.targetingArea ?? interactionCfg.targetArea ?? interactionCfg.hitAreaMode ?? ''
+    ).trim().toLowerCase();
+    if (explicitMode === 'conveyor' || explicitMode === 'spotlight' || explicitMode === 'brick') {
+      return explicitMode;
+    }
+    if (this._isInteractionToggleEnabled(interactionCfg.conveyorWideHitArea)) {
+      return 'conveyor';
+    }
+    if (this._isInteractionToggleEnabled(interactionCfg.spotlightWideHitArea)) {
+      return 'spotlight';
+    }
+    return 'brick';
+  }
+
+  _isConveyorHitAreaEnabled() {
+    return this._getInteractionTargetMode() === 'conveyor';
+  }
+
+  _isSpotlightHitAreaEnabled() {
+    return this._getInteractionTargetMode() === 'spotlight';
   }
 
   _extractPointerPosition(e) {
@@ -1157,6 +1284,141 @@ export class ConveyorRenderer {
       }
     }
     return selected?.id ?? null;
+  }
+
+  _syncSpotlightHoverTarget(completionMode) {
+    if (!this._isSpotlightHitAreaEnabled() || completionMode !== 'hover_to_clear') {
+      if (this.spotlightHoveredBrickId) {
+        this.onBrickHover(
+          this.spotlightHoveredBrickId,
+          false,
+          this.spotlightPointerPos?.x ?? null,
+          this.spotlightPointerPos?.y ?? null
+        );
+        this.spotlightHoveredBrickId = null;
+      }
+      return;
+    }
+    const next = this.spotlightPointerInside ? (this.activeBrickId ?? null) : null;
+    const prev = this.spotlightHoveredBrickId ?? null;
+    if (prev === next) {
+      return;
+    }
+    if (prev) {
+      this._emitPointerDebug('spotlight_hover_end', prev, null);
+      this.onBrickHover(prev, false, this.spotlightPointerPos?.x ?? null, this.spotlightPointerPos?.y ?? null);
+    }
+    if (next) {
+      this._emitPointerDebug('spotlight_hover_begin', next, null);
+      this.onBrickHover(next, true, this.spotlightPointerPos?.x ?? null, this.spotlightPointerPos?.y ?? null);
+    }
+    this.spotlightHoveredBrickId = next;
+  }
+
+  _clearSpotlightZoneInteraction() {
+    const mode = this.config?.bricks?.completionMode;
+    if (mode === 'hover_to_clear' && this.spotlightHoveredBrickId) {
+      this._emitPointerDebug('spotlight_hover_end', this.spotlightHoveredBrickId, null);
+      this.onBrickHover(
+        this.spotlightHoveredBrickId,
+        false,
+        this.spotlightPointerPos?.x ?? null,
+        this.spotlightPointerPos?.y ?? null
+      );
+    }
+    this.spotlightHoveredBrickId = null;
+    this.spotlightHoldStart = null;
+    this.spotlightPointerInside = false;
+  }
+
+  _teardownSpotlightZone() {
+    this._clearSpotlightZoneInteraction();
+    if (this.spotlightZone?.destroy) {
+      this.spotlightZone.destroy();
+    }
+    this.spotlightZone = null;
+  }
+
+  _ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius) {
+    if (!this.interactionLayer || !this._isSpotlightHitAreaEnabled()) {
+      this._teardownSpotlightZone();
+      return;
+    }
+    if (!this.spotlightZone) {
+      const zone = new PIXI.Graphics();
+      zone.eventMode = 'dynamic';
+      zone.cursor = 'pointer';
+
+      const endSpotlightHold = (e) => {
+        const mode = this.config?.bricks?.completionMode;
+        const holdState = this.spotlightHoldStart;
+        if (mode !== 'hold_duration' || !holdState) {
+          return;
+        }
+        this.spotlightHoldStart = null;
+        const pos = this._extractPointerPosition(e);
+        this.spotlightPointerPos = pos;
+        const holdDurationMs = Math.max(0, performance.now() - holdState.t);
+        this._emitPointerDebug('spotlight_hold_end', holdState.brickId, e, { hold_ms: Math.round(holdDurationMs) });
+        this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+      };
+
+      zone.on('pointerdown', (e) => {
+        const mode = this.config?.bricks?.completionMode;
+        const targetBrickId = this.activeBrickId ?? null;
+        const pos = this._extractPointerPosition(e);
+        this.spotlightPointerPos = pos;
+        this.spotlightPointerInside = true;
+        if (!targetBrickId) {
+          this._emitPointerDebug('spotlight_pointerdown_no_target', null, e);
+          return;
+        }
+        if (mode === 'hold_duration') {
+          this.spotlightHoldStart = { brickId: targetBrickId, t: performance.now() };
+          this._emitPointerDebug('spotlight_hold_begin', targetBrickId, e);
+        } else {
+          this._emitPointerDebug('spotlight_click', targetBrickId, e);
+          this.onBrickClick(targetBrickId, pos.x, pos.y);
+        }
+      });
+      zone.on('pointerup', endSpotlightHold);
+      zone.on('pointerupoutside', endSpotlightHold);
+      zone.on('pointerover', (e) => {
+        this.spotlightPointerInside = true;
+        this.spotlightPointerPos = this._extractPointerPosition(e);
+        this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
+      });
+      zone.on('pointermove', (e) => {
+        this.spotlightPointerPos = this._extractPointerPosition(e);
+        this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
+      });
+      zone.on('pointerout', (e) => {
+        this.spotlightPointerInside = false;
+        this.spotlightPointerPos = this._extractPointerPosition(e);
+        endSpotlightHold(e);
+        this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
+      });
+      zone.on('pointerleave', (e) => {
+        this.spotlightPointerInside = false;
+        this.spotlightPointerPos = this._extractPointerPosition(e);
+        endSpotlightHold(e);
+        this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
+      });
+      zone.on('pointercancel', (e) => {
+        this.spotlightPointerInside = false;
+        this.spotlightPointerPos = this._extractPointerPosition(e);
+        endSpotlightHold(e);
+        this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
+      });
+
+      this.interactionLayer.addChild(zone);
+      this.spotlightZone = zone;
+    }
+
+    this.spotlightZone.clear();
+    this.spotlightZone.beginFill(0xffffff, 0.001);
+    this.spotlightZone.drawRoundedRect(holeX, holeY, Math.max(1, holeW), Math.max(1, holeH), Math.max(0, cornerRadius));
+    this.spotlightZone.endFill();
   }
 
   _drawConveyorZone(conveyorId, beltY, beltLength, beltHeight) {
@@ -1458,12 +1720,25 @@ export class ConveyorRenderer {
     if (!this.beltVisuals || !this.beltVisuals.length) {
       return;
     }
-    const useTexture = !!this.beltTexture && (this.config?.display?.beltTexture?.enable === true);
-    if (!useTexture) {
+    const hasAnimatedBelts = this.beltVisuals.some((vis) =>
+      vis?.type === 'tiling' || vis?.type === 'procedural_redraw'
+    );
+    if (!hasAnimatedBelts) {
       return;
     }
     const factor = Number(this.config?.display?.beltTexture?.scrollFactor ?? 1);
     const dirRaw = this.config?.display?.beltTexture?.scrollDirection;
+    const snapModeRaw = this.config?.display?.beltTexture?.scrollSnapMode;
+    const scrollSnapMode = (() => {
+      const text = String(snapModeRaw ?? 'none').trim().toLowerCase();
+      if (text === 'texture' || text === 'legacy') {
+        return 'texture';
+      }
+      if (text === 'none' || text === 'off' || text === 'false') {
+        return 'none';
+      }
+      return 'screen';
+    })();
     const scrollDirection = (() => {
       if (typeof dirRaw === 'number' && Number.isFinite(dirRaw)) {
         return dirRaw < 0 ? -1 : 1;
@@ -1474,14 +1749,37 @@ export class ConveyorRenderer {
     const dt = Math.max(0, Number(dtMs) || 0) / 1000;
     for (let i = 0; i < Math.min(this.beltVisuals.length, conveyors.length); i += 1) {
       const vis = this.beltVisuals[i];
-      if (vis.type !== 'tiling' || !vis.node) {
+      if (!vis?.node || (vis.type !== 'tiling' && vis.type !== 'procedural_redraw')) {
         continue;
       }
       const speed = Number(conveyors[i]?.speed) || 0;
       const shift = speed * dt * factor * scrollDirection;
       try {
         vis.offsetX = Number(vis.offsetX ?? 0) + shift;
-        vis.node.tilePosition.x = vis.pixelSnap ? Math.round(vis.offsetX) : vis.offsetX;
+        let snappedOffsetX = vis.offsetX;
+        if (vis.pixelSnap && scrollSnapMode !== 'none') {
+          if (scrollSnapMode === 'texture') {
+            snappedOffsetX = Math.round(vis.offsetX);
+          } else if (vis.type === 'tiling') {
+            const scaleX = Math.max(1e-6, Math.abs(Number(vis.node?.tileScale?.x) || 1));
+            snappedOffsetX = Math.round(vis.offsetX * scaleX) / scaleX;
+          } else {
+            snappedOffsetX = Math.round(vis.offsetX);
+          }
+        }
+
+        if (vis.type === 'procedural_redraw') {
+          this._drawProceduralTopdownBeltGraphics(vis.node, {
+            beltLength: vis.beltLength,
+            beltHeight: vis.beltHeight,
+            phaseX: snappedOffsetX,
+            styleCfg: vis.styleCfg,
+            styleScaleX: vis.styleScaleX,
+            styleScaleY: vis.styleScaleY
+          });
+        } else {
+          vis.node.tilePosition.x = snappedOffsetX;
+        }
       } catch (_) {
         // ignore
       }
@@ -1592,6 +1890,214 @@ export class ConveyorRenderer {
     } catch (_) {
       // ignore
     }
+  }
+
+  _resolveClearAnimationConfig() {
+    const cfg = (this.config?.display?.clearAnimation && typeof this.config.display.clearAnimation === 'object')
+      ? this.config.display.clearAnimation
+      : {};
+    const coinCfg = (cfg.coin && typeof cfg.coin === 'object') ? cfg.coin : {};
+    return {
+      enable: cfg.enable === true,
+      timeoutMs: Math.max(120, Number(cfg.timeoutMs ?? cfg.durationMs ?? 720)),
+      risePx: Math.max(0, Number(cfg.risePx ?? 28)),
+      startOffsetYPx: Math.max(0, Number(cfg.startOffsetYPx ?? 10)),
+      textColor: cfg.textColor ?? '#ffe082',
+      textStrokeColor: cfg.textStrokeColor ?? '#4a2f05',
+      textStrokeThickness: Math.max(0, Number(cfg.textStrokeThickness ?? 4)),
+      textFontFamily: String(cfg.textFontFamily ?? '"Trebuchet MS", "Verdana", "Arial Black", sans-serif'),
+      textFontWeight: String(cfg.textFontWeight ?? '900'),
+      textMinSizePx: Math.max(8, Number(cfg.textMinSizePx ?? 16)),
+      textMaxSizePx: Math.max(10, Number(cfg.textMaxSizePx ?? 40)),
+      textSizeFactor: Math.max(0.05, Number(cfg.textSizeFactor ?? 0.62)),
+      textShadowColor: cfg.textShadowColor ?? '#000000',
+      textShadowBlur: Math.max(0, Number(cfg.textShadowBlur ?? 1)),
+      textShadowDistance: Math.max(0, Number(cfg.textShadowDistance ?? 2)),
+      coin: {
+        enable: coinCfg.enable !== false,
+        showInPointsAnimation: coinCfg.showInPointsAnimation !== false,
+        showInHud: coinCfg.showInHud !== false,
+        sizePx: Math.max(6, Number(coinCfg.sizePx ?? 20)),
+        gapPx: Math.max(0, Number(coinCfg.gapPx ?? 5)),
+        rimColor: coinCfg.rimColor ?? '#b8860b',
+        bodyColor: coinCfg.bodyColor ?? '#facc15',
+        shineColor: coinCfg.shineColor ?? '#fef3c7',
+        shadowColor: coinCfg.shadowColor ?? '#a16207',
+        symbolColor: coinCfg.symbolColor ?? '#92400e',
+        ridgeCount: Math.max(8, Math.min(48, Number(coinCfg.ridgeCount ?? 18))),
+      },
+    };
+  }
+
+  _seedFromValue(input, fallback = 1) {
+    const text = String(input ?? '');
+    if (!text) {
+      return (fallback >>> 0) || 1;
+    }
+    let hash = 2166136261 >>> 0;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return hash || (fallback >>> 0) || 1;
+  }
+
+  _drawCoinPrimitive(target, sizePx, coinCfg, seed = 1) {
+    const size = Math.max(6, Number(sizePx) || 6);
+    const r = size * 0.5;
+    const rimColor = toPixiColor(coinCfg?.rimColor ?? '#b8860b');
+    const bodyColor = toPixiColor(coinCfg?.bodyColor ?? '#facc15');
+    const shineColor = toPixiColor(coinCfg?.shineColor ?? '#fef3c7');
+    const shadowColor = toPixiColor(coinCfg?.shadowColor ?? '#a16207');
+    const symbolColor = toPixiColor(coinCfg?.symbolColor ?? '#92400e');
+    const ridgeCount = Math.max(8, Math.min(48, Number(coinCfg?.ridgeCount ?? 18)));
+
+    let local = (Number(seed) >>> 0) || 1;
+    const rand = () => {
+      local ^= (local << 13) >>> 0;
+      local ^= local >>> 17;
+      local ^= (local << 5) >>> 0;
+      return (local >>> 0) / 0x100000000;
+    };
+
+    target.beginFill(rimColor, 1);
+    target.drawCircle(0, 0, r);
+    target.endFill();
+
+    target.beginFill(bodyColor, 1);
+    target.drawCircle(0, 0, Math.max(1, r * 0.82));
+    target.endFill();
+
+    target.beginFill(shineColor, 0.42);
+    target.drawEllipse(-r * 0.22, -r * 0.3, Math.max(1, r * 0.42), Math.max(1, r * 0.24));
+    target.endFill();
+
+    target.beginFill(shadowColor, 0.24);
+    target.drawEllipse(r * 0.18, r * 0.22, Math.max(1, r * 0.42), Math.max(1, r * 0.25));
+    target.endFill();
+
+    for (let i = 0; i < ridgeCount; i += 1) {
+      const baseAngle = (Math.PI * 2 * i) / ridgeCount;
+      const jitter = (rand() - 0.5) * 0.055;
+      const angle = baseAngle + jitter;
+      const outer = r * 0.98;
+      const inner = r * 0.87;
+      const x0 = Math.cos(angle) * inner;
+      const y0 = Math.sin(angle) * inner;
+      const x1 = Math.cos(angle) * outer;
+      const y1 = Math.sin(angle) * outer;
+      target.lineStyle(Math.max(1, size * 0.03), shadowColor, 0.34);
+      target.moveTo(x0, y0);
+      target.lineTo(x1, y1);
+      target.lineStyle(0, 0, 0);
+    }
+
+    const symbolSize = Math.max(1, r * 0.54);
+    target.lineStyle(Math.max(1, size * 0.09), symbolColor, 0.65);
+    target.moveTo(-symbolSize * 0.5, -symbolSize * 0.65);
+    target.lineTo(symbolSize * 0.5, symbolSize * 0.65);
+    target.moveTo(symbolSize * 0.5, -symbolSize * 0.65);
+    target.lineTo(-symbolSize * 0.5, symbolSize * 0.65);
+    target.lineStyle(0, 0, 0);
+  }
+
+  _resolveHudCoinSize(text, uiCfg, clearCfg) {
+    const explicit = Number(clearCfg?.coin?.hudSizePx);
+    if (Number.isFinite(explicit)) {
+      return Math.max(6, explicit);
+    }
+    const lineHeight = Math.max(
+      8,
+      Number(uiCfg?.hudLineHeight ?? text?.style?.lineHeight ?? text?.style?.fontSize ?? 16)
+    );
+    let capHeight = 0;
+    try {
+      capHeight = Number(PIXI.TextMetrics.measureText('M', text?.style).height) || 0;
+    } catch (_) {
+      capHeight = 0;
+    }
+    const fallbackCap = lineHeight * 0.72;
+    const baseCap = capHeight > 0 ? capHeight : fallbackCap;
+    const scale = Math.max(0.5, Math.min(1.5, Number(clearCfg?.coin?.hudSizeScale ?? 0.95)));
+    // Keep coin close to uppercase letter height and safely within line box.
+    return Math.max(6, Math.min(lineHeight * 0.92, baseCap * scale));
+  }
+
+  queueClearEffects(clearEvents = []) {
+    if (!Array.isArray(clearEvents) || clearEvents.length === 0) {
+      return;
+    }
+    const clearCfg = this._resolveClearAnimationConfig();
+    if (!clearCfg.enable) {
+      return;
+    }
+    const perfCfg = this.config?.display?.performance || {};
+    const maxEffects = Math.max(0, Number(perfCfg.maxActiveEffects ?? 180));
+    clearEvents.forEach((entry) => {
+      if (this.effectVisuals.length >= maxEffects) {
+        this.perfStats.effectDropsSkipped += 1;
+        return;
+      }
+      const points = Math.max(0, Number(entry?.value ?? 0));
+      const width = Math.max(1, Number(entry?.width ?? this.config?.display?.brickWidth ?? 1));
+      const height = Math.max(1, Number(entry?.height ?? this.config?.display?.brickHeight ?? 1));
+      const centerX = Number(entry?.x ?? 0) + width * 0.5;
+      const centerY = Number(entry?.y ?? 0) + height * 0.5;
+      const startY = centerY - Math.max(1, height * 0.2) - clearCfg.startOffsetYPx;
+      const label = `+${Math.max(0, Math.round(points))}`;
+      const textSize = Math.max(
+        clearCfg.textMinSizePx,
+        Math.min(clearCfg.textMaxSizePx, height * clearCfg.textSizeFactor)
+      );
+      const container = new PIXI.Container();
+      container.x = this.pixelSnapBricks ? Math.round(centerX) : centerX;
+      container.y = this.pixelSnapBricks ? Math.round(startY) : startY;
+
+      const text = new PIXI.Text(label, {
+        fill: toPixiColor(clearCfg.textColor),
+        fontSize: textSize,
+        fontFamily: clearCfg.textFontFamily,
+        fontWeight: clearCfg.textFontWeight,
+        stroke: toPixiColor(clearCfg.textStrokeColor),
+        strokeThickness: clearCfg.textStrokeThickness,
+        dropShadow: true,
+        dropShadowColor: toPixiColor(clearCfg.textShadowColor),
+        dropShadowBlur: clearCfg.textShadowBlur,
+        dropShadowDistance: clearCfg.textShadowDistance,
+      });
+
+      const showCoin = clearCfg.coin.enable && clearCfg.coin.showInPointsAnimation;
+      const coinSize = Math.max(6, Number(clearCfg.coin.sizePx ?? 20));
+      const coinGap = Math.max(0, Number(clearCfg.coin.gapPx ?? 5));
+      let totalWidth = text.width;
+      if (showCoin) {
+        totalWidth += coinGap + coinSize;
+      }
+      const left = -totalWidth * 0.5;
+      if (showCoin) {
+        const coin = new PIXI.Graphics();
+        const seed = this._seedFromValue(`${entry?.brickId ?? ''}|${entry?.conveyorId ?? ''}|${points}`, this.seed);
+        this._drawCoinPrimitive(coin, coinSize, clearCfg.coin, seed);
+        coin.x = left + coinSize * 0.5;
+        coin.y = 0;
+        container.addChild(coin);
+      }
+      text.x = left + (showCoin ? coinSize + coinGap : 0);
+      text.y = -text.height * 0.5;
+      container.addChild(text);
+
+      this.effectLayer.addChild(container);
+      this.effectVisuals.push({
+        kind: 'clear_points_pop',
+        node: container,
+        elapsedMs: 0,
+        durationMs: clearCfg.timeoutMs,
+        startY: container.y,
+        risePx: clearCfg.risePx,
+      });
+      this.perfStats.clearEffectsQueued += 1;
+    });
+    this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
   }
 
   queueDropEffects(dropEvents = []) {
@@ -1842,6 +2348,12 @@ export class ConveyorRenderer {
         const eased = 1 - Math.pow(1 - t, 3);
         node.scale.x = Math.max(0.01, 1 - eased);
         node.alpha = Math.max(0, 1 - t * 0.9);
+      } else if (effect.kind === 'clear_points_pop') {
+        const eased = 1 - Math.pow(1 - t, 3);
+        node.y = (Number(effect.startY) || 0) - (Number(effect.risePx) || 0) * eased;
+        const scale = 0.92 + (1 - Math.abs(0.5 - t) * 2) * 0.14;
+        node.scale.set(scale, scale);
+        node.alpha = Math.max(0, 1 - t);
       } else if (effect.kind === 'disintegrate_flash') {
         node.alpha = Math.max(0, 0.55 * (1 - t));
       } else if (effect.kind === 'drop_shard') {
@@ -1916,7 +2428,9 @@ export class ConveyorRenderer {
   syncBricks(bricks, completionMode, completionParams, focusState = null) {
     this._spriteSyncEpoch += 1;
     const syncEpoch = this._spriteSyncEpoch;
-    const conveyorWideHitArea = this._isConveyorHitAreaEnabled();
+    const interactionMode = this._getInteractionTargetMode();
+    const conveyorWideHitArea = interactionMode === 'conveyor';
+    const spotlightWideHitArea = interactionMode === 'spotlight';
     this.bricksByConveyor.clear();
     bricks.forEach((brick) => {
       const cid = String(brick.conveyorId ?? '');
@@ -1959,7 +2473,7 @@ export class ConveyorRenderer {
       const y = this.pixelSnapBricks ? Math.round(brick.y) : brick.y;
       sprite.position.set(x, y);
       const isFocused = !focusEnabled || brick.id === this.activeBrickId;
-      if (conveyorWideHitArea) {
+      if (conveyorWideHitArea || spotlightWideHitArea) {
         sprite.eventMode = 'none';
         sprite.cursor = 'default';
       } else {
@@ -2002,6 +2516,7 @@ export class ConveyorRenderer {
         }
       });
     }
+    this._syncSpotlightHoverTarget(completionMode);
     this._updateSpotlight(focusState);
   }
 
@@ -2156,19 +2671,6 @@ export class ConveyorRenderer {
       sprite.usesProgressMask = true;
       sprite.progressMaxWidth = brick.width;
     } else if (completionMode === 'hover_to_clear' && supportsMaskProgress) {
-      const ghostGraphic = new PIXI.Graphics();
-      this._drawBrickBody(ghostGraphic, {
-        brick,
-        shape,
-        width: brick.width,
-        height: brick.height,
-        cornerRadius,
-        fillColor: color,
-        fillAlpha: 0.26,
-        borderColor,
-        borderAlpha: 0.55,
-        borderWidth: 1.5,
-      });
       const progressGraphic = new PIXI.Graphics();
       this._drawBrickBody(progressGraphic, {
         brick,
@@ -2184,10 +2686,8 @@ export class ConveyorRenderer {
       });
       const mask = new PIXI.Graphics();
       progressGraphic.mask = mask;
-      sprite.addChild(ghostGraphic);
       sprite.addChild(progressGraphic);
       sprite.addChild(mask);
-      sprite.mainGraphic = ghostGraphic;
       sprite.progressGraphic = progressGraphic;
       sprite.progressMask = mask;
       sprite.usesProgressMask = true;
@@ -2214,18 +2714,6 @@ export class ConveyorRenderer {
     } else if (completionMode === 'hover_to_clear') {
       const legacyGraphic = new PIXI.Graphics();
       const remainingWidth = getBrickVisibleWidth(brick, completionMode);
-      this._drawBrickBody(legacyGraphic, {
-        brick,
-        shape,
-        width: brick.width,
-        height: brick.height,
-        cornerRadius,
-        fillColor: color,
-        fillAlpha: 0.26,
-        borderColor,
-        borderAlpha: 0.55,
-        borderWidth: 1.5,
-      });
       if (remainingWidth > 0) {
         this._drawBrickBody(legacyGraphic, {
           brick,
@@ -2418,17 +2906,20 @@ export class ConveyorRenderer {
         return;
       }
       const ribbonColor = toPixiColor(cfg.ribbonColor ?? '#fef3c7');
-      const ribbonAlpha = Math.max(0, Math.min(1, Number(cfg.ribbonAlpha ?? 0.95)));
-      const ribbonWidthRatio = Math.max(0.06, Math.min(0.45, Number(cfg.ribbonWidthRatio ?? 0.16)));
+      const ribbonAlpha = Math.max(0, Math.min(1, Number(cfg.ribbonAlpha ?? 1)));
+      const ribbonWidthRatio = Math.max(0.08, Math.min(0.5, Number(cfg.ribbonWidthRatio ?? 0.24)));
       const ribbonInsetPx = Math.max(0, Number(cfg.ribbonInsetPx ?? inset));
-      const ribbonW = Math.max(2, Math.round(w * ribbonWidthRatio));
-      const ribbonH = Math.max(2, Math.round(h * ribbonWidthRatio));
+      const bowBorderColor = toPixiColor(cfg.bowBorderColor ?? seamColor);
+      const bowBorderAlpha = Math.max(0, Math.min(1, Number(cfg.bowBorderAlpha ?? 0.7)));
+      const bowBorderWidth = Math.max(1, Number(cfg.bowBorderWidthPx ?? seamWidth));
+      const ribbonW = Math.max(3, Math.round(w * ribbonWidthRatio));
+      const ribbonH = Math.max(3, Math.round(h * ribbonWidthRatio));
       const cx = Math.round((w - ribbonW) * 0.5);
       const cy = Math.round((h - ribbonH) * 0.5);
       const usableW = Math.max(1, w - ribbonInsetPx * 2);
       const usableH = Math.max(1, h - ribbonInsetPx * 2);
       const paperPatternColor = toPixiColor(cfg.paperPatternColor ?? '#ffffff');
-      const paperPatternAlpha = Math.max(0, Math.min(0.4, Number(cfg.paperPatternAlpha ?? 0.12)));
+      const paperPatternAlpha = Math.max(0, Math.min(0.75, Number(cfg.paperPatternAlpha ?? 0.32)));
       const paperDotStep = Math.max(6, Math.floor(Number(cfg.paperDotStepPx ?? 11)));
       for (let py = ribbonInsetPx + 2; py < ribbonInsetPx + usableH - 1; py += paperDotStep) {
         for (let px = ribbonInsetPx + 2; px < ribbonInsetPx + usableW - 1; px += paperDotStep) {
@@ -2443,8 +2934,8 @@ export class ConveyorRenderer {
       target.drawRect(ribbonInsetPx, cy, usableW, ribbonH);
       target.endFill();
 
-      const bowAlpha = alphaBase * Math.max(0.35, ribbonAlpha * 0.9);
-      const bowSize = Math.max(2, Math.round(Math.min(w, h) * 0.12));
+      const bowAlpha = alphaBase * Math.max(0.55, ribbonAlpha);
+      const bowSize = Math.max(3, Math.round(Math.min(w, h) * 0.18));
       target.beginFill(ribbonColor, bowAlpha);
       target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
       target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
@@ -2460,6 +2951,153 @@ export class ConveyorRenderer {
         cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
       ]);
       target.endFill();
+      target.lineStyle(bowBorderWidth, bowBorderColor, alphaBase * bowBorderAlpha);
+      target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
+      target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
+      target.drawCircle(cx + ribbonW * 0.5, cy + ribbonH * 0.5, Math.max(1.2, bowSize * 0.58));
+      target.drawPolygon([
+        cx + ribbonW * 0.5 - bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+        cx + ribbonW * 0.5 - bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+        cx + ribbonW * 0.5 - bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+      ]);
+      target.drawPolygon([
+        cx + ribbonW * 0.5 + bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+        cx + ribbonW * 0.5 + bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+        cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+      ]);
+      target.lineStyle(0, 0, 0);
+      return;
+    }
+
+    const drawLabelPatch = () => {
+      if (cfg.labelPatch !== true) {
+        return;
+      }
+      const patchW = Math.max(8, Math.round(w * 0.26));
+      const patchH = Math.max(5, Math.round(h * 0.2));
+      const px = Math.round(w - patchW - inset - 1);
+      const py = Math.round(inset + 1);
+      const patchColor = toPixiColor(cfg.labelPatchColor ?? '#f8fafc');
+      const patchAlpha = Math.max(0, Math.min(1, Number(cfg.labelPatchAlpha ?? 0.8)));
+      const patchBorder = toPixiColor(cfg.labelPatchBorderColor ?? '#334155');
+      const barcodeColor = toPixiColor(cfg.labelBarcodeColor ?? '#111827');
+      target.beginFill(patchColor, alphaBase * patchAlpha);
+      target.drawRoundedRect(px, py, patchW, patchH, 1);
+      target.endFill();
+      target.beginFill(patchBorder, alphaBase * 0.35);
+      target.drawRect(px, py + patchH - 1, patchW, 1);
+      target.endFill();
+      for (let i = 0; i < 4; i += 1) {
+        const bx = px + 2 + i * Math.max(1, Math.floor((patchW - 4) / 4));
+        const bw = Math.max(1, (i % 2 === 0 ? 1 : 2));
+        target.beginFill(barcodeColor, alphaBase * 0.55);
+        target.drawRect(bx, py + Math.max(1, Math.floor(patchH * 0.34)), bw, Math.max(1, patchH - 3));
+        target.endFill();
+      }
+    };
+
+    const drawBandAndPlate = () => {
+      if (cfg.bandColor == null) {
+        return;
+      }
+      const bandColor = toPixiColor(cfg.bandColor);
+      const bandAlpha = Math.max(0, Math.min(1, Number(cfg.bandAlpha ?? 0.28)));
+      const bandW = Math.max(2, Math.round(w * 0.12));
+      target.beginFill(bandColor, alphaBase * bandAlpha);
+      target.drawRect(inset, inset, bandW, Math.max(1, h - inset * 2));
+      target.drawRect(Math.max(inset, w - inset - bandW), inset, bandW, Math.max(1, h - inset * 2));
+      target.endFill();
+      const plateColor = toPixiColor(cfg.lockPlateColor ?? '#fef3c7');
+      const plateAlpha = Math.max(0, Math.min(1, Number(cfg.lockPlateAlpha ?? 0.68)));
+      const plateW = Math.max(3, Math.round(w * 0.14));
+      const plateH = Math.max(3, Math.round(h * 0.22));
+      target.beginFill(plateColor, alphaBase * plateAlpha);
+      target.drawRoundedRect(Math.round((w - plateW) * 0.5), Math.round((h - plateH) * 0.5), plateW, plateH, 1);
+      target.endFill();
+    };
+
+    if (pattern === 'checkerboard') {
+      if (!isRectangular) {
+        return;
+      }
+      const colorA = toPixiColor(cfg.checkerColorA ?? '#e2e8f0');
+      const colorB = toPixiColor(cfg.checkerColorB ?? '#334155');
+      const cellPx = Math.max(4, Math.round(Number(cfg.checkerCellPx ?? 10)));
+      const usableW = Math.max(1, w - inset * 2);
+      const usableH = Math.max(1, h - inset * 2);
+      for (let y = 0; y < usableH; y += cellPx) {
+        const row = Math.floor(y / cellPx);
+        for (let x = 0; x < usableW; x += cellPx) {
+          const col = Math.floor(x / cellPx);
+          const fill = ((row + col + Math.floor(phase * 2)) % 2 === 0) ? colorA : colorB;
+          target.beginFill(fill, alphaBase * 0.76);
+          target.drawRect(
+            inset + x,
+            inset + y,
+            Math.max(1, Math.min(cellPx, usableW - x)),
+            Math.max(1, Math.min(cellPx, usableH - y))
+          );
+          target.endFill();
+        }
+      }
+      if (topSheenAlpha > 0) {
+        target.beginFill(highlightColor, alphaBase * topSheenAlpha);
+        target.drawRoundedRect(inset, inset, Math.max(1, w - inset * 2), Math.max(1, h * 0.18), Math.max(0, radius * 0.45));
+        target.endFill();
+      }
+      drawLabelPatch();
+      drawBandAndPlate();
+      return;
+    }
+
+    if (pattern === 'cardboard_block') {
+      if (!isRectangular) {
+        return;
+      }
+      const speckleColor = toPixiColor(cfg.speckleColor ?? '#7a5b3d');
+      const speckleAlpha = Math.max(0, Math.min(1, Number(cfg.speckleAlpha ?? 0.12)));
+      const speckleCount = Math.max(0, Math.floor(Number(cfg.speckleCount ?? 12)));
+      const tapeColor = cfg.tapeColor != null ? toPixiColor(cfg.tapeColor) : null;
+      const tapeAlpha = Math.max(0, Math.min(1, Number(cfg.tapeAlpha ?? 0)));
+      const tapeWidthRatio = Math.max(0.04, Math.min(0.45, Number(cfg.tapeWidthRatio ?? 0.16)));
+      const tapeInset = Math.max(0, Number(cfg.tapeInsetPx ?? inset));
+      const tapeOrientation = String(cfg.tapeOrientation ?? 'vertical').toLowerCase();
+      const usableW = Math.max(1, w - inset * 2);
+      const usableH = Math.max(1, h - inset * 2);
+      let local = ((idNum || 1) * 1103515245) >>> 0;
+      const rand = () => {
+        local ^= (local << 13) >>> 0;
+        local ^= local >>> 17;
+        local ^= (local << 5) >>> 0;
+        return (local >>> 0) / 0x100000000;
+      };
+      for (let i = 0; i < speckleCount; i += 1) {
+        const px = inset + Math.floor(rand() * usableW);
+        const py = inset + Math.floor(rand() * usableH);
+        const sw = Math.max(1, Math.floor(1 + rand() * 2));
+        const sh = Math.max(1, Math.floor(1 + rand() * 2));
+        target.beginFill(speckleColor, alphaBase * (speckleAlpha * (0.6 + rand() * 0.7)));
+        target.drawRect(px, py, sw, sh);
+        target.endFill();
+      }
+      if (tapeColor !== null && tapeAlpha > 0) {
+        const tapeX = tapeInset;
+        const tapeY = tapeInset;
+        const tapeW = Math.max(2, Math.round((w - tapeInset * 2) * tapeWidthRatio));
+        const tapeH = Math.max(2, Math.round((h - tapeInset * 2) * tapeWidthRatio));
+        const vx = Math.round((w - tapeW) * 0.5);
+        const hy = Math.round((h - tapeH) * 0.5);
+        target.beginFill(tapeColor, alphaBase * tapeAlpha);
+        if (tapeOrientation === 'horizontal' || tapeOrientation === 'cross') {
+          target.drawRect(tapeX, hy, Math.max(1, w - tapeInset * 2), tapeH);
+        }
+        if (tapeOrientation === 'vertical' || tapeOrientation === 'cross') {
+          target.drawRect(vx, tapeY, tapeW, Math.max(1, h - tapeInset * 2));
+        }
+        target.endFill();
+      }
+      drawLabelPatch();
+      drawBandAndPlate();
       return;
     }
 
@@ -2504,46 +3142,8 @@ export class ConveyorRenderer {
     target.drawCircle(Math.max(nailOffsetX, w - nailOffsetX), nailYBottom, nailRadius);
     target.endFill();
 
-    if (cfg.labelPatch === true) {
-      const patchW = Math.max(8, Math.round(w * 0.36));
-      const patchH = Math.max(5, Math.round(h * 0.3));
-      const px = Math.round(w - patchW - inset - 1);
-      const py = Math.round(inset + 1);
-      const patchColor = toPixiColor(cfg.labelPatchColor ?? '#f8fafc');
-      const patchAlpha = Math.max(0, Math.min(1, Number(cfg.labelPatchAlpha ?? 0.8)));
-      const patchBorder = toPixiColor(cfg.labelPatchBorderColor ?? '#334155');
-      const barcodeColor = toPixiColor(cfg.labelBarcodeColor ?? '#111827');
-      target.beginFill(patchColor, alphaBase * patchAlpha);
-      target.drawRoundedRect(px, py, patchW, patchH, 1);
-      target.endFill();
-      target.beginFill(patchBorder, alphaBase * 0.35);
-      target.drawRect(px, py + patchH - 1, patchW, 1);
-      target.endFill();
-      for (let i = 0; i < 4; i += 1) {
-        const bx = px + 2 + i * Math.max(1, Math.floor((patchW - 4) / 4));
-        const bw = Math.max(1, (i % 2 === 0 ? 1 : 2));
-        target.beginFill(barcodeColor, alphaBase * 0.55);
-        target.drawRect(bx, py + Math.max(1, Math.floor(patchH * 0.34)), bw, Math.max(1, patchH - 3));
-        target.endFill();
-      }
-    }
-
-    if (cfg.bandColor != null) {
-      const bandColor = toPixiColor(cfg.bandColor);
-      const bandAlpha = Math.max(0, Math.min(1, Number(cfg.bandAlpha ?? 0.28)));
-      const bandW = Math.max(2, Math.round(w * 0.12));
-      target.beginFill(bandColor, alphaBase * bandAlpha);
-      target.drawRect(inset, inset, bandW, Math.max(1, h - inset * 2));
-      target.drawRect(Math.max(inset, w - inset - bandW), inset, bandW, Math.max(1, h - inset * 2));
-      target.endFill();
-      const plateColor = toPixiColor(cfg.lockPlateColor ?? '#fef3c7');
-      const plateAlpha = Math.max(0, Math.min(1, Number(cfg.lockPlateAlpha ?? 0.68)));
-      const plateW = Math.max(3, Math.round(w * 0.14));
-      const plateH = Math.max(3, Math.round(h * 0.22));
-      target.beginFill(plateColor, alphaBase * plateAlpha);
-      target.drawRoundedRect(Math.round((w - plateW) * 0.5), Math.round((h - plateH) * 0.5), plateW, plateH, 1);
-      target.endFill();
-    }
+    drawLabelPatch();
+    drawBandAndPlate();
   }
 
   _drawBrickPrimitive(sprite, shape, width, height, cornerRadius) {
@@ -2587,12 +3187,18 @@ export class ConveyorRenderer {
   }
 
   _updateSpotlight(focusState) {
+    if (!this._isSpotlightHitAreaEnabled()) {
+      this._teardownSpotlightZone();
+    }
     if (!focusState?.enabled || !focusState.activeBrickId) {
       if (this.spotlightGraphics) {
         this.spotlightGraphics.clear();
       }
       if (this.spotlightRing) {
         this.spotlightRing.clear();
+      }
+      if (this._isSpotlightHitAreaEnabled()) {
+        this._teardownSpotlightZone();
       }
       this._lastSpotlightSignature = '';
       return;
@@ -2613,6 +3219,7 @@ export class ConveyorRenderer {
     }
     const pad = Math.max(0, Number(focusState.spotlightPadding ?? 18));
     const dimAlpha = Math.max(0, Math.min(0.95, Number(focusState.dimAlpha ?? 0.45)));
+    const cornerRadius = 10;
     const holeX = sprite.x - pad;
     const holeY = sprite.y - pad;
     const holeW = sprite.brickWidth + pad * 2;
@@ -2635,20 +3242,99 @@ export class ConveyorRenderer {
 
     this.spotlightGraphics.clear();
     this.spotlightGraphics.beginFill(0x000000, dimAlpha);
-    this.spotlightGraphics.drawRect(0, 0, canvasW, Math.max(0, holeY));
-    this.spotlightGraphics.drawRect(0, Math.max(0, holeY + holeH), canvasW, Math.max(0, canvasH - (holeY + holeH)));
-    this.spotlightGraphics.drawRect(0, Math.max(0, holeY), Math.max(0, holeX), Math.max(0, holeH));
-    this.spotlightGraphics.drawRect(
-      Math.max(0, holeX + holeW),
-      Math.max(0, holeY),
-      Math.max(0, canvasW - (holeX + holeW)),
-      Math.max(0, holeH)
-    );
+    this.spotlightGraphics.drawRect(0, 0, canvasW, canvasH);
+    if (typeof this.spotlightGraphics.beginHole === 'function' && typeof this.spotlightGraphics.endHole === 'function') {
+      this.spotlightGraphics.beginHole();
+      this.spotlightGraphics.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
+      this.spotlightGraphics.endHole();
+    } else {
+      this.spotlightGraphics.drawRect(0, 0, canvasW, Math.max(0, holeY));
+      this.spotlightGraphics.drawRect(0, Math.max(0, holeY + holeH), canvasW, Math.max(0, canvasH - (holeY + holeH)));
+      this.spotlightGraphics.drawRect(0, Math.max(0, holeY), Math.max(0, holeX), Math.max(0, holeH));
+      this.spotlightGraphics.drawRect(
+        Math.max(0, holeX + holeW),
+        Math.max(0, holeY),
+        Math.max(0, canvasW - (holeX + holeW)),
+        Math.max(0, holeH)
+      );
+    }
     this.spotlightGraphics.endFill();
 
     this.spotlightRing.clear();
     this.spotlightRing.lineStyle(3, 0xf8fafc, 0.95);
-    this.spotlightRing.drawRoundedRect(holeX, holeY, holeW, holeH, 10);
+    this.spotlightRing.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
+    this._ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius);
+  }
+
+  _updateHudPointsAdornment(lines, text, uiCfg, clearCfg = null, layout = null) {
+    const resolvedClearCfg = clearCfg || this._resolveClearAnimationConfig();
+    const showPoints = uiCfg?.showPoints === true;
+    const shouldShow = resolvedClearCfg.enable && showPoints && resolvedClearCfg.coin.enable && resolvedClearCfg.coin.showInHud;
+    if (!shouldShow) {
+      if (this.hudPointsAdornment) {
+        this.hudPointsAdornment.visible = false;
+      }
+      this._lastHudPointsAdornmentSignature = '';
+      return;
+    }
+
+    const lineIndex = Array.isArray(lines)
+      ? lines.findIndex((line) => typeof line === 'string' && (line.includes('Points:') || line.includes('Coins:')))
+      : -1;
+    if (lineIndex < 0) {
+      if (this.hudPointsAdornment) {
+        this.hudPointsAdornment.visible = false;
+      }
+      this._lastHudPointsAdornmentSignature = '';
+      return;
+    }
+
+    if (!this.hudPointsAdornment) {
+      this.hudPointsAdornment = new PIXI.Graphics();
+      this.hudLayer.addChild(this.hudPointsAdornment);
+    }
+    const coinSize = Number.isFinite(Number(layout?.coinSize))
+      ? Math.max(6, Number(layout.coinSize))
+      : this._resolveHudCoinSize(text, uiCfg, resolvedClearCfg);
+    const coinGap = Number.isFinite(Number(layout?.coinGap))
+      ? Math.max(0, Number(layout.coinGap))
+      : Math.max(4, Number(resolvedClearCfg.coin.gapPx ?? 5));
+    const pointsLineWidthMeasured = Number.isFinite(Number(layout?.pointsLineWidth))
+      ? Math.max(0, Number(layout.pointsLineWidth))
+      : 0;
+    const pointsLineWidth = pointsLineWidthMeasured > 0 ? pointsLineWidthMeasured : Number(text.width);
+    const panelEnabled = uiCfg.hudPanel !== false;
+    const lineHeight = Math.max(8, Number(uiCfg.hudLineHeight ?? 22));
+    const x = panelEnabled
+      ? (Number(text.x) + pointsLineWidth + coinGap + coinSize * 0.5)
+      : (Number(text.x) + pointsLineWidth + coinGap + coinSize * 0.5);
+    const y = Number(text.y) + lineIndex * lineHeight + lineHeight * 0.5;
+    const signature = [
+      Math.round(x * 100) / 100,
+      Math.round(y * 100) / 100,
+      Math.round(coinSize * 100) / 100,
+      Math.round(coinGap * 100) / 100,
+      Math.round(pointsLineWidth * 100) / 100,
+      String(resolvedClearCfg.coin.rimColor),
+      String(resolvedClearCfg.coin.bodyColor),
+      String(resolvedClearCfg.coin.shineColor),
+      String(resolvedClearCfg.coin.shadowColor),
+      String(resolvedClearCfg.coin.symbolColor),
+      Number(resolvedClearCfg.coin.ridgeCount),
+      lineIndex,
+      panelEnabled ? 1 : 0
+    ].join('|');
+    if (signature === this._lastHudPointsAdornmentSignature) {
+      this.hudPointsAdornment.visible = true;
+      return;
+    }
+    this._lastHudPointsAdornmentSignature = signature;
+    this.hudPointsAdornment.clear();
+    this._drawCoinPrimitive(this.hudPointsAdornment, coinSize, resolvedClearCfg.coin, this.seed ^ 0x41d29be5);
+    this.hudPointsAdornment.x = this.pixelSnapBricks ? Math.round(x) : x;
+    this.hudPointsAdornment.y = this.pixelSnapBricks ? Math.round(y) : y;
+    this.hudPointsAdornment.alpha = 0.96;
+    this.hudPointsAdornment.visible = true;
   }
 
   updateHUD(stats, remainingMs, blockInfo) {
@@ -2656,13 +3342,19 @@ export class ConveyorRenderer {
     if (!text) {
       return;
     }
+    const uiCfg = this.config?.display?.ui || {};
+    const clearCfg = this._resolveClearAnimationConfig();
+    const useCoinsLabel = clearCfg.enable && clearCfg.coin.enable;
+    const hudUiConfig = useCoinsLabel
+      ? { ...uiCfg, pointsLabel: 'Coins' }
+      : uiCfg;
     const lines = buildHUDLines({
       stats,
       remainingMs,
       blockLabel: blockInfo?.label,
       drtStats: blockInfo?.drtStats,
       focusInfo: blockInfo?.focusInfo,
-      uiConfig: this.config?.display?.ui || {},
+      uiConfig: hudUiConfig,
       drtEnabled: Boolean(blockInfo?.drtEnabled)
     });
     const nextText = lines.join('\n');
@@ -2671,16 +3363,30 @@ export class ConveyorRenderer {
       this._lastHudText = nextText;
     }
 
-    const uiCfg = this.config?.display?.ui || {};
+    const pointsLineIndex = lines.findIndex((line) => typeof line === 'string' && (line.includes('Points:') || line.includes('Coins:')));
+    const showHudCoin = clearCfg.enable && uiCfg.showPoints === true && clearCfg.coin.enable && clearCfg.coin.showInHud && pointsLineIndex >= 0;
+    const coinSize = this._resolveHudCoinSize(text, uiCfg, clearCfg);
+    const coinGap = Math.max(4, Number(clearCfg.coin.gapPx ?? 5));
+    const pointsLineText = pointsLineIndex >= 0 ? String(lines[pointsLineIndex] ?? '') : '';
+    let pointsLineWidth = 0;
+    if (showHudCoin && pointsLineText) {
+      try {
+        pointsLineWidth = Number(PIXI.TextMetrics.measureText(pointsLineText, text.style).width) || 0;
+      } catch (_) {
+        pointsLineWidth = 0;
+      }
+    }
+    const coinExtendedLineWidth = showHudCoin ? (Math.max(0, pointsLineWidth) + coinGap + coinSize) : 0;
     if (this.hudBackground) {
       const padX = Math.max(2, Number(uiCfg.hudPanelPaddingX ?? 10));
       const padY = Math.max(2, Number(uiCfg.hudPanelPaddingY ?? 8));
       const bgAlpha = Math.max(0, Math.min(1, Number(uiCfg.hudPanelAlpha ?? 0.42)));
       const bgColor = toPixiColor(uiCfg.hudPanelColor ?? '#0f172a');
       const radius = Math.max(0, Number(uiCfg.hudPanelRadius ?? 8));
-      const panelW = Math.max(8, text.width + padX * 2);
+      const contentW = showHudCoin ? Math.max(Number(text.width) || 0, coinExtendedLineWidth) : (Number(text.width) || 0);
+      const panelW = Math.max(8, contentW + padX * 2);
       const panelH = Math.max(8, text.height + padY * 2);
-      const panelSignature = `${padX}|${padY}|${bgAlpha}|${bgColor}|${radius}|${panelW}|${panelH}`;
+      const panelSignature = `${padX}|${padY}|${bgAlpha}|${bgColor}|${radius}|${panelW}|${panelH}|${contentW}|${coinExtendedLineWidth}`;
       if (panelSignature !== this._lastHudPanelSignature) {
         this.hudBackground.clear();
         this.hudBackground.beginFill(bgColor, bgAlpha);
@@ -2689,6 +3395,11 @@ export class ConveyorRenderer {
         this._lastHudPanelSignature = panelSignature;
       }
     }
+    this._updateHudPointsAdornment(lines, text, uiCfg, clearCfg, {
+      pointsLineWidth,
+      coinGap,
+      coinSize
+    });
   }
 
   /**
@@ -2789,6 +3500,7 @@ export class ConveyorRenderer {
     this.conveyorHovered.clear();
     this.conveyorHoverTarget.clear();
     this.conveyorPointerPos.clear();
+    this._teardownSpotlightZone();
     this.bricksByConveyor.clear();
     this.conveyorZones.clear();
     this.brickHoldStart.clear();
@@ -2820,6 +3532,8 @@ export class ConveyorRenderer {
     this.backgroundTextureOwned = false;
     this.beltTexture = null;
     this.beltTextureOwned = false;
+    this.hudPointsAdornment = null;
+    this._lastHudPointsAdornmentSignature = '';
   }
 
   getPerformanceSnapshot() {

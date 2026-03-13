@@ -40,7 +40,7 @@
     "blockIntroPmTemplate": "This is a {nLevel}-back PM block. Press SPACE for PM items from: {pmCategoryText}."
   },
   "stimuliCsv": {
-    "basePath": "/assets/pm-words",
+    "basePath": "{runtime.assetsBase}/pm-words",
     "idColumn": "word",
     "categories": {
       "animals": "animals_members.csv",

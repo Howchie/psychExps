@@ -24,7 +24,9 @@ export async function finalizeTaskRun(args) {
             downloadJson(args.payload, filePrefix, args.selection);
         }
     }
-    const submittedToJatos = await submitToJatos(args.payload);
+    const submittedToJatos = args.jatosHandledBySink
+        ? true
+        : await submitToJatos(args.payload);
     if (submittedToJatos && args.endJatosOnSubmit !== false) {
         await endJatosStudy();
     }

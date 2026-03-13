@@ -1,4 +1,4 @@
-import { type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "../web/trial";
+import { type TrialTimelineResult, type TrialStage, type TrialResponseSpec } from "./trial";
 export interface RtTiming {
     trialDurationMs: number;
     fixationOnsetMs?: number;
@@ -31,6 +31,17 @@ export interface RtPhaseDurations {
 export interface RtPhaseOptions {
     responseTerminatesTrial?: boolean;
 }
+export interface ResolvedRtTaskConfig {
+    enabled: boolean;
+    timing: RtTiming;
+    responseTerminatesTrial: boolean;
+}
+export interface ResolveRtTaskOptions {
+    baseTiming: RtTiming;
+    override?: unknown;
+    defaultEnabled?: boolean;
+    defaultResponseTerminatesTrial?: boolean;
+}
 export interface RunBasicRtTrialArgs {
     container: HTMLElement;
     timing: RtTiming;
@@ -46,6 +57,8 @@ export interface BasicRtTrialResult {
     timings: RtPhaseDurations;
     timeline: TrialTimelineResult;
 }
+export declare function resolveRtTaskConfig(options: ResolveRtTaskOptions): ResolvedRtTaskConfig;
+export declare function mergeRtTaskConfig(base: ResolvedRtTaskConfig, override?: unknown): ResolvedRtTaskConfig;
 export declare function computeRtPhaseDurations(timing: RtTiming, options?: RtPhaseOptions): RtPhaseDurations;
 export interface MultiPhaseTrialResult {
     key: string | null;

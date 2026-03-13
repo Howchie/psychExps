@@ -1,5 +1,5 @@
 import { asArray, asObject, asString, toNonNegativeNumber, toPositiveNumber, toUnitNumber } from "../utils/coerce";
-import { normalizeKey } from "../web/ui";
+import { normalizeKey } from "../infrastructure/keys";
 import { SeededRandom } from "../infrastructure/random";
 import { createSampler } from "../infrastructure/sampling";
 import {
@@ -8,7 +8,7 @@ import {
   type OnlineParameterTransformEstimate,
   type OnlineTransformObservation,
   type OnlineTransformRuntimeData,
-} from "../web/parameterTransforms";
+} from "./parameterTransforms";
 import type { TaskModule, TaskModuleHandle, TaskModuleAddress, TaskModuleContext } from "../api/taskModule";
 
 /**
@@ -268,6 +268,13 @@ export function coerceScopedDrtConfig(
   const stimModesRaw = asArray(overrideRaw.stimModes).map((entry) => asString(entry)).filter((entry): entry is "visual" | "auditory" | "border" => (
     entry === "visual" || entry === "auditory" || entry === "border"
   ));
+  const hasStimModesOverride = Object.prototype.hasOwnProperty.call(overrideRaw, "stimModes");
+  const hasExplicitStimMode = Boolean(stimModeRaw) || legacyStimType === "audio" || legacyStimType === "border";
+  const resolvedStimMode = (stimModeRaw ||
+    (legacyStimType === "audio" ? "auditory" : legacyStimType === "border" ? "border" : base.stimMode)) as ScopedDrtConfig["stimMode"];
+  const resolvedStimModes = hasStimModesOverride
+    ? (stimModesRaw.length > 0 ? stimModesRaw : undefined)
+    : (hasExplicitStimMode ? undefined : base.stimModes);
 
   return {
     ...base,
@@ -298,9 +305,8 @@ export function coerceScopedDrtConfig(
       if (!parsed || typeof parsed.type !== "string") return [];
       return [parsed as unknown as OnlineParameterTransformConfig];
     }),
-    stimMode: ((stimModeRaw ||
-      (legacyStimType === "audio" ? "auditory" : legacyStimType === "border" ? "border" : base.stimMode)) as ScopedDrtConfig["stimMode"]),
-    stimModes: stimModesRaw.length > 0 ? stimModesRaw : base.stimModes,
+    stimMode: resolvedStimMode,
+    stimModes: resolvedStimModes,
     visual: {
       ...base.visual,
       ...(visualRaw
@@ -442,6 +448,8 @@ export interface DrtResponseTransformRow {
   response: DrtEvent;
   observation: OnlineTransformObservation;
   estimates: OnlineParameterTransformEstimate[];
+  estimate: OnlineParameterTransformEstimate | null;
+  transformColumns: Record<string, string | number | null>;
 }
 
 interface NormalizedControllerConfig {
@@ -601,7 +609,10 @@ export class DrtController {
     return this.engine.exportData();
   }
 
-  static asTaskModule(config: ScopedDrtConfig & { onControllerCreated?: (c: DrtController) => void }): TaskModule {
+  static asTaskModule(config: ScopedDrtConfig & {
+    onControllerCreated?: (c: DrtController) => void;
+    transformRunner?: OnlineParameterTransformRunner | null;
+  }): TaskModule {
     return {
       id: "drt",
       start: (moduleConfig, address, context) => {
@@ -612,6 +623,7 @@ export class DrtController {
             displayElement: context.displayElement,
             borderTargetElement: context.borderTargetElement,
             borderTargetRect: context.borderTargetRect,
+            transformRunner: config.transformRunner ?? null,
           },
         );
         config.onControllerCreated?.(controller);
@@ -666,6 +678,15 @@ export class DrtController {
         intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
         aux: estimate.aux ? { ...estimate.aux } : undefined,
       })),
+      estimate: row.estimate
+        ? {
+            ...row.estimate,
+            values: { ...row.estimate.values },
+            intervals: row.estimate.intervals ? { ...row.estimate.intervals } : undefined,
+            aux: row.estimate.aux ? { ...row.estimate.aux } : undefined,
+          }
+        : null,
+      transformColumns: { ...row.transformColumns },
     }));
   }
 
@@ -681,20 +702,53 @@ export class DrtController {
     const observation = this.mapResponseEventToObservation(event);
     if (!observation) return;
     const estimates = this.transformRunner.observe(observation);
+    const primaryEstimate = estimates.length > 0 ? this.cloneEstimate(estimates[0]) : null;
     this.responseRows.push({
       responseIndex: this.responseRows.length,
       response: { ...event },
       observation: { ...observation },
-      estimates: estimates.map((estimate) => ({
-        ...estimate,
-        values: { ...estimate.values },
-        intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
-        aux: estimate.aux ? { ...estimate.aux } : undefined,
-      })),
+      estimates: estimates.map((estimate) => this.cloneEstimate(estimate)),
+      estimate: primaryEstimate,
+      transformColumns: this.flattenEstimateColumns(primaryEstimate),
     });
     for (const estimate of estimates) {
       this.hooks.onTransformEstimate?.(estimate, { responseEvent: event, observation });
     }
+  }
+
+  private cloneEstimate(estimate: OnlineParameterTransformEstimate): OnlineParameterTransformEstimate {
+    return {
+      ...estimate,
+      values: { ...estimate.values },
+      intervals: estimate.intervals ? { ...estimate.intervals } : undefined,
+      aux: estimate.aux ? { ...estimate.aux } : undefined,
+    };
+  }
+
+  private flattenEstimateColumns(estimate: OnlineParameterTransformEstimate | null): Record<string, string | number | null> {
+    if (!estimate) return {};
+    const out: Record<string, string | number | null> = {
+      transform_model_id: estimate.modelId,
+      transform_model_type: estimate.modelType,
+      transform_sample_size: estimate.sampleSize,
+    };
+    for (const [key, value] of Object.entries(estimate.values ?? {})) {
+      out[String(key)] = Number(value);
+    }
+    for (const [key, interval] of Object.entries(estimate.intervals ?? {})) {
+      out[`${String(key)}_ci_lower`] = Number(interval.lower);
+      out[`${String(key)}_ci_upper`] = Number(interval.upper);
+    }
+    for (const [key, value] of Object.entries(estimate.aux ?? {})) {
+      if (value === null) {
+        out[`aux_${String(key)}`] = null;
+        continue;
+      }
+      if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+        out[`aux_${String(key)}`] = typeof value === "boolean" ? String(value) : value;
+      }
+    }
+    return out;
   }
 
   private mapResponseEventToObservation(event: DrtEvent): OnlineTransformObservation | null {
@@ -795,6 +849,26 @@ export class DrtController {
   private showVisual(): void {
     const element = this.ensureVisualElement();
     if (!element) return;
+    if (typeof this.config.visual.leftPx === "number") {
+      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+      const leftPx = rect ? rect.left + this.config.visual.leftPx : this.config.visual.leftPx;
+      element.style.left = `${Math.round(leftPx)}px`;
+      element.style.transform = "";
+    } else {
+      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+      if (rect && rect.width > 0) {
+        element.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+      } else {
+        element.style.left = "50%";
+      }
+      element.style.transform = "translateX(-50%)";
+    }
+    const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+    if (rect && rect.height > 0) {
+      element.style.top = `${Math.round(rect.top + this.config.visual.topPx)}px`;
+    } else {
+      element.style.top = `${this.config.visual.topPx}px`;
+    }
     element.style.display = "block";
   }
 
@@ -837,10 +911,8 @@ export class DrtController {
     } else {
       const rect = this.borderTargetRect?.() ?? this.resolveBorderTarget()?.getBoundingClientRect();
       if (!rect || rect.width <= 0 || rect.height <= 0) {
-        overlay.style.left = "0px";
-        overlay.style.top = "0px";
-        overlay.style.width = "100vw";
-        overlay.style.height = "100vh";
+        overlay.style.display = "none";
+        return;
       } else {
         overlay.style.left = `${Math.round(rect.left)}px`;
         overlay.style.top = `${Math.round(rect.top)}px`;

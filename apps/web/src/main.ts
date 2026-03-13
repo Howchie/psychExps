@@ -5,8 +5,10 @@ import {
   LifecycleManager,
   configureAutoResponder,
   resolveAutoResponderProfile,
-  resolveSelection,
-  readJatosSelectionInput,
+  loadJatosScriptCandidates,
+  waitForJatosReady,
+  resolveSelectionWithJatosRetry,
+  resolveRuntimePath,
   buildTaskMap,
   getVariantOrThrow,
   installFullscreenOnFirstInteraction,
@@ -27,37 +29,6 @@ import { changeDetectionAdapter } from "@experiments/task-change-detection";
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
 
-declare const jatos: JatosLike | undefined;
-
-function getJatosRuntime(): JatosLike | undefined {
-  const fromWindow = (window as unknown as { jatos?: JatosLike }).jatos;
-  if (fromWindow) return fromWindow;
-  try {
-    return typeof jatos !== "undefined" ? jatos : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function resolveSelectionWithJatosRetry(maxWaitMs = 10000): Promise<ReturnType<typeof resolveSelection>> {
-  const started = Date.now();
-  let selection = resolveSelection(coreDefaultConfig);
-  const hasUrlTask = new URLSearchParams(window.location.search).get("task") != null;
-  while (
-    selection.platform === "jatos"
-    && selection.source.task === "default"
-    && !hasUrlTask
-    && Date.now() - started < maxWaitMs
-  ) {
-    if (readJatosSelectionInput() != null) {
-      selection = resolveSelection(coreDefaultConfig);
-      if (selection.source.task !== "default") break;
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 100));
-  }
-  return selection;
-}
-
 async function bootstrap(): Promise<void> {
   const app = document.querySelector("#app");
   if (!(app instanceof HTMLElement)) {
@@ -76,7 +47,7 @@ async function bootstrap(): Promise<void> {
   ];
   const adapterMap = buildTaskMap(adapters);
 
-  const initialSelection = await resolveSelectionWithJatosRetry();
+  const initialSelection = await resolveSelectionWithJatosRetry(coreDefaultConfig);
   const selection = initialSelection.taskId === "pm"
     ? { ...initialSelection, taskId: "nback_pm_old", source: { ...initialSelection.source, task: "url" as const } }
     : initialSelection;
@@ -95,7 +66,7 @@ async function bootstrap(): Promise<void> {
     } else {
       const explicitPath = selection.configPath.endsWith(".json")
         ? selection.configPath
-        : `/configs/${selection.configPath}.json`;
+        : resolveRuntimePath(`/configs/${selection.configPath}.json`);
       resolvedVariantConfig = await configManager.load(explicitPath);
     }
   } else if (variant.configPath) {
@@ -103,7 +74,7 @@ async function bootstrap(): Promise<void> {
     if (fromMap) {
       resolvedVariantConfig = fromMap;
     } else {
-      resolvedVariantConfig = await configManager.load(`/configs/${variant.configPath}.json`);
+      resolvedVariantConfig = await configManager.load(resolveRuntimePath(`/configs/${variant.configPath}.json`));
     }
   }
 
@@ -177,37 +148,7 @@ const startApp = (): void => {
   void bootstrap().catch(handleBootstrapError);
 };
 
-type JatosLike = {
-  onLoad?: (cb: () => void) => void;
-  componentJsonInput?: unknown;
-  studySessionData?: unknown;
-};
-
-const waitForJatosReady = async (timeoutMs = 2000): Promise<void> => {
-  const api = getJatosRuntime();
-  if (!api) return;
-  if (typeof api.onLoad === "function") {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const done = (): void => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      const timer = window.setTimeout(done, timeoutMs);
-      api.onLoad?.(() => {
-        window.clearTimeout(timer);
-        done();
-      });
-    });
-    return;
-  }
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const latest = getJatosRuntime();
-    if (latest?.componentJsonInput != null || latest?.studySessionData != null) return;
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-  }
-};
-
-void waitForJatosReady().finally(startApp);
+void loadJatosScriptCandidates().finally(async () => {
+  await waitForJatosReady();
+  startApp();
+});

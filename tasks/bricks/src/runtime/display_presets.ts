@@ -1015,7 +1015,7 @@ export const applyDisplayPreset = (config, presetId) => {
   if (!preset) {
     return cloned;
   }
-  const mergedDisplay = deepMerge(cloned?.display || {}, materializeCompletePreset(preset));
+  const mergedDisplay = deepMerge(materializeCompletePreset(preset), cloned?.display || {});
   const presetCfg = isObject(cloned?.display?.preset) ? cloned.display.preset : {};
   const perPresetOverrides = isObject(presetCfg?.presetOverrides) ? presetCfg.presetOverrides[id] : null;
   const displayWithOverrides = isObject(perPresetOverrides)

@@ -61,6 +61,8 @@ Recognized top-level keys:
 {
   label?: string;
   trials?: number;          // >= 1, default 1
+  phase?: string;           // optional block phase tag (e.g., "practice", "main")
+  isPractice?: boolean;     // explicit practice marker; if omitted, inferred from phase containing "practice"
   manipulation?: string;    // manipulation id
   overrides?: object;       // deep-merged into per-block config
 }
@@ -198,6 +200,46 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
 }
 ```
 
+### `display.clearAnimation`
+
+Optional points pop animation shown when a brick is cleared.
+
+```ts
+{
+  enable?: boolean;
+  timeoutMs?: number;             // pop lifetime in ms
+  durationMs?: number;            // alias of timeoutMs
+  risePx?: number;                // upward drift over lifetime
+  startOffsetYPx?: number;        // initial vertical offset above brick center
+  textColor?: string | number;
+  textStrokeColor?: string | number;
+  textStrokeThickness?: number;
+  textFontFamily?: string;
+  textFontWeight?: string | number;
+  textMinSizePx?: number;         // clamp min for size-aware text
+  textMaxSizePx?: number;         // clamp max for size-aware text
+  textSizeFactor?: number;        // scales with brick height
+  textShadowColor?: string | number;
+  textShadowBlur?: number;
+  textShadowDistance?: number;
+  coin?: {
+    enable?: boolean;
+    showInPointsAnimation?: boolean;
+    showInHud?: boolean;
+    sizePx?: number;
+    hudSizePx?: number;            // optional fixed HUD coin size; default auto from HUD cap height
+    hudSizeScale?: number;         // multiplier for auto HUD size (default 0.95)
+    gapPx?: number;
+    rimColor?: string | number;
+    bodyColor?: string | number;
+    shineColor?: string | number;
+    shadowColor?: string | number;
+    symbolColor?: string | number;
+    ridgeCount?: number;
+  };
+}
+```
+
 ### `display.backgroundTexture`
 
 ```ts
@@ -248,6 +290,8 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
   alpha?: number;
   scale?: number;
   scrollFactor?: number;
+  scrollSnapMode?: "screen" | "texture" | "none"; // default "none"; "texture" keeps legacy seam snapping
+  scrollRenderMode?: "auto" | "tiling"; // default "auto"; procedural_topdown uses seam-free redraw path unless forced to "tiling"
   proceduralTopdown?: {
     tileSizePx?: number;
     ribStepPx?: number;
@@ -286,7 +330,7 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
   enable?: boolean;
   style?: string; // default style id (e.g., "crate", "present", or custom)
   styles?: Record<string, object>; // per-style overrides
-  pattern?: "wood_planks" | "gift_wrap" | "pizza";
+  pattern?: "wood_planks" | "gift_wrap" | "pizza" | "checkerboard" | "cardboard_block";
   baseFillColor?: string | number;
   baseFillAlpha?: number; // 0..1, can fully mask base brick color when 1
   alpha?: number;
@@ -302,9 +346,26 @@ Supports `enable`, `offsetX`, and visual style values used by renderer presets:
   ribbonAlpha?: number;               // gift_wrap
   ribbonWidthRatio?: number;          // gift_wrap
   ribbonInsetPx?: number;             // gift_wrap
+  bowBorderColor?: string | number;   // gift_wrap
+  bowBorderAlpha?: number;            // gift_wrap
+  bowBorderWidthPx?: number;          // gift_wrap
   paperPatternColor?: string | number; // gift_wrap
   paperPatternAlpha?: number;          // gift_wrap
   paperDotStepPx?: number;             // gift_wrap
+  checkerColorA?: string | number;     // checkerboard
+  checkerColorB?: string | number;     // checkerboard
+  checkerCellPx?: number;              // checkerboard
+  fiberColor?: string | number;        // cardboard_block
+  fiberAlpha?: number;                 // cardboard_block
+  fiberStepPx?: number;                // cardboard_block
+  speckleColor?: string | number;      // cardboard_block
+  speckleAlpha?: number;               // cardboard_block
+  speckleCount?: number;               // cardboard_block
+  tapeColor?: string | number;         // cardboard_block
+  tapeAlpha?: number;                  // cardboard_block
+  tapeWidthRatio?: number;             // cardboard_block
+  tapeInsetPx?: number;                // cardboard_block
+  tapeOrientation?: "vertical" | "horizontal" | "cross"; // cardboard_block
   sliceCount?: number;                // pizza
   toppingCount?: number;              // pizza
   crustColor?: string | number;       // pizza
@@ -367,8 +428,11 @@ Built-in brick texture style IDs (global, usable without presets):
 - `pizza`
 - `target_pizza`
 - `box`
+- `checkerboard`
+- `checker_board`
 - `crate_damaged`
 - `parcel_label`
+- `parcel-label`
 - `parcel_damaged`
 - `chest`
 
@@ -415,6 +479,7 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
     width_scaling?: boolean;         // hold_duration
     width_reference_px?: number;     // hold_duration
     width_scaling_exponent?: number; // hold_duration
+    hover_process_rate_px_s?: number;// hover_to_clear; if unset, uses runtime `brick.speed`
   };
 
   maxBricksPerTrial?: number;
@@ -438,6 +503,20 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
     fields?: Record<string, ForcedPlanFieldSpec>;
   };
 
+  interaction?: {
+    targetingArea?: "brick" | "conveyor" | "spotlight";
+    conveyorWideHitArea?:
+      | boolean
+      | {
+          enable?: boolean;
+        };
+    spotlightWideHitArea?:
+      | boolean
+      | {
+          enable?: boolean;
+        };
+  };
+
   colorCategories?: BrickCategorySpec[];
   widthCategories?: BrickCategorySpec[];
   borderColorCategories?: BrickCategorySpec[];
@@ -445,6 +524,23 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
   textureCategories?: BrickCategorySpec[];
 }
 ```
+
+`interaction` targeting behavior:
+- Default is direct brick hit-testing.
+- Preferred selector: `targetingArea`
+  - `"brick"`: interact only on brick geometry (focused brick only when spotlight forced-order is active).
+  - `"conveyor"`: interact anywhere on a conveyor lane; routes to front-most brick on that lane.
+  - `"spotlight"`: interact anywhere inside the current spotlight area; routes to currently spotlighted brick.
+- Legacy booleans remain supported:
+  - `conveyorWideHitArea: true` (same as `targetingArea: "conveyor"`)
+  - `spotlightWideHitArea: true` (same as `targetingArea: "spotlight"`)
+- If `targetingArea` is set, it takes precedence over legacy booleans.
+
+`hover_to_clear` runtime behavior:
+- Bricks continue moving while hovered (normal conveyor advection still applies).
+- Processing depletes visible width from the right edge at `hover_process_rate_px_s`.
+- Depleted segments are fully removed visually (no translucent ghost body), while interaction bounds remain the full brick object until clear/drop.
+- If `hover_process_rate_px_s` is not set, the runtime uses `brick.speed` (the sampled conveyor/brick px/s rate), so depletion rate matches forward progress by default.
 
 ### `BrickCategorySpec`
 
@@ -473,6 +569,7 @@ Supported keys (with aliases):
 - position and conveyor:
   - `conveyorIndex` / `conveyor_index`
   - `x`, or `xFraction` / `x_fraction`
+  - `rightEdge` / `right_edge`, or `rightEdgeFraction` / `right_edge_fraction`
 - category picks:
   - `colorCategoryId` / `color_category_id`
   - `widthCategoryId` / `width_category_id`
@@ -560,17 +657,87 @@ Each field can be:
 
 ```ts
 {
-  startTrialsOnSpace?: boolean;  // if true, trial starts on space
+  startTrialsOn?: "space" | "click"; // preferred explicit trigger selector
+  startTrialsOnSpace?: boolean;      // legacy alias for startTrialsOn: "space"
+  startTrialsOnClick?: boolean;      // legacy alias for startTrialsOn: "click"
   startOverlay?: {
     text?: string;
     padding?: string;
     background?: string;
     border?: string;
     borderRadius?: string;
+    boxShadow?: string;
     color?: string;
     fontSize?: string;
+    buttonStyle?: {
+      padding?: string;
+      fontSize?: string;
+      fontWeight?: string | number;
+      border?: string;
+      borderRadius?: string;
+      color?: string;
+      background?: string;
+      minWidth?: string;
+      minHeight?: string;
+      outline?: string;
+      boxShadow?: string;
+    };
+    buttonAutoFocus?: boolean;
+    buttonPadding?: string;      // click start mode: button padding
+    buttonFontSize?: string;     // click start mode: button font-size
+    buttonFontWeight?: string | number;
+    buttonBorder?: string;
+    buttonBorderRadius?: string;
+    buttonColor?: string;
+    buttonBackground?: string;
+    buttonMinWidth?: string;
+    buttonMinHeight?: string;
   };
   showBetweenBlockSummary?: boolean; // currently not consumed in runtime
+  statsPresentation?: {
+    defaultScope?: "trial" | "block" | "experiment"; // default "trial"
+    scopeByMetric?: {
+      spawned?: "trial" | "block" | "experiment";
+      cleared?: "trial" | "block" | "experiment";
+      dropped?: "trial" | "block" | "experiment";
+      points?: "trial" | "block" | "experiment";
+    };
+    reset?: Array<{
+      at?: "block_start" | "block_end"; // default "block_end"
+      scope?: "block" | "experiment";    // default "experiment"
+      metrics?: Array<"spawned" | "cleared" | "dropped" | "points">; // default all metrics
+      when?: {
+        isPractice?: boolean;
+        phaseIn?: string[];
+        labelIn?: string[];
+        manipulationIdIn?: string[];
+      };
+    }>;
+  };
+}
+```
+
+Example: show `cleared/dropped` per trial while keeping `points` cumulative across experiment,
+then clear only experiment points after practice blocks:
+
+```json
+{
+  "experiment": {
+    "statsPresentation": {
+      "defaultScope": "trial",
+      "scopeByMetric": {
+        "points": "experiment"
+      },
+      "reset": [
+        {
+          "at": "block_end",
+          "scope": "experiment",
+          "metrics": ["points"],
+          "when": { "isPractice": true }
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -616,6 +783,10 @@ Used by trial difficulty estimator:
 - Post-trial survey presets (`surveys.postTrial`) support display toggles:
   - `showQuestionNumbers?: boolean` (set `false` to hide `Q1` / `1.`)
   - `showRequiredAsterisk?: boolean` (set `false` to hide required `*` marker)
+  - `questionBorder?: string` (for example `"none"` to remove question frame border)
+  - `questionBorderRadius?: string` (for example `"0"` to square corners)
+  - `submitButtonStyle?: { ... }` (same style fields as core continue buttons)
+  - `autoFocusSubmitButton?: boolean`
 
 ## 5. SamplerSpec grammar
 

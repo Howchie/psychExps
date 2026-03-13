@@ -1,5 +1,6 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "./autoresponder";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse } from "../runtime/autoresponder";
 import { asObject, asString } from "../utils/coerce";
+import { normalizeKey as normalizeKeyBase } from "../infrastructure/keys";
 export function resolvePageBackground(args) {
     const taskUi = asObject(asObject(args.taskConfig)?.ui);
     const coreUi = asObject(asObject(args.coreConfig)?.ui);
@@ -26,10 +27,7 @@ export function setCursorHidden(hidden) {
     document.documentElement.classList.toggle(CURSOR_HIDDEN_CLASS, hidden);
 }
 export function normalizeKey(key) {
-    const k = String(key || "").toLowerCase();
-    if (k === " " || k === "spacebar" || k === "space")
-        return "space";
-    return k;
+    return normalizeKeyBase(key);
 }
 export function toJsPsychKey(key) {
     const normalized = normalizeKey(key);
@@ -95,11 +93,48 @@ export function installGlobalScrollBlocker(blockedKeys = ["space", "arrowup", "a
         window.removeEventListener("keydown", onKeyDown, { capture: true });
     };
 }
+/**
+ * Lock page scrolling during active task execution.
+ * Returns a disposer that restores prior overflow styles.
+ */
+export function lockPageScroll() {
+    const docEl = document.documentElement;
+    const body = document.body;
+    if (!docEl || !body)
+        return () => { };
+    const prevDocOverflow = docEl.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    docEl.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+        docEl.style.overflow = prevDocOverflow;
+        body.style.overflow = prevBodyOverflow;
+    };
+}
 export function installFullscreenOnFirstInteraction(container) {
     let isActive = true;
     let requestInFlight = false;
     let attempts = 0;
     const maxAttempts = 3;
+    let pendingContinueButton = null;
+    const captureContinueButton = (target) => {
+        if (!(target instanceof Element)) {
+            pendingContinueButton = null;
+            return;
+        }
+        const button = target.closest("button.exp-continue-btn");
+        pendingContinueButton = button instanceof HTMLButtonElement ? button : null;
+    };
+    const replayPendingContinueButtonClick = () => {
+        const button = pendingContinueButton;
+        pendingContinueButton = null;
+        if (!(button instanceof HTMLButtonElement))
+            return;
+        // If the original click already fired, the button/screen is usually removed.
+        if (!button.isConnected)
+            return;
+        button.click();
+    };
     const dispatchFullscreenResize = () => {
         // Some embedded/kiosk browsers do not emit a reliable resize on fullscreen
         // transitions; force a reflow signal so canvas hosts can recenter.
@@ -130,21 +165,26 @@ export function installFullscreenOnFirstInteraction(container) {
             requestInFlight = false;
             if (document.fullscreenElement) {
                 dispatchFullscreenResize();
+                replayPendingContinueButtonClick();
                 cleanup();
             }
         }
     };
-    const onPointer = () => {
+    const onPointer = (event) => {
+        captureContinueButton(event.target);
         void request();
     };
     const onKey = () => {
+        pendingContinueButton = null;
         void request();
     };
     const onFullscreenChange = () => {
         const isFullscreenActive = !!document.fullscreenElement;
         dispatchFullscreenResize();
-        if (isFullscreenActive)
+        if (isFullscreenActive) {
+            replayPendingContinueButtonClick();
             cleanup();
+        }
     };
     const cleanup = () => {
         if (!isActive)
@@ -173,6 +213,62 @@ export function escapeHtml(value) {
 export function sleep(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms)));
 }
+export function resolveButtonStyleOverrides(raw) {
+    const node = asObject(raw);
+    if (!node)
+        return undefined;
+    const style = {};
+    const assignString = (target, ...keys) => {
+        for (const key of keys) {
+            const value = asString(node[key]);
+            if (value && value.trim().length > 0) {
+                style[target] = value.trim();
+                return;
+            }
+        }
+    };
+    assignString("padding", "padding");
+    assignString("fontSize", "fontSize", "font_size");
+    assignString("border", "border");
+    assignString("borderRadius", "borderRadius", "border_radius");
+    assignString("color", "color");
+    assignString("background", "background");
+    assignString("minWidth", "minWidth", "min_width");
+    assignString("minHeight", "minHeight", "min_height");
+    assignString("outline", "outline");
+    assignString("boxShadow", "boxShadow", "box_shadow");
+    const fontWeightRaw = node.fontWeight ?? node.font_weight;
+    if (typeof fontWeightRaw === "string" || typeof fontWeightRaw === "number") {
+        style.fontWeight = fontWeightRaw;
+    }
+    return Object.keys(style).length > 0 ? style : undefined;
+}
+export function applyButtonStyleOverrides(button, style) {
+    if (!style)
+        return;
+    if (style.padding !== undefined)
+        button.style.padding = style.padding;
+    if (style.fontSize !== undefined)
+        button.style.fontSize = style.fontSize;
+    if (style.fontWeight !== undefined)
+        button.style.fontWeight = String(style.fontWeight);
+    if (style.border !== undefined)
+        button.style.border = style.border;
+    if (style.borderRadius !== undefined)
+        button.style.borderRadius = style.borderRadius;
+    if (style.color !== undefined)
+        button.style.color = style.color;
+    if (style.background !== undefined)
+        button.style.background = style.background;
+    if (style.minWidth !== undefined)
+        button.style.minWidth = style.minWidth;
+    if (style.minHeight !== undefined)
+        button.style.minHeight = style.minHeight;
+    if (style.outline !== undefined)
+        button.style.outline = style.outline;
+    if (style.boxShadow !== undefined)
+        button.style.boxShadow = style.boxShadow;
+}
 export async function waitForContinue(container, html, options = {}) {
     const buttonId = options.buttonId ?? "exp-continue-btn";
     const buttonLabel = options.buttonLabel ?? "Continue";
@@ -180,12 +276,16 @@ export async function waitForContinue(container, html, options = {}) {
     const btn = container.querySelector(`#${buttonId}`);
     if (!(btn instanceof HTMLButtonElement))
         return;
+    applyButtonStyleOverrides(btn, options.buttonStyle);
     if (isAutoResponderEnabled()) {
         const delayMs = sampleAutoContinueDelayMs() ?? 0;
         await sleep(delayMs);
-        btn.click();
+        container.innerHTML = "";
         return;
     }
+    const clearScreen = () => {
+        container.innerHTML = "";
+    };
     await new Promise((resolve) => {
         const onKey = (ev) => {
             if (normalizeKey(ev.key) !== "space")
@@ -205,7 +305,80 @@ export async function waitForContinue(container, html, options = {}) {
         };
         btn.addEventListener("click", onClick);
         window.addEventListener("keydown", onKey);
-        btn.focus();
+        if (options.autoFocusButton !== false) {
+            btn.focus();
+        }
+    });
+    clearScreen();
+}
+export async function waitForContinueChoice(container, html, options) {
+    const buttons = options.buttons ?? [];
+    if (buttons.length === 0) {
+        return { id: "continue", label: "Continue", action: "continue" };
+    }
+    const buttonsHtml = buttons
+        .map((button) => `<button id="${escapeHtml(button.id)}" class="exp-continue-btn" type="button" data-action="${escapeHtml(button.action)}">${escapeHtml(button.label)}</button>`)
+        .join(" ");
+    container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:980px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;">${buttonsHtml}</p></div></div>`;
+    for (const button of buttons) {
+        const node = container.querySelector(`#${button.id}`);
+        if (node instanceof HTMLButtonElement) {
+            applyButtonStyleOverrides(node, options.buttonStyle);
+        }
+    }
+    if (isAutoResponderEnabled()) {
+        const preferred = buttons.find((b) => b.action === "continue") ?? buttons[0];
+        const delayMs = sampleAutoContinueDelayMs() ?? 0;
+        await sleep(delayMs);
+        container.innerHTML = "";
+        return preferred;
+    }
+    return await new Promise((resolve) => {
+        const clearScreen = () => {
+            container.innerHTML = "";
+        };
+        const cleanup = () => {
+            window.removeEventListener("keydown", onKey);
+            for (const button of buttons) {
+                const node = container.querySelector(`#${button.id}`);
+                if (node instanceof HTMLButtonElement) {
+                    node.removeEventListener("click", onClick);
+                }
+            }
+        };
+        const submit = (selected) => {
+            cleanup();
+            clearScreen();
+            resolve(selected);
+        };
+        const onClick = (event) => {
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLButtonElement))
+                return;
+            const selected = buttons.find((b) => b.id === target.id);
+            if (!selected)
+                return;
+            submit(selected);
+        };
+        const onKey = (event) => {
+            if (normalizeKey(event.key) !== "space")
+                return;
+            if (!isEditableKeyTarget(event.target))
+                event.preventDefault();
+            const preferred = buttons.find((b) => b.action === "continue") ?? buttons[0];
+            submit(preferred);
+        };
+        for (const button of buttons) {
+            const node = container.querySelector(`#${button.id}`);
+            if (node instanceof HTMLButtonElement) {
+                node.addEventListener("click", onClick);
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        const firstButton = container.querySelector(`#${buttons[0]?.id ?? ""}`);
+        if (firstButton instanceof HTMLButtonElement && options.autoFocusFirstButton !== false) {
+            firstButton.focus();
+        }
     });
 }
 export function captureTimedResponse(args) {
@@ -453,7 +626,6 @@ export function ensureJsPsychCanvasCentered(container) {
   width: 100%;
 }
 .exp-jspsych-canvas-centered.jspsych-display-element {
-  height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
 }
@@ -476,7 +648,7 @@ export function ensureJsPsychCanvasCentered(container) {
   justify-content: center;
   align-items: center;
   width: 100%;
-  min-height: 100%;
+  min-height: 0;
 }
 .exp-jspsych-canvas-centered #jspsych-canvas-stimulus {
   display: block;

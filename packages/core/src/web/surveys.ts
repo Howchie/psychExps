@@ -1,5 +1,5 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "./autoresponder";
-import { escapeHtml, sleep } from "./ui";
+import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "../runtime/autoresponder";
+import { applyButtonStyleOverrides, escapeHtml, sleep, type ButtonStyleOverrides } from "./ui";
 
 export type SurveyAnswerValue = string | number | null;
 export type SurveyAnswerMap = Record<string, SurveyAnswerValue>;
@@ -41,8 +41,12 @@ export interface SurveyDefinition {
   description?: string;
   showQuestionNumbers?: boolean;
   showRequiredAsterisk?: boolean;
+  questionBorder?: string;
+  questionBorderRadius?: string;
   questions: SurveyQuestion[];
   submitLabel?: string;
+  submitButtonStyle?: ButtonStyleOverrides;
+  autoFocusSubmitButton?: boolean;
   computeScores?: (answers: SurveyAnswerMap) => Record<string, number> | undefined;
 }
 
@@ -59,6 +63,8 @@ export interface SurveyRunResult {
 export interface RunSurveyOptions {
   buttonId?: string;
   className?: string;
+  submitButtonStyle?: ButtonStyleOverrides;
+  autoFocusSubmitButton?: boolean;
 }
 
 export async function runSurvey(
@@ -77,8 +83,14 @@ export async function runSurvey(
   if (!(submitButton instanceof HTMLButtonElement)) {
     throw new Error(`Survey submit button missing: ${buttonId}`);
   }
+  applyButtonStyleOverrides(submitButton, options.submitButtonStyle ?? survey.submitButtonStyle);
 
-  const answers = await waitForSurveySubmit(container, survey, submitButton);
+  const answers = await waitForSurveySubmit(
+    container,
+    survey,
+    submitButton,
+    options.autoFocusSubmitButton ?? survey.autoFocusSubmitButton,
+  );
   const completedAt = Date.now();
   const scores = survey.computeScores?.(answers);
   return {
@@ -96,6 +108,7 @@ function waitForSurveySubmit(
   container: HTMLElement,
   survey: SurveyDefinition,
   submitButton: HTMLButtonElement,
+  autoFocusSubmitButton: boolean | undefined,
 ): Promise<SurveyAnswerMap> {
   return new Promise((resolve) => {
     const errors = container.querySelector('[data-exp-survey-errors]');
@@ -135,7 +148,9 @@ function waitForSurveySubmit(
 
     submitButton.addEventListener("click", onClick);
     window.addEventListener("keydown", onKey);
-    submitButton.focus();
+    if (autoFocusSubmitButton !== false) {
+      submitButton.focus();
+    }
 
     if (isAutoResponderEnabled()) {
       const autoAnswers = autoFillSurvey(container, survey);
@@ -226,8 +241,17 @@ function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: 
   const description = survey.description ? `<p style="margin:0 0 1rem 0;">${escapeHtml(survey.description)}</p>` : "";
   const showQuestionNumbers = survey.showQuestionNumbers !== false;
   const showRequiredAsterisk = survey.showRequiredAsterisk !== false;
+  const questionBorder = resolveInlineStyleValue(survey.questionBorder, "1px solid #e5e7eb");
+  const questionBorderRadius = resolveInlineStyleValue(survey.questionBorderRadius, "8px");
   const questionsHtml = survey.questions
-    .map((question, index) => renderQuestion(question, index + 1, showQuestionNumbers, showRequiredAsterisk))
+    .map((question, index) => renderQuestion(
+      question,
+      index + 1,
+      showQuestionNumbers,
+      showRequiredAsterisk,
+      questionBorder,
+      questionBorderRadius,
+    ))
     .join("");
   const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
   return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div style="width:min(900px,96vw);padding:1rem 1.25rem;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1rem 0 0 0;"><button id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
@@ -238,6 +262,8 @@ function renderQuestion(
   index: number,
   showQuestionNumbers: boolean,
   showRequiredAsterisk: boolean,
+  questionBorder: string,
+  questionBorderRadius: string,
 ): string {
   const required = question.required !== false;
   const star = required && showRequiredAsterisk ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
@@ -246,7 +272,7 @@ function renderQuestion(
   const help = question.helpText ? `<p style="margin:0 0 0.6rem 0;color:#374151;">${escapeHtml(question.helpText)}</p>` : "";
   const inner = question.type === "single_choice" ? renderSingleChoice(question) : renderSlider(question);
   const legend = showQuestionNumbers ? `<legend style="padding:0 0.3rem;">Q${index}</legend>` : "";
-  return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:1px solid #e5e7eb;border-radius:8px;">${legend}${prompt}${help}${inner}</fieldset>`;
+  return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:${questionBorder};border-radius:${questionBorderRadius};">${legend}${prompt}${help}${inner}</fieldset>`;
 }
 
 function renderSingleChoice(question: SurveySingleChoiceQuestion): string {
@@ -375,6 +401,10 @@ export interface AtwitSurveyOptions {
   max?: number;
   showQuestionNumbers?: boolean;
   showRequiredAsterisk?: boolean;
+  questionBorder?: string;
+  questionBorderRadius?: string;
+  submitButtonStyle?: ButtonStyleOverrides;
+  autoFocusSubmitButton?: boolean;
   required?: boolean;
 }
 
@@ -388,6 +418,8 @@ export function createAtwitSurvey(options: AtwitSurveyOptions = {}): SurveyDefin
     title: options.title ?? "Workload Rating",
     showQuestionNumbers: options.showQuestionNumbers,
     showRequiredAsterisk: options.showRequiredAsterisk,
+    questionBorder: options.questionBorder,
+    questionBorderRadius: options.questionBorderRadius,
     questions: [
       {
         id: questionId,
@@ -402,6 +434,8 @@ export function createAtwitSurvey(options: AtwitSurveyOptions = {}): SurveyDefin
       },
     ],
     submitLabel: "Continue",
+    submitButtonStyle: options.submitButtonStyle,
+    autoFocusSubmitButton: options.autoFocusSubmitButton,
     computeScores: (answers) => {
       const value = answers[questionId];
       if (typeof value !== "number") return undefined;
@@ -421,6 +455,10 @@ export interface NasaTlxSurveyOptions {
   initial?: number;
   showQuestionNumbers?: boolean;
   showRequiredAsterisk?: boolean;
+  questionBorder?: string;
+  questionBorderRadius?: string;
+  submitButtonStyle?: ButtonStyleOverrides;
+  autoFocusSubmitButton?: boolean;
   showValue?: boolean;
   required?: boolean;
 }
@@ -437,6 +475,8 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
     description: options.description,
     showQuestionNumbers: options.showQuestionNumbers,
     showRequiredAsterisk: options.showRequiredAsterisk,
+    questionBorder: options.questionBorder,
+    questionBorderRadius: options.questionBorderRadius,
     questions: selectedSubscales.map((subscale) => ({
       id: subscale.id,
       type: "slider",
@@ -452,6 +492,8 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
       required: options.required !== false,
     })),
     submitLabel: "Continue",
+    submitButtonStyle: options.submitButtonStyle,
+    autoFocusSubmitButton: options.autoFocusSubmitButton,
     computeScores: (answers) => {
       const numericValues = selectedSubscales
         .map((subscale) => answers[subscale.id])
@@ -484,6 +526,10 @@ export type SurveyPresetSpec =
       max?: number;
       showQuestionNumbers?: boolean;
       showRequiredAsterisk?: boolean;
+      questionBorder?: string;
+      questionBorderRadius?: string;
+      submitButtonStyle?: ButtonStyleOverrides;
+      autoFocusSubmitButton?: boolean;
       required?: boolean;
     }
   | {
@@ -498,9 +544,18 @@ export type SurveyPresetSpec =
       initial?: number;
       showQuestionNumbers?: boolean;
       showRequiredAsterisk?: boolean;
+      questionBorder?: string;
+      questionBorderRadius?: string;
+      submitButtonStyle?: ButtonStyleOverrides;
+      autoFocusSubmitButton?: boolean;
       showValue?: boolean;
       required?: boolean;
     };
+
+function resolveInlineStyleValue(raw: string | undefined, fallback: string): string {
+  const value = typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : fallback;
+  return escapeHtml(value);
+}
 
 export function createSurveyFromPreset(spec: SurveyPresetSpec): SurveyDefinition {
   if (spec.preset === "atwit") {

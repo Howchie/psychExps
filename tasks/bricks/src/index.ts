@@ -14,12 +14,11 @@ import {
   hashSeed,
   recordsToCsv as toCsv,
   resolveInstructionScreenSlots,
+  resolveButtonStyleOverrides,
   resolveTemplatedString,
-  renderCenteredNotice,
   runInstructionScreens,
   runTaskSession,
   runSurvey,
-  waitForContinue,
   isStimulusExportOnly,
   exportStimulusRows,
   asObject,
@@ -40,6 +39,13 @@ import {
 } from '@experiments/core';
 import { resolveBricksDrtConfig, type BricksScopedDrtConfig } from './runtime/drtConfig.js';
 import {
+  addTrialStatsToAccumulator,
+  applyResetRulesAt,
+  buildHudBaseStats,
+  createBricksStatsAccumulator,
+  resolveBricksStatsPresentation,
+} from './runtime/statsPresentation.js';
+import {
   runConveyorTrial,
   type ConveyorTrialData,
   type ConveyorTrialDrtRuntime,
@@ -51,6 +57,8 @@ interface BlockPlanItem {
   label: string;
   trials: number;
   manipulationId: string | null;
+  phase: string | null;
+  isPractice: boolean;
   trialConfigs: Array<Record<string, unknown>>;
 }
 
@@ -87,6 +95,8 @@ class BricksTaskAdapter implements TaskAdapter {
       { id: 'baseline', label: 'Moray Baseline', configPath: 'bricks/baseline' },
       { id: 'moray1991', label: 'Moray 1991 VPT+VDD', configPath: 'bricks/moray1991' },
       { id: 'spotlight', label: 'Spotlight + DRT', configPath: 'bricks/spotlight' },
+      { id: 'evanderHons', label: 'Evander Honours', configPath: 'bricks/evanderHons' },
+      { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No SPotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
       { id: 'drt_block_demo', label: 'DRT Block Scope Demo', configPath: 'bricks/drt_block_demo' },
     ],
   };
@@ -101,9 +111,20 @@ class BricksTaskAdapter implements TaskAdapter {
     if (!this.context) throw new Error("Bricks Task not initialized");
     const { context } = this;
     const { taskConfig, rawTaskConfig, selection, resolver, container, moduleRunner } = context;
+    const rawTaskNode = asRecord(rawTaskConfig.task);
+    const rawTaskModules = asRecord(rawTaskNode?.modules);
+    const rawTaskDrt = asRecord(rawTaskModules?.drt);
+    const rawTaskDrtEnabledBefore = rawTaskDrt ? rawTaskDrt.enabled : undefined;
+    if (rawTaskDrt) {
+      // Bricks manages DRT scopes manually via startDrtModuleScope; prevent orchestrator auto-start duplication.
+      rawTaskDrt.enabled = false;
+    }
 
     const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId));
     const blockPlan = buildBlockPlan(taskConfig as Record<string, unknown>, rng, selection);
+    const instructionSlots = resolveInstructionScreenSlots((taskConfig as Record<string, unknown>).instructions);
+    const statsPresentation = resolveBricksStatsPresentation(taskConfig);
+    const statsAccumulator = createBricksStatsAccumulator();
 
     if (isStimulusExportOnly(taskConfig)) {
       return exportStimulusRows({
@@ -138,32 +159,41 @@ class BricksTaskAdapter implements TaskAdapter {
 
     const orchestrator = new TaskOrchestrator<BlockPlanItem, Record<string, unknown>, ConveyorTrialData>(context);
 
-    return orchestrator.run({
-      buttonIdPrefix: "bricks",
-      getBlocks: () => blockPlan,
-      getTrials: ({ block }) => block.trialConfigs,
-      getEvents: () => eventLogger.events,
-      onTaskStart: () => {
-        eventLogger.emit("task_start", { task: "bricks" });
-      },
-      renderInstruction: (ctx) => {
-        const instructions = asObject(taskConfig.instructions);
-        const sectionPages = instructions ? asArray(instructions[ctx.section]) : [];
-        const pageSpec = sectionPages[ctx.pageIndex];
-        if (!pageSpec) return ctx.pageText;
+    try {
+      return await orchestrator.run({
+        buttonIdPrefix: "bricks",
+        introPages: instructionSlots.intro,
+        endPages: instructionSlots.end,
+        getBlocks: () => blockPlan,
+        getTrials: ({ block }) => block.trialConfigs,
+        getEvents: () => eventLogger.events,
+        onTaskStart: () => {
+          eventLogger.emit("task_start", { task: "bricks" });
+        },
+        renderInstruction: (ctx) => {
+          const sectionPages = instructionSlots[ctx.section as keyof typeof instructionSlots] ?? [];
+          const pageSpec = sectionPages[ctx.pageIndex];
+          if (!pageSpec) return ctx.pageHtml ?? ctx.pageText;
 
-        const resolved = resolveInstructionPagesForContext({
-          pages: [pageSpec as any],
-          templateVars: taskConfig as Record<string, unknown>,
-          resolver,
-          blockIndex: ctx.blockLabel ? blockPlan.findIndex(b => b.label === ctx.blockLabel) : undefined
-        })[0];
+          const resolved = resolveInstructionPagesForContext({
+            pages: [pageSpec as any],
+            templateVars: taskConfig as Record<string, unknown>,
+            resolver,
+            blockIndex: ctx.blockLabel ? blockPlan.findIndex((b) => b.label === ctx.blockLabel) : undefined,
+          })[0];
 
-        return renderBricksInstructionPage(resolved || {}, ctx.pageText);
-      },
-      onBlockStart: async ({ block, blockIndex }) => {
+          return renderBricksInstructionPage(resolved || {}, ctx.pageText);
+        },
+        onBlockStart: async ({ block, blockIndex }) => {
         eventLogger.emit("block_start", { label: block.label, manipulationId: block.manipulationId }, { blockIndex });
         blockDrtPreviousStats.delete(blockIndex);
+        statsAccumulator.block = { spawned: 0, cleared: 0, dropped: 0, points: 0 };
+        applyResetRulesAt(statsAccumulator, statsPresentation, "block_start", {
+          label: block.label,
+          manipulationId: block.manipulationId,
+          phase: block.phase,
+          isPractice: block.isPractice,
+        });
 
         const blockScopedDrt = resolveBlockScopedDrtConfig(block.trialConfigs);
         if (blockScopedDrt && blockScopedDrt.enabled && blockScopedDrt.scope === "block") {
@@ -190,14 +220,23 @@ class BricksTaskAdapter implements TaskAdapter {
             onControllerCreated: (controller) => { activeScope.controller = controller; },
             context: {
               displayElement: container,
-              borderTargetElement: container,
+              borderTargetElement: undefined,
               borderTargetRect: () => activeScope.bindings?.displayElement?.getBoundingClientRect() ?? null,
             },
           });
           activeDrtScopes.set(scopeId, activeScope);
         }
       },
-      runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
+        runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
+        const stageHost = document.createElement("div");
+        stageHost.style.width = "100%";
+        stageHost.style.minHeight = "70vh";
+        stageHost.style.display = "flex";
+        stageHost.style.justifyContent = "center";
+        stageHost.style.alignItems = "center";
+        container.innerHTML = "";
+        container.appendChild(stageHost);
+
         const resolvedDrtConfig = resolveBricksDrtConfig(resolveBricksDrtOverride(trial));
         let injectedDrtRuntime: ConveyorTrialDrtRuntime | undefined;
         const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
@@ -225,8 +264,8 @@ class BricksTaskAdapter implements TaskAdapter {
               seedSuffix: scopeId,
               onControllerCreated: (controller) => { activeScope.controller = controller; },
               context: {
-                displayElement: container,
-                borderTargetElement: container,
+                displayElement: stageHost,
+                borderTargetElement: undefined,
                 borderTargetRect: () => activeScope.bindings?.displayElement?.getBoundingClientRect() ?? null,
               },
             });
@@ -251,15 +290,6 @@ class BricksTaskAdapter implements TaskAdapter {
           }
         }
 
-        const stageHost = document.createElement("div");
-        stageHost.style.width = "100%";
-        stageHost.style.minHeight = "70vh";
-        stageHost.style.display = "flex";
-        stageHost.style.justifyContent = "center";
-        stageHost.style.alignItems = "center";
-        container.innerHTML = "";
-        container.appendChild(stageHost);
-
         let record = await runConveyorTrial({
           displayElement: stageHost,
           blockLabel: block.label,
@@ -267,6 +297,7 @@ class BricksTaskAdapter implements TaskAdapter {
           trialIndex,
           config: trial,
           drtRuntime: injectedDrtRuntime,
+          hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
         });
 
         // Handle DRT results if trial-scoped
@@ -278,11 +309,19 @@ class BricksTaskAdapter implements TaskAdapter {
           });
           const trialResult = trialScopeResults.find((r) => r.moduleId === "drt");
           if (trialResult) {
+            const responseRows = ((trialResult as any).responseRows ?? []) as Array<Record<string, unknown>>;
+            const latestEstimate = responseRows
+              .slice()
+              .reverse()
+              .map((row) => row.estimate as Record<string, unknown> | null | undefined)
+              .find((estimate) => Boolean(estimate)) ?? null;
             record = {
               ...record,
-              drt: trialResult.data,
-              drt_transforms: (trialResult as any).transforms,
-              drt_response_rows: (trialResult as any).responseRows,
+              drt: {
+                ...(trialResult.data ?? {}),
+                ...(latestEstimate ? { transform_latest: latestEstimate } : {}),
+              },
+              drt_response_rows: responseRows,
             } as ConveyorTrialData;
           }
           activeDrtScopes.delete(scopeId);
@@ -317,30 +356,54 @@ class BricksTaskAdapter implements TaskAdapter {
             scores: entry.scores ?? {},
           })),
         }, { blockIndex, trialIndex });
+        addTrialStatsToAccumulator(statsAccumulator, (record as any)?.game?.stats ?? {});
+        (record as any).stats_scope_totals = {
+          block: { ...statsAccumulator.block },
+          experiment: { ...statsAccumulator.experiment },
+        };
 
         return record;
       },
-      onBlockEnd: async ({ block, blockIndex, trialResults }) => {
+        onBlockEnd: async ({ block, blockIndex, trialResults }) => {
         const totals = summarizeBlockTrials(trialResults);
         eventLogger.emit("block_end", { label: block.label, totals }, { blockIndex });
-        
-        const showDrtSummary = blockHasEnabledDrt(trialResults);
-        const drtSummary = showDrtSummary ? `<li>DRT hits: ${totals.hits}</li><li>DRT misses: ${totals.misses}</li>` : "";
-        
-        await waitForContinue(
-          container,
-          `<h3>End of ${escapeHtml(block.label)}</h3><ul><li>Bricks cleared: ${totals.cleared}</li><li>Bricks dropped: ${totals.dropped}</li>${drtSummary}</ul>`,
-          { buttonId: `bricks-continue-btn-end-${blockIndex}` },
-        );
+        applyResetRulesAt(statsAccumulator, statsPresentation, "block_end", {
+          label: block.label,
+          manipulationId: block.manipulationId,
+          phase: block.phase,
+          isPractice: block.isPractice,
+        });
 
         activeDrtScopes.delete(toBricksDrtScopeId(blockIndex, null));
         blockDrtPreviousStats.delete(blockIndex);
       },
-      csvOptions: {
-        suffix: "bricks",
-        getRecords: (res) => buildBricksCsvRows(res.blocks.flatMap((b: any) => b.trialResults))
+        csvOptions: {
+          suffix: "bricks_drt_rows",
+          getRecords: (res) => buildBricksDrtRows(
+            res.blocks.flatMap((b: any) => b.trialResults),
+            blockPlan,
+            {
+              participantId: selection.participant.participantId,
+              variantId: selection.variantId,
+            },
+          ),
+        },
+        getTaskMetadata: (res) => ({
+          drt_rows: buildBricksDrtRows(
+            res.blocks.flatMap((b: any) => b.trialResults),
+            blockPlan,
+            {
+              participantId: selection.participant.participantId,
+              variantId: selection.variantId,
+            },
+          ),
+        }),
+      });
+    } finally {
+      if (rawTaskDrt) {
+        rawTaskDrt.enabled = rawTaskDrtEnabledBefore;
       }
-    });
+    }
   }
 
   async terminate(): Promise<void> {}
@@ -385,6 +448,11 @@ function buildBlockPlan(
     });
     const manipulationId = manipulationIds.length > 0 ? manipulationIds.join("+") : null;
     const label = typeof block.label === 'string' && block.label.trim() ? block.label.trim() : `Block ${index + 1}`;
+    const phase = typeof block.phase === 'string' && block.phase.trim().length > 0 ? block.phase.trim() : null;
+    const isPractice =
+      typeof block.isPractice === 'boolean'
+        ? block.isPractice
+        : (typeof phase === 'string' && phase.toLowerCase().includes('practice'));
     const trialsRaw = Number(block.trials ?? 1);
     const trials = Number.isFinite(trialsRaw) ? Math.max(1, Math.floor(trialsRaw)) : 1;
 
@@ -440,7 +508,16 @@ function buildBlockPlan(
       return trialConfig;
     });
 
-    return { index, label, trials, manipulationId, trialConfigs };
+    return {
+      ...block,
+      index,
+      label,
+      trials,
+      manipulationId,
+      phase,
+      isPractice,
+      trialConfigs,
+    };
   });
 }
 
@@ -545,25 +622,143 @@ function blockHasEnabledDrt(rows: ConveyorTrialData[]): boolean {
   });
 }
 
-function buildBricksCsvRows(rows: ConveyorTrialData[]): Array<Record<string, string | number>> {
-  return rows.map((row) => {
-    const gameStats = ((row.game as any)?.stats ?? {}) as Record<string, unknown>;
-    const drtStats = ((row.drt as any)?.stats ?? {}) as Record<string, unknown>;
-    const surveySummaries = collectSurveySummaries(row);
-    return {
-      block_label: row.block_label,
-      block_index: row.block_index,
-      trial_index: row.trial_index,
-      trial_duration_ms: row.trial_duration_ms,
-      end_reason: row.end_reason,
-      cleared: Number(gameStats.cleared ?? 0),
-      dropped: Number(gameStats.dropped ?? 0),
-      spawned: Number(gameStats.spawned ?? 0),
-      drt_hits: Number(drtStats.hits ?? 0),
-      drt_misses: Number(drtStats.misses ?? 0),
-      atwit_overall: surveySummaries.atwitOverall ?? '',
-      nasa_raw_tlx: surveySummaries.nasaRawTlx ?? '',
-    };
+function toPrimitiveCell(value: unknown): string | number | boolean | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  return JSON.stringify(value);
+}
+
+function flattenUnknown(
+  value: unknown,
+  prefix: string,
+  out: Record<string, string | number | boolean | null>,
+): void {
+  if (value === null || value === undefined) {
+    out[prefix] = null;
+    return;
+  }
+  if (Array.isArray(value)) {
+    out[prefix] = JSON.stringify(value);
+    return;
+  }
+  if (typeof value !== "object") {
+    out[prefix] = toPrimitiveCell(value);
+    return;
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) {
+    out[prefix] = "{}";
+    return;
+  }
+  for (const [key, nested] of entries) {
+    const child = prefix ? `${prefix}_${String(key)}` : String(key);
+    flattenUnknown(nested, child, out);
+  }
+}
+
+function buildSpotlightLookup(row: ConveyorTrialData): {
+  findSpotlightAtMs: (timeMs: number) => { spotlightBrickId: string | null; spotlightConveyorId: string | null };
+} {
+  const timeline = Array.isArray((row as any).timeline_events) ? ((row as any).timeline_events as Array<Record<string, unknown>>) : [];
+  const sorted = timeline
+    .map((entry) => ({
+      time: Number(entry.time ?? entry.time_ms ?? 0),
+      event: entry,
+    }))
+    .filter((entry) => Number.isFinite(entry.time))
+    .sort((a, b) => a.time - b.time);
+
+  const brickToConveyor = new Map<string, string | null>();
+  let spotlightBrickId: string | null = null;
+  const checkpoints: Array<{ time: number; spotlightBrickId: string | null; spotlightConveyorId: string | null }> = [];
+
+  for (const entry of sorted) {
+    const event = entry.event;
+    const type = String(event.type ?? "");
+    if (type === "brick_spawned") {
+      const brickId = typeof event.brick_id === "string" ? event.brick_id : null;
+      const conveyorId = typeof event.conveyor_id === "string" ? event.conveyor_id : null;
+      if (brickId) brickToConveyor.set(brickId, conveyorId);
+    }
+    if (type === "brick_focus_changed") {
+      spotlightBrickId = typeof event.active_brick_id === "string" ? event.active_brick_id : null;
+    }
+    checkpoints.push({
+      time: entry.time,
+      spotlightBrickId,
+      spotlightConveyorId: spotlightBrickId ? (brickToConveyor.get(spotlightBrickId) ?? null) : null,
+    });
+  }
+
+  return {
+    findSpotlightAtMs: (timeMs: number) => {
+      if (checkpoints.length === 0) return { spotlightBrickId: null, spotlightConveyorId: null };
+      let chosen: { spotlightBrickId: string | null; spotlightConveyorId: string | null } = {
+        spotlightBrickId: null,
+        spotlightConveyorId: null,
+      };
+      for (const checkpoint of checkpoints) {
+        if (checkpoint.time > timeMs) break;
+        chosen = {
+          spotlightBrickId: checkpoint.spotlightBrickId,
+          spotlightConveyorId: checkpoint.spotlightConveyorId,
+        };
+      }
+      return chosen;
+    },
+  };
+}
+
+function buildBricksDrtRows(
+  rows: ConveyorTrialData[],
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string; variantId: string },
+): Array<Record<string, string | number | boolean | null>> {
+  const out: Array<Record<string, string | number | boolean | null>> = [];
+
+  for (const row of rows) {
+    const responseRows = Array.isArray((row as any).drt_response_rows)
+      ? ((row as any).drt_response_rows as Array<Record<string, unknown>>)
+      : [];
+    if (responseRows.length === 0) continue;
+
+    const blockMeta = blockPlan[row.block_index];
+    const spotlightLookup = buildSpotlightLookup(row);
+
+    for (const responseRow of responseRows) {
+      const response = (responseRow.response ?? {}) as Record<string, unknown>;
+      const responseTimeMs = Number(response.time ?? response.rt_ms ?? 0);
+      const spotlightAtResponse = spotlightLookup.findSpotlightAtMs(responseTimeMs);
+      const flat: Record<string, string | number | boolean | null> = {
+        participant_id: ids.participantId,
+        variant_id: ids.variantId,
+        bricks_trial_id: `B${row.block_index}_T${row.trial_index}`,
+        block_index: row.block_index,
+        block_label: row.block_label,
+        block_phase: blockMeta?.phase ?? null,
+        block_is_practice: blockMeta?.isPractice ?? null,
+        manipulation_id: blockMeta?.manipulationId ?? null,
+        trial_index: row.trial_index,
+        trial_duration_ms: row.trial_duration_ms,
+        trial_end_reason: row.end_reason,
+        spotlight_brick_id: spotlightAtResponse.spotlightBrickId,
+        spotlight_conveyor_id: spotlightAtResponse.spotlightConveyorId,
+      };
+      flattenUnknown(responseRow, "", flat);
+      out.push(flat);
+    }
+  }
+
+  if (out.length === 0) return out;
+  const allColumns = new Set<string>();
+  out.forEach((entry) => Object.keys(entry).forEach((key) => allColumns.add(key)));
+  const orderedColumns = Array.from(allColumns);
+  return out.map((entry) => {
+    const normalized: Record<string, string | number | boolean | null> = {};
+    orderedColumns.forEach((key) => {
+      normalized[key] = Object.prototype.hasOwnProperty.call(entry, key) ? entry[key] : null;
+    });
+    return normalized;
   });
 }
 
@@ -628,6 +823,8 @@ function toSurveyDefinition(entry: unknown, index: number): SurveyDefinition | n
       description: typeof obj.description === 'string' ? obj.description : undefined,
       showQuestionNumbers: typeof obj.showQuestionNumbers === 'boolean' ? obj.showQuestionNumbers : undefined,
       showRequiredAsterisk: typeof obj.showRequiredAsterisk === 'boolean' ? obj.showRequiredAsterisk : undefined,
+      submitButtonStyle: resolveButtonStyleOverrides(obj.submitButtonStyle),
+      autoFocusSubmitButton: typeof obj.autoFocusSubmitButton === 'boolean' ? obj.autoFocusSubmitButton : undefined,
       questions: obj.questions as SurveyDefinition["questions"],
       submitLabel: typeof obj.submitLabel === 'string' ? obj.submitLabel : undefined,
       computeScores:

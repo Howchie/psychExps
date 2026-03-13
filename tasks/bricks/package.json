@@ -10,7 +10,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "difficulty": "node ./scripts/run-difficulty-estimate.mjs",
+    "render:stimuli": "node ./scripts/render-brick-stimuli.mjs"
   },
   "dependencies": {
     "@experiments/core": "0.1.0",
