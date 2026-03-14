@@ -411,6 +411,7 @@ export async function waitForContinue(
 ): Promise<void> {
   const buttonId = options.buttonId ?? "exp-continue-btn";
   const buttonLabel = options.buttonLabel ?? "Continue";
+  const autoResponderEnabled = isAutoResponderEnabled();
   container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:900px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
   const btn = container.querySelector(`#${buttonId}`);
   if (!(btn instanceof HTMLButtonElement)) return;
@@ -440,7 +441,7 @@ export async function waitForContinue(
       resolve();
     };
 
-    if (isAutoResponderEnabled()) {
+    if (autoResponderEnabled) {
       void (async () => {
         const delayMs = sampleAutoContinueDelayMs() ?? 0;
         await sleep(delayMs);
@@ -462,6 +463,10 @@ export async function waitForContinue(
       btn.focus();
     }
   });
+
+  if (!(autoResponderEnabled && buttonId.includes("complete"))) {
+    clearScreen();
+  }
 }
 
 export async function waitForContinueChoice(

@@ -498,7 +498,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           });
 
           const blockUi = resolveMergedBlockUi(ctx);
-          const trials = args.getTrials(ctx);
+          const trials = await args.getTrials(ctx);
           await runBlockStartFlow({
             container: uiContainer,
             blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
