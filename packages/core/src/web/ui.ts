@@ -449,12 +449,9 @@ export async function waitForContinue(
         if (buttonId.includes("complete")) {
           btn.disabled = true;
           btn.style.opacity = "0.5";
-        } else {
-          clearScreen();
         }
         resolve();
       })();
-      return;
     }
 
     btn.addEventListener("click", onClickRef);
@@ -464,7 +461,7 @@ export async function waitForContinue(
     }
   });
 
-  if (!(autoResponderEnabled && buttonId.includes("complete"))) {
+  if (!buttonId.includes("complete")) {
     clearScreen();
   }
 }

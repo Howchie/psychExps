@@ -359,6 +359,10 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     const introAfterInsertions = selectInsertionGroups("task_intro_after");
     
     let sessionResult: Awaited<ReturnType<typeof runTaskSession<TBlock, TTrial, TTrialResult>>>;
+    
+    // Cache for trials to avoid redundant calls between onBlockStart and the session runner.
+    const trialsCache: Map<string, TTrial[]> = new Map();
+
     try {
       if (
         (introPages && Array.isArray(introPages) && introPages.length > 0) ||
@@ -393,7 +397,15 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       // 3. Main Session
       sessionResult = await runTaskSession<TBlock, TTrial, TTrialResult>({
       blocks: args.getBlocks(taskConfig),
-      getTrials: args.getTrials,
+      getTrials: async (ctx) => {
+        const key = String(ctx.blockIndex);
+        if (trialsCache.has(key)) {
+          const trials = trialsCache.get(key)!;
+          trialsCache.delete(key);
+          return trials;
+        }
+        return await args.getTrials(ctx);
+      },
       runTrial: async (ctx) => {
         const trialScopedModules = applyModuleFilter(
           resolveScopedModules({
@@ -499,6 +511,11 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
 
           const blockUi = resolveMergedBlockUi(ctx);
           const trials = await args.getTrials(ctx);
+          
+          // Cache trials for the session runner.
+          const key = String(ctx.blockIndex);
+          trialsCache.set(key, trials);
+
           await runBlockStartFlow({
             container: uiContainer,
             blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
