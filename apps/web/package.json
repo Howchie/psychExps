@@ -12,7 +12,6 @@
   "dependencies": {
     "@experiments/core": "0.1.0",
     "@experiments/task-sft": "0.1.0",
-    "@experiments/task-nback-pm-old": "0.1.0",
     "@experiments/task-nback": "0.1.0",
     "@experiments/task-bricks": "0.1.0",
     "@experiments/task-stroop": "0.1.0",

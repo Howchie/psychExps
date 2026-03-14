@@ -68,6 +68,78 @@ export function renderInstructionScreenHtml(ctx: InstructionScreenRenderContext)
   return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
 }
 
+export function renderSimpleInstructionScreenHtml(
+  ctx: Omit<InstructionScreenRenderContext, "title"> & { title?: string | null },
+  options: {
+    showBlockLabel?: boolean;
+    introAppendHtml?: string | ((ctx: Omit<InstructionScreenRenderContext, "title"> & { title?: string | null }) => string | null | undefined);
+  } = {},
+): string {
+  const section = String(ctx.section ?? "");
+  const blockLabel = options.showBlockLabel === false ? null : ctx.blockLabel;
+  const base = renderInstructionScreenHtml({ ...ctx, title: ctx.title ?? null, blockLabel });
+  if (!section.startsWith("intro")) return base;
+  const append =
+    typeof options.introAppendHtml === "function"
+      ? options.introAppendHtml(ctx)
+      : options.introAppendHtml;
+  return append ? `${base}${append}` : base;
+}
+
+export type TaskInstructionRenderContext = Omit<InstructionScreenRenderContext, "title"> & { title?: string | null };
+
+export interface CreateInstructionRendererOptions {
+  showBlockLabel?: boolean;
+  introAppendHtml?: string | ((ctx: TaskInstructionRenderContext) => string | null | undefined);
+  summarySectionPattern?: RegExp;
+  resolvePage?: (ctx: TaskInstructionRenderContext) => {
+    pageText: string;
+    pageHtml?: string;
+    pageTitle?: string;
+  };
+}
+
+export function createInstructionRenderer(options: CreateInstructionRendererOptions = {}) {
+  return (ctx: TaskInstructionRenderContext): string => {
+    const resolved = options.resolvePage ? options.resolvePage(ctx) : {
+      pageText: ctx.pageText,
+      ...(ctx.pageHtml ? { pageHtml: ctx.pageHtml } : {}),
+      ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
+    };
+
+    if (
+      options.summarySectionPattern &&
+      !resolved.pageHtml &&
+      options.summarySectionPattern.test(String(ctx.section ?? ""))
+    ) {
+      const lines = resolved.pageText
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      if (lines.length > 0) {
+        const [titleLine, ...bodyLines] = lines;
+        const blockLabelHtml =
+          options.showBlockLabel !== false && ctx.blockLabel ? `<h3>${escapeHtml(ctx.blockLabel)}</h3>` : "";
+        const bodyHtml = bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+        return `${blockLabelHtml}<h2>${escapeHtml(titleLine)}</h2>${bodyHtml}`;
+      }
+    }
+
+    return renderSimpleInstructionScreenHtml(
+      {
+        ...ctx,
+        pageText: resolved.pageText,
+        ...(resolved.pageHtml ? { pageHtml: resolved.pageHtml } : {}),
+        ...(resolved.pageTitle ? { pageTitle: resolved.pageTitle } : {}),
+      },
+      {
+        showBlockLabel: options.showBlockLabel,
+        introAppendHtml: options.introAppendHtml,
+      },
+    );
+  };
+}
+
 export interface BuiltInstructionScreen {
   ctx: InstructionScreenRenderContext;
   buttonId: string;

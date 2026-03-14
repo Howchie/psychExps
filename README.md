@@ -83,6 +83,7 @@ npm run autoresponder:url -- \
 
 Notes:
 - If `auto` is missing in the URL, the runner injects `auto=true` by default.
+- For JATOS publix start pages that require a launch click, pass `--start-selector "button:has-text('Start')"` if needed.
 - Artifacts are written to `temp/autoresponder-runs/<timestamp>/` (`result.json`, screenshot, HTML).
 
 ## Design stance

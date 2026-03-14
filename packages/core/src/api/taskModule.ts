@@ -82,6 +82,11 @@ export interface TaskModuleHandle<TResult = any> {
    * Optional: Called when the task wants the module to render its state.
    */
   render?(ctx: CanvasRenderingContext2D, now: number): void;
+
+  /**
+   * Optional runtime object exposed by a module handle (for advanced integrations).
+   */
+  controller?: unknown;
 }
 
 export interface TaskModuleResult<TResult = any> extends TaskModuleAddress {
@@ -353,5 +358,24 @@ export class TaskModuleRunner {
       }
     }
     return output;
+  }
+
+  /**
+   * Returns the active module handle at an exact address (optionally filtered by module id).
+   */
+  getActiveHandle(criteria: {
+    scope: TaskModuleScope;
+    blockIndex: number | null;
+    trialIndex: number | null;
+    moduleId?: string;
+  }): TaskModuleHandle | null {
+    for (const entry of this.active.values()) {
+      if (criteria.moduleId && entry.moduleId !== criteria.moduleId) continue;
+      if (entry.address.scope !== criteria.scope) continue;
+      if (entry.address.blockIndex !== criteria.blockIndex) continue;
+      if (entry.address.trialIndex !== criteria.trialIndex) continue;
+      return entry.handle;
+    }
+    return null;
   }
 }

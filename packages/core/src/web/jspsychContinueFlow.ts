@@ -111,6 +111,7 @@ export interface AppendJsPsychBlockIntroScreenArgs {
   container: HTMLElement;
   blockLabel: string;
   introText?: string | null;
+  showBlockLabel?: boolean;
   phase?: string;
   buttonId?: string;
   data?: Record<string, unknown>;
@@ -121,7 +122,11 @@ export function appendJsPsychBlockIntroScreen(args: AppendJsPsychBlockIntroScree
     args.timeline,
     args.plugin,
     args.container,
-    renderBlockIntroCardHtml({ blockLabel: args.blockLabel, introText: args.introText }),
+    renderBlockIntroCardHtml({
+      blockLabel: args.blockLabel,
+      introText: args.introText,
+      showBlockLabel: args.showBlockLabel,
+    }),
     args.phase ?? "block_start",
     args.buttonId ?? "continue-block-start",
     args.data,

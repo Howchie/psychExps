@@ -1,7 +1,5 @@
 import {
-  type TaskAdapter,
   type TaskAdapterContext,
-  type TaskManifest,
   type JSONObject,
   asObject,
   asString,
@@ -26,178 +24,145 @@ import {
   mountCanvasElement,
   drawCanvasFramedScene,
   drawCanvasTrialFrame,
-  finalizeTaskRun,
-  runTaskSession,
-  runTaskIntroFlow,
-  runTaskEndFlow,
-  runBlockStartFlow,
-  recordsToCsv,
-  isStimulusExportOnly,
-  exportStimulusRows,
+  TaskOrchestrator,
+  buildTaskInstructionConfig,
+  applyTaskInstructionConfig,
+  maybeExportStimulusRows,
+  createTaskAdapter,
 } from "@experiments/core";
 import { buildTrialPlan, type TrialPlanItem } from "./planner";
 
-class ChangeDetectionTaskAdapter implements TaskAdapter {
-  readonly manifest: TaskManifest = {
-    taskId: "change_detection",
-    label: "Change Detection",
-    variants: [
-      { id: "default", label: "Default Change Detection", configPath: "change_detection/default" },
-    ],
-  };
+const changeDetectionLayoutManager = new SpatialLayoutManager();
 
-  private context: TaskAdapterContext | null = null;
-  private layoutManager = new SpatialLayoutManager();
+async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unknown> {
+  const { container, taskConfig, selection } = context;
 
-  async initialize(context: TaskAdapterContext): Promise<void> {
-    this.context = context;
-  }
+  const rng = new SeededRandom(
+    hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId),
+  );
 
-  async execute(): Promise<unknown> {
-    if (!this.context) throw new Error("Task not initialized");
-    const { container, taskConfig, selection } = this.context;
-    
-    const rng = new SeededRandom(
-      hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId)
-    );
-    
-    const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
-    const layout = computeCanvasFrameLayout({ 
-      aperturePx: toPositiveNumber(asObject(taskConfig.display)?.aperturePx, 560) 
-    });
+  const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
+  const instructionsRaw = asObject(taskConfig.instructions) ?? {};
+  const instructionConfig = buildTaskInstructionConfig({
+    title: asString(asObject(taskConfig.task)?.title) || "Change Detection",
+    instructions: instructionsRaw,
+    defaults: {
+      intro: [
+        "In this task, you will see a set of colored shapes. Memorize them.",
+        "After a short delay, you will see the shapes again. One of them might have changed.",
+        "Press 'S' if they have CHANGED, and 'D' if they are the SAME.",
+      ],
+      end: ["Thank you for participating."],
+    },
+    blockIntroTemplateDefault: "Press continue when ready.",
+    showBlockLabelDefault: instructionsRaw.showBlockLabel !== false,
+    preBlockBeforeBlockIntroDefault: instructionsRaw.preBlockBeforeBlockIntro === true,
+  });
+  const layout = computeCanvasFrameLayout({
+    aperturePx: toPositiveNumber(asObject(taskConfig.display)?.aperturePx, 560),
+  });
 
-    const trialPlan = buildTrialPlan(taskConfig, rng);
-    const blocks = asArray(asObject(taskConfig.plan)?.blocks) as JSONObject[];
+  const trialPlan = buildTrialPlan(taskConfig, rng);
+  const blocks = asArray(asObject(taskConfig.plan)?.blocks) as JSONObject[];
 
-    if (isStimulusExportOnly(taskConfig)) {
-      const rows = trialPlan.map((trial) => {
-        const block = asObject(blocks[trial.blockIndex]);
-        return {
-          block_index: trial.blockIndex,
-          block_label: asString(block?.label) || `Block ${trial.blockIndex + 1}`,
-          trial_index: trial.trialIndex,
-          set_size: trial.setSize,
-          is_change: trial.isChange,
-          trial_code: trial.isChange ? "change" : "no_change",
-        };
-      });
-      return exportStimulusRows({
-        context: this.context,
-        rows,
-        suffix: "change_detection_stimulus_list",
-      });
-    }
+  const rows = trialPlan.map((trial) => {
+    const block = asObject(blocks[trial.blockIndex]);
+    return {
+      block_index: trial.blockIndex,
+      block_label: asString(block?.label) || `Block ${trial.blockIndex + 1}`,
+      trial_index: trial.trialIndex,
+      set_size: trial.setSize,
+      is_change: trial.isChange,
+      trial_code: trial.isChange ? "change" : "no_change",
+    };
+  });
+  const stimulusExport = await maybeExportStimulusRows({
+    context,
+    rows,
+    suffix: "change_detection_stimulus_list",
+  });
+  if (stimulusExport) return stimulusExport;
 
-    // Mount canvas with correct height for the layout
-    const { canvas, ctx } = mountCanvasElement({
-      container,
-      width: layout.aperturePx,
-      height: layout.totalHeightPx,
-    });
-    const sceneRenderer = new SceneRenderer(canvas);
+  const { canvas, ctx } = mountCanvasElement({
+    container,
+    width: layout.aperturePx,
+    height: layout.totalHeightPx,
+  });
+  applyTaskInstructionConfig(taskConfig, instructionConfig);
+  const sceneRenderer = new SceneRenderer(canvas);
+  const orchestrator = new TaskOrchestrator<JSONObject, TrialPlanItem, any>(context);
+  return orchestrator.run({
+    buttonIdPrefix: "cd",
+    getBlocks: () => blocks,
+    getTrials: ({ blockIndex }) => trialPlan.filter((t) => t.blockIndex === blockIndex),
+    runTrial: async ({ trial }) => {
+      container.innerHTML = "";
+      container.appendChild(canvas.parentElement || canvas);
 
-    const sessionResult = await runTaskSession<JSONObject, TrialPlanItem, any>({
-      blocks: blocks,
-      getTrials: ({ blockIndex }) => trialPlan.filter(t => t.blockIndex === blockIndex),
-      runTrial: async ({ trial }) => {
-        // Ensure canvas is mounted at start of every trial
-        container.innerHTML = "";
-        container.appendChild(canvas.parentElement || canvas);
+      const result = await runChangeDetectionTrial(
+        trial,
+        taskConfig,
+        sceneRenderer,
+        ctx,
+        container,
+        layout,
+        feedbackConfig,
+        rng,
+      );
 
-        const result = await this.runTrial(trial, taskConfig, sceneRenderer, canvas, ctx, container, layout, feedbackConfig, rng);
-        
-        // Feedback
-        if (feedbackConfig.enabled) {
-          const responseCategory = result.key === null ? "timeout" : (result.responseCorrect === 1 ? "correct" : "incorrect");
-          const view = resolveTrialFeedbackView({
-            feedback: feedbackConfig,
-            responseCategory,
-            correct: result.responseCorrect,
-          });
-          
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawTrialFeedbackOnCanvas(ctx, layout, feedbackConfig, view);
-          await sleep(feedbackConfig.durationMs);
-          
-          // Blank after feedback
-          drawCanvasTrialFrame(ctx, layout, { 
-            frameBackground: "#ffffff", 
-            frameBorder: feedbackConfig.style.canvasBorder 
-          });
-          await sleep(100);
-        }
-        
-        return result;
-      },
-      hooks: {
-        onTaskStart: async () => {
-          await runTaskIntroFlow({
-            container,
-            title: asString(asObject(taskConfig.task)?.title) || "Change Detection",
-            participantId: selection.participant.participantId,
-            introPages: [
-              "In this task, you will see a set of colored shapes. Memorize them.",
-              "After a short delay, you will see the shapes again. One of them might have changed.",
-              "Press 'S' if they have CHANGED, and 'D' if they are the SAME."
-            ],
-            buttonIdPrefix: "cd-intro"
-          });
-        },
-        onBlockStart: async ({ block, blockIndex }) => {
-          await runBlockStartFlow({
-            container,
-            blockLabel: asString(asObject(block)?.label) || `Block ${blockIndex + 1}`,
-            blockIndex,
-            buttonIdPrefix: "cd-block-start",
-          });
-        },
-        onTaskEnd: async () => {
-          await runTaskEndFlow({
-            container,
-            endPages: ["Thank you for participating."],
-            buttonIdPrefix: "cd-end"
-          });
-        }
+      if (feedbackConfig.enabled) {
+        const responseCategory = result.key === null ? "timeout" : result.responseCorrect === 1 ? "correct" : "incorrect";
+        const view = resolveTrialFeedbackView({
+          feedback: feedbackConfig,
+          responseCategory,
+          correct: result.responseCorrect,
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawTrialFeedbackOnCanvas(ctx, layout, feedbackConfig, view);
+        await sleep(feedbackConfig.durationMs);
+
+        drawCanvasTrialFrame(ctx, layout, {
+          frameBackground: "#ffffff",
+          frameBorder: feedbackConfig.style.canvasBorder,
+        });
+        await sleep(100);
       }
-    });
 
-    const flatResults = sessionResult.blocks.flatMap(b => b.trialResults);
-    const csv = recordsToCsv(flatResults.map((r: any) => ({
-      participantId: selection.participant.participantId,
-      variantId: selection.variantId,
-      ...r,
-      // Flatten diff for CSV
-      changedIndices: r.diff.changedIndices.join("|")
-    })));
+      return result;
+    },
+    csvOptions: {
+      suffix: "trials",
+      getRecords: (sessionResult) =>
+        sessionResult.blocks.flatMap((b: any) =>
+          b.trialResults.map((r: any) => ({
+            participantId: selection.participant.participantId,
+            variantId: selection.variantId,
+            ...r,
+            changedIndices: r.diff.changedIndices.join("|"),
+          })),
+        ),
+    },
+  });
+}
 
-    await finalizeTaskRun({
-      coreConfig: this.context.coreConfig,
-      selection: this.context.selection,
-      payload: sessionResult,
-      csv: { contents: csv, suffix: "trials" }
-    });
-
-    return sessionResult;
-  }
-
-  private async runTrial(
-    trial: TrialPlanItem,
-    config: JSONObject,
-    renderer: SceneRenderer,
-    canvas: HTMLCanvasElement,
-    ctx: CanvasRenderingContext2D,
-    container: HTMLElement,
-    layout: any,
-    feedbackConfig: any,
-    rng: SeededRandom
-  ): Promise<any> {
+async function runChangeDetectionTrial(
+  trial: TrialPlanItem,
+  config: JSONObject,
+  renderer: SceneRenderer,
+  ctx: CanvasRenderingContext2D,
+  container: HTMLElement,
+  layout: any,
+  feedbackConfig: any,
+  rng: SeededRandom,
+): Promise<any> {
     const stimulusConfig = asObject(config.stimulus);
     const layoutConfig = asObject(stimulusConfig?.layout);
     const itemConfig = asObject(stimulusConfig?.items);
     const timingConfig = asObject(config.timing);
     const mappingConfig = asObject(config.mapping);
 
-    const slots = this.layoutManager.generateSlots({
+    const slots = changeDetectionLayoutManager.generateSlots({
       template: (asString(layoutConfig?.type) as any) || "circular",
       count: trial.setSize,
       radius: toPositiveNumber(layoutConfig?.radius, 200),
@@ -312,11 +277,13 @@ class ChangeDetectionTaskAdapter implements TaskAdapter {
       responseCorrect: isCorrect ? 1 : 0,
       diff: diffScenes(encodingScene, probeScene),
     };
-  }
-
-  async terminate(): Promise<void> {
-    // Cleanup
-  }
 }
 
-export const changeDetectionAdapter = new ChangeDetectionTaskAdapter();
+export const changeDetectionAdapter = createTaskAdapter({
+  manifest: {
+    taskId: "change_detection",
+    label: "Change Detection",
+    variants: [{ id: "default", label: "Default Change Detection", configPath: "change_detection/default" }],
+  },
+  run: runChangeDetectionTask,
+});

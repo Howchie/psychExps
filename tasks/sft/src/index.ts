@@ -3,7 +3,6 @@ import {
   buildLinearRange,
   buildScheduledItems,
   createMulberry32,
-  createSurveyFromPreset,
   createEventLogger,
   dbToLuminance,
   drawTrialFeedbackOnCanvas,
@@ -18,10 +17,8 @@ import {
   drawCanvasCenteredText,
   ensureJsPsychCanvasCentered,
   installKeyScrollBlocker,
-  appendJsPsychInstructionScreens,
-  appendJsPsychTaskIntroScreen,
-  appendJsPsychBlockIntroScreen,
   pushJsPsychContinueScreen,
+  applyTaskInstructionConfig,
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
@@ -30,6 +27,7 @@ import {
   setCursorHidden,
   computeRtPhaseDurations,
   toJsPsychChoices,
+  buildTaskInstructionConfig,
   waitForContinue,
   createManipulationPoolAllocator,
   resolveBlockManipulationIds,
@@ -43,66 +41,52 @@ import {
   toFiniteNumber,
   toNumberArray,
   toStringScreens,
-  runSurvey,
-  isStimulusExportOnly,
-  exportStimulusRows,
+  maybeExportStimulusRows,
+  collectSurveyEntries,
+  createInstructionRenderer,
+  parseSurveyDefinitions,
+  runSurveySequence,
   createResponseSemantics,
   coerceBlockSummaryConfig,
   buildBlockSummaryModel,
   renderBlockSummaryCardHtml,
+  TaskOrchestrator,
+  createTaskAdapter,
   type BlockSummaryConfig,
   type RtTiming,
   type ResponseSemantics,
   type SurveyDefinition,
-  type SurveyPresetSpec,
   type SurveyRunResult,
   type TrialFeedbackConfig,
   type JSONObject,
-  type TaskAdapter,
   type TaskAdapterContext,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
-class SftTaskAdapter implements TaskAdapter {
-  readonly manifest: TaskAdapter["manifest"] = {
-    taskId: "sft",
-    label: "SFT (DotsExp)",
-    variants: [
-      { id: "default", label: "Default", configPath: "sft/default" },
-      { id: "staircase_example", label: "Staircase Example", configPath: "sft/staircase_example" },
-    ],
-  };
+const sftManifest = {
+  taskId: "sft",
+  label: "SFT (DotsExp)",
+  variants: [
+    { id: "default", label: "Default", configPath: "sft/default" },
+    { id: "staircase_example", label: "Staircase Example", configPath: "sft/staircase_example" },
+  ],
+};
 
-  private context: TaskAdapterContext | null = null;
-  private removeKeyScrollBlocker: (() => void) | null = null;
+let sftRemoveKeyScrollBlocker: (() => void) | null = null;
 
-  async initialize(context: TaskAdapterContext): Promise<void> {
-    this.context = context;
-  }
-
-  async execute(): Promise<unknown> {
-    if (!this.context) throw new Error("SFT Task not initialized");
-    const result = await runSftTask(this.context);
-    return result;
-  }
-
-  async terminate(): Promise<void> {
+export const sftAdapter = createTaskAdapter({
+  manifest: sftManifest,
+  run: runSftTask,
+  terminate: async () => {
     setCursorHidden(false);
-    if (this.removeKeyScrollBlocker) {
-      this.removeKeyScrollBlocker();
-      this.removeKeyScrollBlocker = null;
+    if (sftRemoveKeyScrollBlocker) {
+      sftRemoveKeyScrollBlocker();
+      sftRemoveKeyScrollBlocker = null;
     }
-  }
-
-  // Helper to store the remover since runSftTask is still a standalone function for now
-  setKeyScrollRemover(remover: () => void) {
-    this.removeKeyScrollBlocker = remover;
-  }
-}
-
-export const sftAdapter = new SftTaskAdapter();
+  },
+});
 
 function shouldHideCursorForPhase(phase: unknown): boolean {
   if (typeof phase !== "string") return false;
@@ -111,7 +95,15 @@ function shouldHideCursorForPhase(phase: unknown): boolean {
 
 interface SftParsedConfig {
   title: string;
-  instructions: string;
+  instructions: {
+    introPages: string[];
+    preBlockPages: string[];
+    postBlockPages: string[];
+    endPages: string[];
+    blockIntroTemplate: string;
+    showBlockLabel: boolean;
+    preBlockBeforeBlockIntro: boolean;
+  };
   timing: {
     fixationMs: number;
     blankMs: number;
@@ -269,41 +261,34 @@ interface StaircaseRecord {
   rt: number;
 }
 
-interface BlockRunningStats {
-  correct: number;
-  total: number;
-  accuracy: number;
-}
-
 async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
   const root = context.container;
   const plan = buildBlockPlan(parsed, rng);
 
-  if (isStimulusExportOnly(context.taskConfig)) {
-    const rows = plan.flatMap((block, blockIndex) =>
-      block.trials.map((trial) => ({
-        block_index: blockIndex,
-        block_id: block.id,
-        block_label: block.label,
-        block_rule: block.rule,
-        trial_index: trial.trialIndex,
-        trial_id: trial.id,
-        rule: trial.rule,
-        layout: trial.layout,
-        stim_code: trial.stimCode,
-        trial_code: trial.stimCode.toLowerCase(),
-        stim_category: trial.stimCategory,
-        show_rule_cue: trial.showRuleCue,
-      })),
-    );
-    return exportStimulusRows({
-      context,
-      rows,
-      suffix: "sft_stimulus_list",
-    });
-  }
+  const rows = plan.flatMap((block, blockIndex) =>
+    block.trials.map((trial) => ({
+      block_index: blockIndex,
+      block_id: block.id,
+      block_label: block.label,
+      block_rule: block.rule,
+      trial_index: trial.trialIndex,
+      trial_id: trial.id,
+      rule: trial.rule,
+      layout: trial.layout,
+      stim_code: trial.stimCode,
+      trial_code: trial.stimCode.toLowerCase(),
+      stim_category: trial.stimCategory,
+      show_rule_cue: trial.showRuleCue,
+    })),
+  );
+  const stimulusExport = await maybeExportStimulusRows({
+    context,
+    rows,
+    suffix: "sft_stimulus_list",
+  });
+  if (stimulusExport) return stimulusExport;
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -314,99 +299,234 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const eventLogger = createEventLogger(context.selection);
   const allowedKeys = allKeys(parsed.responseSemantics);
   const removeKeyScrollBlocker = installKeyScrollBlocker(allowedKeys);
-  if (sftAdapter instanceof SftTaskAdapter) {
-    sftAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
-  }
-
-  eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
-
-  const timeline: any[] = [];
-  appendJsPsychTaskIntroScreen({
-    timeline,
-    plugin: CallFunctionPlugin,
-    container: root,
-    title: parsed.title,
-    participantId: context.selection.participant.participantId,
-    phase: "intro_start",
-    buttonId: "sft-continue-intro_start",
-  });
-  appendJsPsychInstructionScreens({
-    timeline,
-    plugin: CallFunctionPlugin,
-    container: root,
-    pages: [parsed.instructions],
-    section: "intro",
-    buttonIdPrefix: "sft-continue-intro_instructions",
-    phase: "intro_instructions",
-    renderHtml: (ctx) => `<p>${escapeHtml(ctx.pageText)}</p>${renderKeySummary(parsed.responses)}`,
-    data: (ctx) => ({ introIndex: ctx.pageIndex }),
-  });
-
+  sftRemoveKeyScrollBlocker = removeKeyScrollBlocker;
   applyGlobalSalience(parsed, parsed.salience);
 
-  if (parsed.staircase?.enabled) {
-    appendStaircaseTimeline({
-      timeline,
-      container: root,
-      config: parsed,
-      rng,
-      allowedKeys,
-      staircaseRecords,
-      eventLogger,
-    });
-  }
-
-  appendBlockTimeline({
-    timeline,
-    container: root,
-    blocks: plan,
-    config: parsed,
-    rng,
-    allowedKeys,
-    participantId: context.selection.participant.participantId,
-    eventLogger,
-  });
-
   let jsPsych: ReturnType<typeof initJsPsych> | null = null;
-  try {
-    jsPsych = initJsPsych({
-      display_element: root,
-      on_trial_start: (trial: Record<string, unknown>) => {
-        const data = asObject(trial?.data);
-        setCursorHidden(shouldHideCursorForPhase(data?.phase));
-      },
-      on_finish: () => {
-        setCursorHidden(false);
-      },
-    });
-    await runJsPsychTimeline(jsPsych, timeline);
-  } finally {
-    setCursorHidden(false);
-  }
+  const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
+  applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+  return orchestrator.run({
+    buttonIdPrefix: "sft-continue",
+    getBlocks: () => plan,
+    getTrials: ({ block }) => block.trials,
+    runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
+      if (!jsPsych) throw new Error("jsPsych not initialized");
+      let feedbackView: { text: string; color: string } | null = null;
+      const timeline: any[] = [];
+      appendDotTrialTimeline({
+        timeline,
+        config: parsed,
+        trialProvider: () => trial,
+        allowedKeys,
+        rng,
+        phasePrefix: "main",
+        dataContext: {
+          blockId: block.id,
+          blockIndex,
+          trialId: trial.id,
+          trialIndex,
+          participantId: context.selection.participant.participantId,
+          blockLabel: block.label,
+          blockRule: block.rule,
+          rule: trial.rule,
+          layout: trial.layout,
+          stimCode: trial.stimCode,
+          stimCategory: trial.stimCategory,
+        },
+        onResponse: (response, resolvedTrial, trialData) => {
+          if (!resolvedTrial) return;
+          const responseCategory = classifyResponse(resolvedTrial.rule, response.key, parsed.responseSemantics);
+          const expectedCategory = computeCorrectResponse(resolvedTrial.rule, resolvedTrial.stimCategory);
+          const [channel1, channel2] = stimCodeToChannels(resolvedTrial.stimCode);
+          const outcome = evaluateTrialOutcome({
+            responseCategory,
+            rt: response.rtMs,
+            stimulusCategory: resolvedTrial.stimCategory,
+            expectedCategory,
+          });
+          feedbackView = resolveTrialFeedbackView({
+            feedback: block.feedback,
+            responseCategory: outcome.responseCategory,
+            correct: outcome.correct,
+          });
 
-  const records = collectMainTrialRecords(jsPsych?.data.get().values() ?? [], context.selection.participant.participantId);
-  eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
-  const payload = {
-    selection: context.selection,
-    records,
-    staircaseRecords,
-    events: eventLogger.events,
-    jsPsychData: jsPsych?.data.get().values() ?? [],
-  };
-  await finalizeTaskRun({
-    coreConfig: context.coreConfig,
-    selection: context.selection,
-    payload,
-    csv: { contents: recordsToCsv(records), suffix: "sft" },
-    completionStatus: "complete",
-  });
+          Object.assign(trialData, {
+            participantId: context.selection.participant.participantId,
+            blockId: block.id,
+            blockLabel: block.label,
+            blockRule: block.rule,
+            trialId: resolvedTrial.id,
+            trialIndex: resolvedTrial.trialIndex,
+            rule: resolvedTrial.rule,
+            layout: resolvedTrial.layout,
+            stimCode: resolvedTrial.stimCode,
+            channel1,
+            channel2,
+            stimCategory: resolvedTrial.stimCategory,
+            expectedCategory: outcome.expectedCategory ?? expectedCategory,
+            responseCategory: outcome.responseCategory,
+            responseKey: response.key ?? "",
+            rt: outcome.rt,
+            correct: outcome.correct,
+            trialType: "sft",
+          });
 
-  root.innerHTML = renderCenteredNotice({
-    title: "SFT complete",
-    message: "Data saved locally.",
+          eventLogger.emit(
+            "trial_complete",
+            {
+              blockId: block.id,
+              rule: resolvedTrial.rule,
+              trialType: "sft",
+              correct: outcome.correct,
+              responseKey: response.key ?? "",
+              rt: outcome.rt,
+              responseCategory: outcome.responseCategory,
+            },
+            { blockIndex, trialIndex },
+          );
+        },
+        feedback: {
+          enabled: block.feedback.enabled,
+          config: block.feedback,
+          phaseMode: parsed.rtTask.feedbackPhase,
+          viewProvider: () => feedbackView,
+        },
+      });
+
+      const supportsPostResponseFeedback = !parsed.rtTask.responseTerminatesTrial;
+      if (
+        block.feedback.enabled &&
+        block.feedback.durationMs > 0 &&
+        !(parsed.rtTask.feedbackPhase === "post_response" && supportsPostResponseFeedback)
+      ) {
+        timeline.push({
+          type: CanvasKeyboardResponsePlugin,
+          stimulus: (canvas: HTMLCanvasElement) => {
+            drawFeedbackPhase(canvas, parsed, block.feedback, feedbackView);
+          },
+          canvas_size: [computeCanvasLayout(parsed).totalHeightPx, parsed.display.aperturePx],
+          choices: "NO_KEYS",
+          response_ends_trial: false,
+          trial_duration: block.feedback.durationMs,
+          data: {
+            blockId: block.id,
+            blockIndex,
+            trialId: trial.id,
+            trialIndex,
+            phase: "main_feedback",
+          },
+        });
+      }
+
+      const beforeCount = jsPsych.data.get().values().length;
+      await runJsPsychTimeline(jsPsych, timeline);
+      const deltaRows = jsPsych.data.get().values().slice(beforeCount) as Array<Record<string, unknown>>;
+      const record = collectMainTrialRecords(deltaRows, context.selection.participant.participantId).at(-1);
+      if (!record) {
+        throw new Error(`SFT trial record missing for block=${block.id}, trial=${trial.id}`);
+      }
+
+      const hasNextTrialInBlock = trialIndex < block.trials.length - 1;
+      if (hasNextTrialInBlock && parsed.betweenTrialSurveys.length > 0) {
+        const host = resolveJsPsychContentHost(root);
+        const results = await runSurveySequence(
+          host,
+          parsed.betweenTrialSurveys,
+          `sft-between-${block.id}-${trial.id}-survey-submit`,
+        );
+        eventLogger.emit(
+          "between_trial_survey_complete",
+          {
+            blockId: block.id,
+            trialId: trial.id,
+            surveys: results.map((entry) => ({
+              surveyId: entry.surveyId,
+              answers: entry.answers,
+              scores: entry.scores ?? {},
+            })),
+          },
+          { blockIndex, trialIndex },
+        );
+      }
+
+      return record;
+    },
+    onTaskStart: () => {
+      jsPsych = initJsPsych({
+        display_element: root,
+        on_trial_start: (trial: Record<string, unknown>) => {
+          const data = asObject(trial?.data);
+          setCursorHidden(shouldHideCursorForPhase(data?.phase));
+        },
+        on_finish: () => {
+          setCursorHidden(false);
+        },
+      });
+      eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
+    },
+    staircase: {
+      enabled: parsed.staircase?.enabled ?? false,
+      run: async () => {
+        if (!jsPsych) return;
+        const staircaseTimeline: any[] = [];
+        appendStaircaseTimeline({
+          timeline: staircaseTimeline,
+          container: root,
+          config: parsed,
+          rng,
+          allowedKeys,
+          staircaseRecords,
+          eventLogger,
+        });
+        await runJsPsychTimeline(jsPsych, staircaseTimeline);
+      },
+    },
+    onBlockStart: ({ block, blockIndex }) => {
+      eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
+    },
+    onBlockEnd: async ({ block, blockIndex, trialResults }) => {
+      const correct = trialResults.reduce((acc, row) => acc + (row.correct ?? 0), 0);
+      const total = trialResults.length;
+      const accuracy = total > 0 ? (correct / total) * 100 : 0;
+      eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
+
+      const summaryModel = buildBlockSummaryModel({
+        config: parsed.blockSummary,
+        block: {
+          label: block.label,
+          blockType: "main",
+          isPractice: false,
+        },
+        blockIndex,
+        fallbackStats: { total, correct, accuracyPct: accuracy },
+      });
+      if (!summaryModel) return;
+      const host = resolveJsPsychContentHost(root);
+      await waitForContinue(host, renderBlockSummaryCardHtml(summaryModel), {
+        buttonId: `sft-end-${block.id}`,
+      });
+    },
+    onTaskEnd: () => {
+      setCursorHidden(false);
+    },
+    csvOptions: {
+      suffix: "sft",
+    },
+    getEvents: () => eventLogger.events,
+    getTaskMetadata: (sessionResult) => {
+      const records = sessionResult.blocks.flatMap((b: any) => b.trialResults) as TrialRecord[];
+      eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
+      return {
+        records,
+        staircaseRecords,
+        jsPsychData: jsPsych?.data.get().values() ?? [],
+      };
+    },
+    renderInstruction: createInstructionRenderer({
+      showBlockLabel: parsed.instructions.showBlockLabel,
+      introAppendHtml: () => renderKeySummary(parsed.responses),
+    }),
   });
-  
-  return payload;
 }
 
 function appendStaircaseTimeline(args: {
@@ -538,256 +658,6 @@ function appendStaircaseTimeline(args: {
       ).then(done);
     },
   });
-}
-
-function appendBlockTimeline(args: {
-  timeline: any[];
-  container: HTMLElement;
-  blocks: PlannedBlock[];
-  config: SftParsedConfig;
-  rng: () => number;
-  allowedKeys: string[];
-  participantId: string;
-  eventLogger: ReturnType<typeof createEventLogger>;
-}): void {
-  const { timeline, container, blocks, config, rng, allowedKeys, participantId, eventLogger } = args;
-  const blockStatsMap = new Map<string, BlockRunningStats>();
-  let lastBlockIntroSignature: string | null = null;
-
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
-    const block = blocks[blockIndex];
-    blockStatsMap.set(block.id, { correct: 0, total: 0, accuracy: 0 });
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_start_hook", blockId: block.id, blockIndex },
-      func: () => {
-        eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
-      },
-    });
-
-    const blockIntroText = `Rule: ${block.rule}. Trials: ${block.trials.length}.`;
-    const blockIntroSignature = `${block.label}::${blockIntroText}`;
-    if (blockIntroSignature !== lastBlockIntroSignature) {
-      appendJsPsychBlockIntroScreen({
-        timeline,
-        plugin: CallFunctionPlugin,
-        container,
-        blockLabel: block.label,
-        introText: blockIntroText,
-        phase: "block_start",
-        buttonId: `sft-continue-block_start-${block.id}`,
-        data: { blockId: block.id },
-      });
-      lastBlockIntroSignature = blockIntroSignature;
-    }
-    appendJsPsychInstructionScreens({
-      timeline,
-      plugin: CallFunctionPlugin,
-      container,
-      pages: block.beforeBlockScreens,
-      section: "preBlock",
-      buttonIdPrefix: `sft-continue-block_pre_instruction-${block.id}`,
-      phase: "block_pre_instruction",
-      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
-      data: (ctx) => ({ blockId: block.id, instructionIndex: ctx.pageIndex }),
-    });
-
-    for (let trialIndex = 0; trialIndex < block.trials.length; trialIndex += 1) {
-      const trial = block.trials[trialIndex];
-      let feedbackView: { text: string; color: string } | null = null;
-
-      appendDotTrialTimeline({
-        timeline,
-        config,
-        trialProvider: () => trial,
-        allowedKeys,
-        rng,
-        phasePrefix: "main",
-        dataContext: {
-          blockId: block.id,
-          blockIndex,
-          trialId: trial.id,
-          trialIndex,
-          participantId,
-          blockLabel: block.label,
-          blockRule: block.rule,
-          rule: trial.rule,
-          layout: trial.layout,
-          stimCode: trial.stimCode,
-          stimCategory: trial.stimCategory,
-        },
-        onResponse: (response, resolvedTrial, trialData) => {
-          if (!resolvedTrial) return;
-          const responseCategory = classifyResponse(resolvedTrial.rule, response.key, config.responseSemantics);
-          const expectedCategory = computeCorrectResponse(resolvedTrial.rule, resolvedTrial.stimCategory);
-          const [channel1, channel2] = stimCodeToChannels(resolvedTrial.stimCode);
-          const outcome = evaluateTrialOutcome({
-            responseCategory,
-            rt: response.rtMs,
-            stimulusCategory: resolvedTrial.stimCategory,
-            expectedCategory,
-          });
-          feedbackView = resolveTrialFeedbackView({
-            feedback: block.feedback,
-            responseCategory: outcome.responseCategory,
-            correct: outcome.correct,
-          });
-
-          Object.assign(trialData, {
-            participantId,
-            blockId: block.id,
-            blockLabel: block.label,
-            blockRule: block.rule,
-            trialId: resolvedTrial.id,
-            trialIndex: resolvedTrial.trialIndex,
-            rule: resolvedTrial.rule,
-            layout: resolvedTrial.layout,
-            stimCode: resolvedTrial.stimCode,
-            channel1,
-            channel2,
-            stimCategory: resolvedTrial.stimCategory,
-            expectedCategory: outcome.expectedCategory ?? expectedCategory,
-            responseCategory: outcome.responseCategory,
-            responseKey: response.key ?? "",
-            rt: outcome.rt,
-            correct: outcome.correct,
-            trialType: "sft",
-          });
-
-          const stats = blockStatsMap.get(block.id);
-          if (stats) {
-            stats.correct += outcome.correct;
-            stats.total += 1;
-            stats.accuracy = stats.total > 0 ? (stats.correct / stats.total) * 100 : 0;
-          }
-
-          eventLogger.emit(
-            "trial_complete",
-            {
-              blockId: block.id,
-              rule: resolvedTrial.rule,
-              trialType: "sft",
-              correct: outcome.correct,
-              responseKey: response.key ?? "",
-              rt: outcome.rt,
-              responseCategory: outcome.responseCategory,
-            },
-            { blockIndex, trialIndex },
-          );
-        },
-        feedback: {
-          enabled: block.feedback.enabled,
-          config: block.feedback,
-          phaseMode: config.rtTask.feedbackPhase,
-          viewProvider: () => feedbackView,
-        },
-      });
-
-      const supportsPostResponseFeedback = !config.rtTask.responseTerminatesTrial;
-      if (
-        block.feedback.enabled &&
-        block.feedback.durationMs > 0 &&
-        !(config.rtTask.feedbackPhase === "post_response" && supportsPostResponseFeedback)
-      ) {
-        timeline.push({
-          type: CanvasKeyboardResponsePlugin,
-          stimulus: (canvas: HTMLCanvasElement) => {
-            drawFeedbackPhase(canvas, config, block.feedback, feedbackView);
-          },
-          canvas_size: [computeCanvasLayout(config).totalHeightPx, config.display.aperturePx],
-          choices: "NO_KEYS",
-          response_ends_trial: false,
-          trial_duration: block.feedback.durationMs,
-          data: {
-            blockId: block.id,
-            blockIndex,
-            trialId: trial.id,
-            trialIndex,
-            phase: "main_feedback",
-          },
-        });
-      }
-
-      const hasNextTrialInBlock = trialIndex < block.trials.length - 1;
-      if (hasNextTrialInBlock && config.betweenTrialSurveys.length > 0) {
-        timeline.push({
-          type: CallFunctionPlugin,
-          data: { phase: "between_trial_survey", blockId: block.id, blockIndex, trialId: trial.id, trialIndex },
-          async: true,
-          func: (done: () => void) => {
-            const host = resolveJsPsychContentHost(container);
-            void runSequentialSurveys(host, config.betweenTrialSurveys, `sft-between-${block.id}-${trial.id}`).then((results) => {
-              eventLogger.emit(
-                "between_trial_survey_complete",
-                {
-                  blockId: block.id,
-                  trialId: trial.id,
-                  surveys: results.map((entry) => ({
-                    surveyId: entry.surveyId,
-                    answers: entry.answers,
-                    scores: entry.scores ?? {},
-                  })),
-                },
-                { blockIndex, trialIndex },
-              );
-            }).finally(done);
-          },
-        });
-      }
-    }
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_end_hook", blockId: block.id, blockIndex },
-      func: () => {
-        const stats = blockStatsMap.get(block.id);
-        eventLogger.emit("block_end", { blockId: block.id, accuracy: stats?.accuracy ?? 0 }, { blockIndex });
-      },
-    });
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_end", blockId: block.id, blockIndex },
-      async: true,
-      func: (done: () => void) => {
-        const stats = blockStatsMap.get(block.id);
-        const summaryModel = buildBlockSummaryModel({
-          config: config.blockSummary,
-          block: {
-            label: block.label,
-            blockType: "main",
-            isPractice: false,
-          },
-          blockIndex,
-          fallbackStats: {
-            total: stats?.total ?? 0,
-            correct: stats?.correct ?? 0,
-            accuracyPct: stats?.accuracy ?? 0,
-          },
-        });
-        const host = resolveJsPsychContentHost(container);
-        if (!summaryModel) {
-          done();
-          return;
-        }
-        void waitForContinue(host, renderBlockSummaryCardHtml(summaryModel), {
-          buttonId: `sft-end-${block.id}`,
-        }).then(done);
-      },
-    });
-    appendJsPsychInstructionScreens({
-      timeline,
-      plugin: CallFunctionPlugin,
-      container,
-      pages: block.afterBlockScreens,
-      section: "postBlock",
-      buttonIdPrefix: `sft-continue-block_post_instruction-${block.id}`,
-      phase: "block_post_instruction",
-      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
-      data: (ctx) => ({ blockId: block.id, instructionIndex: ctx.pageIndex }),
-    });
-  }
 }
 
 function appendDotTrialTimeline(args: {
@@ -1028,6 +898,7 @@ function applyGlobalSalience(config: SftParsedConfig, salience: { low: number; h
 
 function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selection"]): SftParsedConfig {
   const design = asObject(config.design);
+  const instructionsRaw = asObject(config.instructions);
   const manipRaw = asArray(design?.manipulations);
   const blockRaw = asArray(design?.blocks);
   if (manipRaw.length === 0) throw new Error("SFT config invalid: design.manipulations is empty.");
@@ -1120,11 +991,20 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
       NN: responses.idNN,
     }),
   };
+  const instructionConfig = buildTaskInstructionConfig({
+    title: asString(asObject(config.task)?.title) || "SFT Task",
+    instructions: instructionsRaw,
+    defaults: {
+      intro: [
+        asString(asObject(config.task)?.instructions) ||
+          "Respond according to the block rule. OR/AND/XOR use yes/no keys; ID uses four category keys.",
+      ],
+    },
+    blockIntroTemplateDefault: "Rule: {blockRule}. Trials: {nTrials}.",
+  });
   return {
     title: asString(asObject(config.task)?.title) || "SFT Task",
-    instructions:
-      asString(asObject(config.task)?.instructions) ||
-      "Respond according to the block rule. OR/AND/XOR use yes/no keys; ID uses four category keys.",
+    instructions: instructionConfig,
     timing: {
       fixationMs: legacyTiming.fixationMs,
       blankMs: legacyTiming.blankMs,
@@ -1158,37 +1038,11 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
 }
 
 function parseBetweenTrialSurveys(config: JSONObject): SurveyDefinition[] {
-  const surveysNode = asObject(config.surveys);
-  const betweenTrial = asArray(surveysNode?.betweenTrial);
-  return betweenTrial
-    .map((entry) => toSurveyDefinition(entry))
-    .filter((entry): entry is SurveyDefinition => Boolean(entry));
-}
-
-function toSurveyDefinition(raw: unknown): SurveyDefinition | null {
-  const objectNode = asObject(raw);
-  if (!objectNode) return null;
-  const preset = asString(objectNode.preset);
-  if (preset === "atwit" || preset === "nasa_tlx") {
-    return createSurveyFromPreset(objectNode as unknown as SurveyPresetSpec);
-  }
-  return null;
-}
-
-async function runSequentialSurveys(
-  container: HTMLElement,
-  surveys: SurveyDefinition[],
-  buttonPrefix: string,
-): Promise<SurveyRunResult[]> {
-  const results: SurveyRunResult[] = [];
-  for (let i = 0; i < surveys.length; i += 1) {
-    const survey = surveys[i];
-    const result = await runSurvey(container, survey, {
-      buttonId: `${buttonPrefix}-survey-submit-${i + 1}`,
-    });
-    results.push(result);
-  }
-  return results;
+  const betweenTrial = collectSurveyEntries(config, {
+    arrayKey: "betweenTrial",
+    singletonKey: "",
+  });
+  return parseSurveyDefinitions(betweenTrial);
 }
 
 function parseSftRtTaskConfig(
@@ -1282,7 +1136,7 @@ function parseManipulation(raw: unknown, index: number, config: JSONObject): Man
   const m = asObject(raw);
   if (!m) throw new Error(`Invalid manipulation at index ${index}`);
   const id = asString(m.id) || `manip_${index + 1}`;
-  const trialPlan = asObject(m.trial_plan);
+  const trialPlan = asObject(m.trialPlan) ?? asObject(m.trial_plan);
   const variantsRaw = asArray(trialPlan?.variants);
   const schedule = asObject(trialPlan?.schedule) || { mode: "weighted" };
   let variants = (variantsRaw.length > 0 ? variantsRaw : [m]).map((entry, vIndex) => {

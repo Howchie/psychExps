@@ -104,6 +104,137 @@ describe('TaskOrchestrator', () => {
     expect(runTrial).toHaveBeenCalledTimes(2);
   });
 
+  it('should run staircase phase before main session when enabled', async () => {
+    mockContext.taskConfig.staircase = { enabled: true };
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const staircaseRun = vi.fn().mockResolvedValue(undefined);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+      staircase: {
+        run: staircaseRun,
+      },
+    });
+
+    expect(staircaseRun).toHaveBeenCalledTimes(1);
+    const staircaseOrder = (staircaseRun as any).mock.invocationCallOrder[0];
+    const trialOrder = (runTrial as any).mock.invocationCallOrder[0];
+    expect(staircaseOrder).toBeLessThan(trialOrder);
+  });
+
+  it('should skip staircase phase when disabled in config', async () => {
+    mockContext.taskConfig.staircase = { enabled: false };
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const staircaseRun = vi.fn().mockResolvedValue(undefined);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+      staircase: {
+        run: staircaseRun,
+      },
+    });
+
+    expect(staircaseRun).not.toHaveBeenCalled();
+    expect(runTrial).toHaveBeenCalledTimes(2);
+  });
+
+  it('should skip staircase phase unless explicitly enabled', async () => {
+    mockContext.taskConfig.staircase = {};
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const staircaseRun = vi.fn().mockResolvedValue(undefined);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+      staircase: {
+        run: staircaseRun,
+      },
+    });
+
+    expect(staircaseRun).not.toHaveBeenCalled();
+    expect(runTrial).toHaveBeenCalledTimes(2);
+  });
+
+  it('should allow filtering auto-started modules by scope/name', async () => {
+    mockContext.rawTaskConfig = {
+      task: {
+        modules: {
+          drt: { enabled: true },
+          pm: { enabled: true },
+        },
+      },
+    };
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+      shouldAutoStartModule: ({ moduleName }) => moduleName !== 'drt',
+    });
+
+    const calls = (mockModuleRunner.startScopedModules as any).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call[0].moduleConfigs).toEqual({ pm: { enabled: true } });
+    }
+  });
+
+  it('should merge task/block/trial module configs for scoped auto-start', async () => {
+    mockContext.rawTaskConfig = {
+      task: {
+        modules: {
+          drt: { enabled: true, scope: 'block', stimMode: 'visual' },
+        },
+      },
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Block 1',
+        trials: [{ id: 0, modules: { drt: { scope: 'trial', stimMode: 'border' } } }],
+        modules: { drt: { key: 'space' } },
+      },
+    ];
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => block.trials,
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    const calls = (mockModuleRunner.startScopedModules as any).mock.calls;
+    const blockCall = calls.find((call: any[]) => call[0].scope === 'block');
+    const trialCall = calls.find((call: any[]) => call[0].scope === 'trial');
+    expect(blockCall?.[0]?.moduleConfigs?.drt).toEqual({
+      enabled: true,
+      scope: 'block',
+      stimMode: 'visual',
+      key: 'space',
+    });
+    expect(trialCall?.[0]?.moduleConfigs?.drt).toEqual({
+      enabled: true,
+      scope: 'trial',
+      stimMode: 'border',
+      key: 'space',
+    });
+  });
+
   it('should route instruction insertions to task and block flows', async () => {
     mockContext.taskConfig.instructions = {
       introPages: ['Intro 1'],
@@ -154,6 +285,49 @@ describe('TaskOrchestrator', () => {
       expect.objectContaining({
         beforeEndPages: [[{ text: 'Before End' }]],
         afterEndPages: [[{ text: 'After End' }]],
+      }),
+    );
+  });
+
+  it('should derive block UI defaults from instructions without getBlockUi', async () => {
+    mockContext.taskConfig.instructions = {
+      introPages: ['Intro 1'],
+      preBlockPages: ['Global pre'],
+      postBlockPages: ['Global post'],
+      blockIntroTemplate: 'Level {nLevel} - {blockLabel} ({nTrials})',
+      showBlockLabel: false,
+      preBlockBeforeBlockIntro: true,
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Block A',
+        nLevel: 2,
+        trials: 2,
+        beforeBlockScreens: ['Block pre'],
+        afterBlockScreens: ['Block post'],
+      },
+    ];
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    expect(taskUiFlow.runBlockStartFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        introText: 'Level 2 - Block A (2)',
+        preBlockPages: [{ text: 'Global pre' }, { text: 'Block pre' }],
+        showBlockLabel: false,
+        preBlockBeforeIntro: true,
+      }),
+    );
+    expect(taskUiFlow.runBlockEndFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        postBlockPages: [{ text: 'Global post' }, { text: 'Block post' }],
       }),
     );
   });

@@ -20,6 +20,7 @@ Stroop currently runs `jspsych` via the `LifecycleManager`.
 
 Top-level sections consumed:
 - `task`
+- `instructions`
 - `mapping`
 - `display`
 - `timing` (legacy fallback)
@@ -31,7 +32,7 @@ Top-level sections consumed:
 ### 2.1 `task`
 
 - `title`
-- `instructions`
+- `instructions` (legacy intro fallback)
 - `runner` (jsPsych expected)
 - `rtTask`
   - `timing.trialDurationMs`
@@ -44,8 +45,16 @@ Top-level sections consumed:
   - `feedbackPhase` (`separate` or `post_response`)
 
 Note:
-- Stroop currently uses a single intro instruction string from `task.instructions`.
-- It does not currently use the shared instruction-slot keys (`instructions.pages`, `preBlockPages`, `postBlockPages`, `endPages`).
+- Stroop now uses shared instruction-slot parsing from `instructions`:
+  - intro: `pages|introPages|intro|screens`
+  - pre-block: `preBlockPages|beforeBlockPages|beforeBlockScreens`
+  - post-block: `postBlockPages|afterBlockPages|afterBlockScreens`
+  - end: `endPages|outroPages|end|outro`
+- `task.instructions` remains a fallback default intro page.
+- Additional block-flow controls:
+  - `instructions.blockIntroTemplate` (supports `{blockLabel}` and `{nTrials}`)
+  - `instructions.showBlockLabel` (default `true`)
+  - `instructions.preBlockBeforeBlockIntro` (default `false`)
 
 ### 2.2 `mapping`
 

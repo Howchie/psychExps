@@ -7,6 +7,7 @@ import {
   getAutoResponderProfile,
   isAutoResponderEnabled,
   normalizeKey,
+  resolveScopedModuleConfig,
   resolveButtonStyleOverrides,
   sampleAutoHoldDurationMs,
   sampleAutoInteractionDelayMs,
@@ -107,14 +108,6 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
-const resolveBricksDrtOverride = (raw: Record<string, unknown> | null | undefined): Record<string, unknown> | null => {
-  const source = asRecord(raw);
-  if (!source) return null;
-  const localModules = asRecord(source.modules);
-  const taskModules = asRecord(asRecord(source.task)?.modules);
-  return asRecord(localModules?.drt) ?? asRecord(taskModules?.drt) ?? null;
-};
-
 export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<ConveyorTrialData> {
   const trial = args;
   const display_element = args.displayElement;
@@ -132,7 +125,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   });
   const resolvedCfg = applyDisplayPreset(cfg, resolvedDisplayPresetId);
   const injectedDrtRuntime = args.drtRuntime ?? null;
-  const legacyDrtRaw = resolveBricksDrtOverride(resolvedCfg) ?? {};
+  const legacyDrtRaw = resolveScopedModuleConfig(resolvedCfg, "drt") ?? {};
   const resolvedDrtConfig =
     injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
   const drtController = injectedDrtRuntime?.controller ?? null;

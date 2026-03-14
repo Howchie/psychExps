@@ -45,8 +45,12 @@ import {
   applyManipulationOverridesToBlock,
   TaskModuleRunner,
   coerceScopedDrtConfig,
-  resolveInstructionFlowPages,
+  createInstructionRenderer,
+  buildTaskInstructionConfig,
+  applyTaskInstructionConfig,
   runTaskSession,
+  maybeExportStimulusRows,
+  resolveScopedModuleConfig,
   asObject,
   asArray,
   asString,
@@ -61,7 +65,6 @@ import {
   type DrtEvent,
   type DrtControllerConfig,
   type JSONObject,
-  type TaskAdapter,
   type TaskAdapterContext,
   type VariableResolver,
   type ResponseSemantics,
@@ -69,57 +72,29 @@ import {
   type PoolDrawConfig,
   type CategoryDrawConfig,
   type TaskModuleAddress,
-  isStimulusExportOnly,
-  exportStimulusRows,
-  startDrtModuleScope,
-  stopModuleScope,
   TaskOrchestrator,
+  createTaskAdapter,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
-class NbackTaskAdapter implements TaskAdapter {
-  readonly manifest: TaskAdapter["manifest"] = {
-    taskId: "nback",
-    label: "NBack",
-    variants: [
-      { id: "default", label: "NBack Default", configPath: "nback/default" },
-      { id: "drt_block_demo", label: "NBack DRT Block Demo", configPath: "nback/drt_block_demo" },
-      { id: "pm_module_demo", label: "NBack PM Module Demo", configPath: "nback/pm_module_demo" },
-      { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
-      { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
-      { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
-    ],
-  };
+let nbackContext: TaskAdapterContext | null = null;
+let nbackRuntime: NbackRuntimeState | null = null;
+let nbackRemoveKeyScrollBlocker: (() => void) | null = null;
+let nbackRemovePageScrollLock: (() => void) | null = null;
+let nbackRootPresentationState: RootPresentationState | null = null;
 
-  private context: TaskAdapterContext | null = null;
-  private runtime: NbackRuntimeState | null = null;
-  private removeKeyScrollBlocker: (() => void) | null = null;
-  private removePageScrollLock: (() => void) | null = null;
-  private rootPresentationState: RootPresentationState | null = null;
-
-  async initialize(context: TaskAdapterContext): Promise<void> {
-    this.context = context;
-    this.runtime = await prepareNbackRuntime(context);
+async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
+  const runtime = nbackRuntime;
+  if (!runtime) {
+    throw new Error("NBack runtime not initialized");
   }
+  const stimulusExport = await exportNbackStimulusList(context, runtime);
+  if (stimulusExport) return stimulusExport;
 
-  async execute(): Promise<unknown> {
-    if (!this.context || !this.runtime) {
-      throw new Error("NBack Task not initialized");
-    }
-    if (isStimulusExportOnly(this.context.taskConfig)) {
-      return exportNbackStimulusList(this.context, this.runtime);
-    }
-
-    const { context, runtime } = this;
     const { parsed, eventLogger } = runtime;
-    const resolvedIntroPages = toStringScreens(
-      runtime.variableResolver.resolveInValue(parsed.instructions.introPages),
-    );
-    const resolvedEndPages = toStringScreens(
-      runtime.variableResolver.resolveInValue(parsed.instructions.endPages),
-    );
+    applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
     const root = context.container;
     let jsPsych: ReturnType<typeof initJsPsych> | null = null;
 
@@ -128,65 +103,29 @@ class NbackTaskAdapter implements TaskAdapter {
     return orchestrator.run({
       buttonIdPrefix: "nback",
       resolveUiContainer: () => resolveJsPsychContentHost(root),
-      getBlocks: () => runtime.plan,
+      getBlocks: () => runtime.plan.map((block) => ({
+        ...block,
+        modules: {
+          drt: block.drt,
+        },
+      })),
       getTrials: ({ block }) => block.trials,
-      introPages: resolvedIntroPages,
-      endPages: resolvedEndPages,
-      getBlockUi: ({ block, blockIndex }) => {
-        const resolverContext = {
-          blockIndex,
-          locals: block.variables,
-        };
-        const resolvedIntroTemplate = runtime.variableResolver.resolveInValue(
-          parsed.instructions.blockIntroTemplate,
-          resolverContext,
-        );
-        const introTemplate = asString(resolvedIntroTemplate) || parsed.instructions.blockIntroTemplate;
-        const introText = introTemplate.replace("{nLevel}", String(block.nLevel));
-        return {
-          introText,
-          preBlockPages: [...parsed.instructions.preBlockPages, ...block.beforeBlockScreens],
-          postBlockPages: [...parsed.instructions.postBlockPages, ...block.afterBlockScreens],
-          repeatPostBlockPages: block.repeatAfterBlockScreens,
-          showBlockLabel: parsed.instructions.showBlockLabel,
-          preBlockBeforeIntro: parsed.instructions.preBlockBeforeBlockIntro,
-        };
-      },
       csvOptions: {
         suffix: "nback",
       },
-      renderInstruction: (ctx) => {
-        if (ctx.pageHtml) {
-          const headerText = ctx.pageTitle ?? ctx.blockLabel ?? null;
-          if (!headerText) return ctx.pageHtml;
-          return `<h3>${escapeHtml(headerText)}</h3>${ctx.pageHtml}`;
-        }
-        // Render computed block-summary insertions as title + body instead of a single plain paragraph.
-        if (/^blockEnd(Before|After)Post_/.test(ctx.section)) {
-          const lines = ctx.pageText
-            .split(/\n+/)
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
-          if (lines.length > 0) {
-            const [titleLine, ...bodyLines] = lines;
-            const blockLabelHtml = ctx.blockLabel ? `<h3>${escapeHtml(ctx.blockLabel)}</h3>` : "";
-            const bodyHtml = bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
-            return `${blockLabelHtml}<h2>${escapeHtml(titleLine)}</h2>${bodyHtml}`;
-          }
-        }
-        const headerText = ctx.blockLabel || null;
-        if (!headerText) return `<p>${escapeHtml(ctx.pageText)}</p>`;
-        return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
-      },
+      renderInstruction: createInstructionRenderer({
+        showBlockLabel: true,
+        summarySectionPattern: /^blockEnd(Before|After)Post_/,
+      }),
       getTaskMetadata: () => ({
         jsPsychData: jsPsych?.data.get().values() ?? [],
       }),
       getEvents: () => eventLogger.events,
       onTaskStart: () => {
         const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-        this.setKeyScrollRemover(removeKeyScrollBlocker);
-        this.setPageScrollLockRemover(lockPageScroll());
-        this.rootPresentationState = applyNbackRootPresentation(root);
+        nbackRemoveKeyScrollBlocker = removeKeyScrollBlocker;
+        nbackRemovePageScrollLock = lockPageScroll();
+        nbackRootPresentationState = applyNbackRootPresentation(root);
         
         jsPsych = initJsPsych({
           display_element: root,
@@ -249,34 +188,44 @@ class NbackTaskAdapter implements TaskAdapter {
         // If we want the custom accuracy info, we might need a custom hook in orchestrator.
       }
     });
-  }
-
-  async terminate(): Promise<void> {
-    setCursorHidden(false);
-    if (this.context?.container) {
-      restoreNbackRootPresentation(this.context.container, this.rootPresentationState);
-      this.rootPresentationState = null;
-    }
-    if (this.removePageScrollLock) {
-      this.removePageScrollLock();
-      this.removePageScrollLock = null;
-    }
-    if (this.removeKeyScrollBlocker) {
-      this.removeKeyScrollBlocker();
-      this.removeKeyScrollBlocker = null;
-    }
-  }
-
-  setKeyScrollRemover(remover: () => void) {
-    this.removeKeyScrollBlocker = remover;
-  }
-
-  setPageScrollLockRemover(remover: () => void) {
-    this.removePageScrollLock = remover;
-  }
 }
 
-export const nbackAdapter = new NbackTaskAdapter();
+export const nbackAdapter = createTaskAdapter({
+  manifest: {
+    taskId: "nback",
+    label: "NBack",
+    variants: [
+      { id: "default", label: "NBack Default", configPath: "nback/default" },
+      { id: "drt_block_demo", label: "NBack DRT Block Demo", configPath: "nback/drt_block_demo" },
+      { id: "pm_module_demo", label: "NBack PM Module Demo", configPath: "nback/pm_module_demo" },
+      { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
+      { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
+      { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
+    ],
+  },
+  initialize: async (context) => {
+    nbackContext = context;
+    nbackRuntime = await prepareNbackRuntime(context);
+  },
+  run: runNbackTask,
+  terminate: async () => {
+    setCursorHidden(false);
+    if (nbackContext?.container) {
+      restoreNbackRootPresentation(nbackContext.container, nbackRootPresentationState);
+      nbackRootPresentationState = null;
+    }
+    if (nbackRemovePageScrollLock) {
+      nbackRemovePageScrollLock();
+      nbackRemovePageScrollLock = null;
+    }
+    if (nbackRemoveKeyScrollBlocker) {
+      nbackRemoveKeyScrollBlocker();
+      nbackRemoveKeyScrollBlocker = null;
+    }
+    nbackRuntime = null;
+    nbackContext = null;
+  },
+});
 
 async function exportNbackStimulusList(context: TaskAdapterContext, runtime: NbackRuntimeState): Promise<unknown> {
   const exportBlockType = (block: PlannedBlock): string => {
@@ -298,7 +247,7 @@ async function exportNbackStimulusList(context: TaskAdapterContext, runtime: Nba
       correct_response: trial.correctResponse,
     })),
   );
-  return exportStimulusRows({
+  return maybeExportStimulusRows({
     context,
     rows,
     suffix: "nback_stimulus_list",
@@ -326,14 +275,6 @@ function resolveNbackDrtConfig(
   overrideRaw: Record<string, unknown> | null,
 ): NbackDrtConfig {
   return coerceScopedDrtConfig(base, overrideRaw);
-}
-
-function resolveNbackDrtOverride(raw: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
-  const source = asObject(raw);
-  if (!source) return null;
-  const taskModules = asObject(asObject(source.task)?.modules);
-  const localModules = asObject(source.modules);
-  return asObject(localModules?.drt) ?? asObject(taskModules?.drt) ?? null;
 }
 
 interface NbackMapping {
@@ -1006,7 +947,7 @@ function parseNbackConfig(
     defaultEnabled: false,
     defaultResponseTerminatesTrial: false,
   });
-  const drtRaw = resolveNbackDrtOverride(taskRaw);
+  const drtRaw = resolveScopedModuleConfig(taskRaw, "drt");
   const drt = resolveNbackDrtConfig(
     {
       enabled: false,
@@ -1125,9 +1066,15 @@ function parseNbackConfig(
 
   const instructionsRaw = asObject(config.instructions);
   const rawInstructions = asObject(rawConfig?.instructions);
-  const instructionSlots = resolveInstructionFlowPages({
+  const instructionSource = {
+    ...(instructionsRaw ?? {}),
+    ...(asString(rawInstructions?.blockIntroTemplate)
+      ? { blockIntroTemplate: asString(rawInstructions?.blockIntroTemplate) }
+      : {}),
+  };
+  const instructionConfig = buildTaskInstructionConfig({
     title: asString(taskRaw?.title) || "NBack Task",
-    instructions: instructionsRaw,
+    instructions: instructionSource,
     defaults: {
       intro: [
         nonTargetKey
@@ -1135,6 +1082,9 @@ function parseNbackConfig(
           : "Respond only to n-back targets. Withhold response for non-targets.",
       ],
     },
+    blockIntroTemplateDefault: "This is a {nLevel}-back block.",
+    showBlockLabelDefault: instructionsRaw?.showBlockLabel !== false,
+    preBlockBeforeBlockIntroDefault: instructionsRaw?.preBlockBeforeBlockIntro === true,
   });
   const completeRaw = asObject(config.completion);
   const redirectRaw = asObject(completeRaw?.redirect);
@@ -1171,18 +1121,7 @@ function parseNbackConfig(
     }),
     variableDefinitions,
     allowedKeys: finalAllowedKeys,
-    instructions: {
-      introPages: instructionSlots.intro,
-      preBlockPages: instructionSlots.preBlock,
-      postBlockPages: instructionSlots.postBlock,
-      endPages: instructionSlots.end,
-      blockIntroTemplate:
-        asString(rawInstructions?.blockIntroTemplate) ||
-        asString(instructionsRaw?.blockIntroTemplate) ||
-        "This is a {nLevel}-back block.",
-      showBlockLabel: instructionsRaw?.showBlockLabel !== false,
-      preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
-    },
+    instructions: instructionConfig,
     practiceBlocks: parsedPracticeBlocks,
     mainBlocks: parsedMainBlocks,
     stimuliByCategory,
@@ -1234,7 +1173,7 @@ function parseBlock(
   const rawBlockSummary = b.blockSummary;
   const rawRepeatUntil = b.repeatUntil;
   const rawRtTask = b.rtTask;
-  const rawDrt = resolveNbackDrtOverride(b);
+  const rawDrt = resolveScopedModuleConfig(b, "drt");
   const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
   const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
   const resolvedRepeatAfterBlockScreens = variableResolver.resolveInValue(rawRepeatAfterBlockScreens, scope);

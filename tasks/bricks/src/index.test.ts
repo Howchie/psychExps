@@ -26,7 +26,8 @@ describe('BricksTaskAdapter', () => {
     const mockModuleRunner = {
       setOptions: vi.fn(),
       getResults: vi.fn().mockReturnValue([]),
-      getActiveData: vi.fn().mockReturnValue([])
+      getActiveData: vi.fn().mockReturnValue([]),
+      getActiveHandle: vi.fn().mockReturnValue(null),
     };
 
     const context: any = {
@@ -41,6 +42,9 @@ describe('BricksTaskAdapter', () => {
       moduleRunner: mockModuleRunner
     };
 
+    if (!bricksAdapter.initialize || !bricksAdapter.execute) {
+      throw new Error('bricksAdapter lifecycle hooks are missing');
+    }
     await bricksAdapter.initialize(context);
     const result = await bricksAdapter.execute();
 

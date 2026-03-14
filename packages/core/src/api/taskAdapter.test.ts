@@ -1,228 +1,231 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
-// We'll import these from where they WILL be.
-// Since they don't exist yet, this will fail to compile/run, which is a good 'Red' phase.
-import { LifecycleManager, TaskAdapter } from './taskAdapter';
+import { describe, it, expect, vi } from "vitest";
+import { createTaskAdapter, LifecycleManager } from "./taskAdapter";
+import type { SelectionContext, TaskAdapterContext } from "./types";
 
-describe('LifecycleManager', () => {
-  it('should handle the full lifecycle of a task adapter', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue({ result: 'success' }),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+function makeSelection(): SelectionContext {
+  return {
+    platform: "local",
+    taskId: "test",
+    variantId: "default",
+    participant: {
+      participantId: "p1",
+      studyId: "study-1",
+      sessionId: "s1",
+    },
+    source: {
+      task: "default",
+      variant: "default",
+    },
+  };
+}
 
-    const context: any = {
-      container: {} as any,
+function makeRunContext(taskConfig: Record<string, unknown> = {}): Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner"> {
+  return {
+    container: document.createElement("div"),
+    selection: makeSelection(),
+    coreConfig: {
       selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
+        taskId: "test",
+        variantId: "default",
       },
-      taskConfig: {}
-    };
-    const manager = new LifecycleManager(mockAdapter);
+    },
+    taskConfig,
+  };
+}
 
-    const result = await manager.run(context);
+describe("LifecycleManager", () => {
+  it("runs initialize -> execute -> terminate", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    const run = vi.fn().mockResolvedValue({ result: "success" });
+    const terminate = vi.fn().mockResolvedValue(undefined);
 
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: {},
-      resolver: expect.anything()
-    }));
-    expect(mockAdapter.execute).toHaveBeenCalled();
-    expect(mockAdapter.terminate).toHaveBeenCalled();
-    expect(result).toEqual({ result: 'success' });
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize,
+      run,
+      terminate,
+    });
+
+    const manager = new LifecycleManager(adapter);
+    const result = await manager.run(makeRunContext());
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(terminate).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ result: "success" });
   });
 
-  it('should terminate even if execution fails', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockRejectedValue(new Error('execution failed')),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("calls terminate even when execute fails", async () => {
+    const terminate = vi.fn().mockResolvedValue(undefined);
 
-    const context: any = {
-      container: {} as any,
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
-      },
-      taskConfig: {}
-    };
-    const manager = new LifecycleManager(mockAdapter);
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      run: vi.fn().mockRejectedValue(new Error("execution failed")),
+      terminate,
+    });
 
-    await expect(manager.run(context)).rejects.toThrow('execution failed');
+    const manager = new LifecycleManager(adapter);
 
-    expect(mockAdapter.initialize).toHaveBeenCalled();
-    expect(mockAdapter.terminate).toHaveBeenCalled();
+    await expect(manager.run(makeRunContext())).rejects.toThrow("execution failed");
+    expect(terminate).toHaveBeenCalledTimes(1);
   });
 
-  it('should resolve variables in the configuration before calling initialize', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue('ok'),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("resolves participant-scope variables before initialize", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
 
-    const context: any = {
-      container: {},
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
-      },
-      taskConfig: {
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize,
+      run: vi.fn().mockResolvedValue("ok"),
+    });
+
+    const manager = new LifecycleManager(adapter);
+
+    await manager.run(
+      makeRunContext({
         variables: {
-          myVar: 'ResolvedValue'
+          myVar: "ResolvedValue",
         },
-        field: '$var.myVar'
-      }
-    };
+        field: "$var.myVar",
+      }),
+    );
 
-    const manager = new LifecycleManager(mockAdapter);
-    await manager.run(context);
-
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: expect.objectContaining({
-        field: 'ResolvedValue'
-      })
-    }));
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskConfig: expect.objectContaining({
+          field: "ResolvedValue",
+        }),
+      }),
+    );
   });
 
-  it('should resolve interpolated variable expressions in strings', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue('ok'),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("supports interpolated variable expressions", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
 
-    const context: any = {
-      container: {},
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
-      },
-      taskConfig: {
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize,
+      run: vi.fn().mockResolvedValue("ok"),
+    });
+
+    const manager = new LifecycleManager(adapter);
+
+    await manager.run(
+      makeRunContext({
         variables: {
-          pmCategory: 'animals'
+          pmCategory: "animals",
         },
-        field: '${var.pmCategory}_controls'
-      }
-    };
+        field: "${var.pmCategory}_controls",
+      }),
+    );
 
-    const manager = new LifecycleManager(mockAdapter);
-    await manager.run(context);
-
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: expect.objectContaining({
-        field: 'animals_controls'
-      })
-    }));
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskConfig: expect.objectContaining({
+          field: "animals_controls",
+        }),
+      }),
+    );
   });
 
-  it('should resolve variables from task.variables and top-level variables', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue('ok'),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("merges task.variables and top-level variables", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
 
-    const context: any = {
-      container: {},
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
-      },
-      taskConfig: {
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize,
+      run: vi.fn().mockResolvedValue("ok"),
+    });
+
+    const manager = new LifecycleManager(adapter);
+
+    await manager.run(
+      makeRunContext({
         task: {
-          variables: { a: 'A' }
+          variables: { a: "A" },
         },
-        variables: { b: 'B' },
-        f1: '$var.a',
-        f2: '$var.b'
-      }
-    };
+        variables: { b: "B" },
+        f1: "$var.a",
+        f2: "$var.b",
+      }),
+    );
 
-    const manager = new LifecycleManager(mockAdapter);
-    await manager.run(context);
-
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: expect.objectContaining({
-        f1: 'A',
-        f2: 'B'
-      })
-    }));
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskConfig: expect.objectContaining({
+          f1: "A",
+          f2: "B",
+        }),
+      }),
+    );
   });
 
-  it('should resolve namespaces correctly', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue('ok'),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("does not resolve block-scoped variables at high level", async () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
 
-    const context: any = {
-      container: {},
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
-      },
-      taskConfig: {
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize,
+      run: vi.fn().mockResolvedValue("ok"),
+    });
+
+    const manager = new LifecycleManager(adapter);
+
+    await manager.run(
+      makeRunContext({
         variables: {
-          between: { pm: 'food' }
+          blockVar: { scope: "block", value: "BlockValue" },
+          partVar: { scope: "participant", value: "PartValue" },
         },
-        field: '$between.pm'
-      }
-    };
+        f1: "$var.blockVar",
+        f2: "$var.partVar",
+      }),
+    );
 
-    const manager = new LifecycleManager(mockAdapter);
-    await manager.run(context);
-
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: expect.objectContaining({
-        field: 'food'
-      })
-    }));
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskConfig: expect.objectContaining({
+          f1: "$var.blockVar",
+          f2: "PartValue",
+        }),
+      }),
+    );
   });
 
-  it('should NOT resolve block-scoped variables at the high level', async () => {
-    const mockAdapter: any = {
-      manifest: { taskId: 'test' },
-      initialize: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn().mockResolvedValue('ok'),
-      terminate: vi.fn().mockResolvedValue(undefined),
-    };
+  it("supports direct run(context) adapters without wrapper classes", async () => {
+    const seen: string[] = [];
 
-    const context: any = {
-      container: {},
-      selection: {
-        participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      initialize: (ctx) => {
+        seen.push(`init:${ctx.selection.variantId}`);
       },
-      taskConfig: {
-        variables: {
-          blockVar: { scope: 'block', value: 'BlockValue' },
-          partVar: { scope: 'participant', value: 'PartValue' }
-        },
-        f1: '$var.blockVar',
-        f2: '$var.partVar'
-      }
-    };
+      run: async (ctx) => {
+        seen.push(`run:${ctx.selection.participant.participantId}`);
+        return "done";
+      },
+      terminate: (ctx) => {
+        seen.push(`term:${ctx.selection.taskId}`);
+      },
+    });
 
-    const manager = new LifecycleManager(mockAdapter);
-    await manager.run(context);
+    const result = await new LifecycleManager(adapter).run(makeRunContext());
 
-    expect(mockAdapter.initialize).toHaveBeenCalledWith(expect.objectContaining({
-      taskConfig: expect.objectContaining({
-        f1: '$var.blockVar',
-        f2: 'PartValue'
-      })
-    }));
+    expect(result).toBe("done");
+    expect(seen).toEqual(["init:default", "run:p1", "term:test"]);
+  });
+});
+
+describe("createTaskAdapter", () => {
+  it("throws if execute is called before initialize", async () => {
+    const adapter = createTaskAdapter({
+      manifest: { taskId: "uninitialized", label: "Uninitialized", variants: [{ id: "default", label: "Default" }] },
+      run: vi.fn().mockResolvedValue("ok"),
+    });
+
+    await expect(adapter.execute?.()).rejects.toThrow("was not initialized");
   });
 });

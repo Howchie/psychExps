@@ -55,6 +55,8 @@ Recognized top-level keys:
 
 ## 3. Planning-level schema (`blocks` + `manipulations`)
 
+Planning keys can be provided either at top-level (`blocks`, `manipulations`, `manipulationPools`) or under `plan.*`.
+
 ### `blocks[]`
 
 ```ts
@@ -76,6 +78,7 @@ Recognized top-level keys:
   label?: string;
   overrides?: object;
   trialPlan?: {
+    // alias: trial_plan
     schedule?: {
       mode?: "weighted" | "sequence" | "quota_shuffle" | "block_quota_shuffle";
       sequence?: Array<string | number>;
@@ -778,6 +781,9 @@ Used by trial difficulty estimator:
   - `preBlockPages`/`beforeBlockPages`/`beforeBlockScreens`: shown before each block starts
   - `postBlockPages`/`afterBlockPages`/`afterBlockScreens`: shown after each block ends
   - `endPages`/`outroPages`/`end`/`outro`: shown after all blocks
+  - `blockIntroTemplate`: optional templated text shown on block intro cards
+  - `showBlockLabel`: optional bool (default true) for block intro/post headers
+  - `preBlockBeforeBlockIntro`: optional bool (default false) to place pre-block pages before block intro card
 - Instruction pages can be plain strings or objects like `{ title, text }` / `{ title, html }`.
 - Page `title`, `text`, and `html` support `{dot.path}` interpolation against merged Bricks config values (and resolver-backed values), e.g. `{bricks.completionParams.target_hold_ms}`.
 - Post-trial survey presets (`surveys.postTrial`) support display toggles:

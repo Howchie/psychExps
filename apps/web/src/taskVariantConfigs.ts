@@ -6,7 +6,6 @@ const bundledConfigs = import.meta.glob("../../../configs/**/*.json", { eager: t
 
 export const taskDefaults: Record<string, JSONObject> = {
   sft: {},
-  nback_pm_old: {},
   nback: {},
   bricks: {},
   stroop: {},

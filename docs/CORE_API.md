@@ -15,6 +15,17 @@ All task adapters must implement this interface to be compatible with the unifie
 - `execute(): Promise<unknown>`: (Optional) Called to run the main task logic. Should return the task results.
 - `terminate(): Promise<void>`: (Optional) Called after execution (success or failure) to clean up resources like global listeners or timers.
 
+### `createTaskAdapter(options)` (Factory)
+
+Preferred way to define task adapters without per-task wrapper classes.
+
+- `manifest: TaskManifest`: Task metadata.
+- `run(context: TaskAdapterContext): Promise<unknown> | unknown`: Main task entrypoint.
+- `initialize?(context)`: Optional setup hook.
+- `terminate?(context)`: Optional cleanup hook.
+
+The factory returns a `TaskAdapter` compatible with `LifecycleManager` and keeps task context management centralized in core.
+
 ### `TaskAdapterContext` (Interface)
 
 Context provided to task adapters during initialization and execution.
@@ -245,6 +256,8 @@ The framework supports modular extensions that can be attached to specific scope
 - `stop(): TResult`: Called when the scope ends.
 - `step?(now: number)`: (Optional) Animation frame tick.
 - `handleKey?(key, now)`: (Optional) Keyboard event handler.
+- `getData?(): TResult`: (Optional) Snapshot current active module data.
+- `controller?: unknown`: (Optional) Runtime controller exposed for advanced task integrations.
 
 #### `TaskModuleRunner` (Class)
 
@@ -256,6 +269,22 @@ Manages the lifecycle of active modules.
 - `stop(address)`: Stops the module instance at the specified address and records the result.
 - `stopAll()`: Stops all active modules.
 - `getResults(): TaskModuleResult[]`: Returns all results from stopped modules.
+- `getActiveData(criteria?)`: Returns live data snapshots from active modules.
+- `getActiveHandle(criteria)`: Returns the active handle at an exact scope address.
+
+### Shared task helpers
+
+- `resolveScopedModuleConfig(raw, moduleId)`: read module overrides from either `modules.<id>` or `task.modules.<id>` with local precedence.
+- `maybeExportStimulusRows({ context, rows, suffix })`: centralized `exportStimuliOnly` gate and export finalization path.
+- `parseSurveyDefinitions(entries)`: parse mixed survey configs (preset or inline `questions[]`) into `SurveyDefinition[]`.
+- `collectSurveyEntries(config, { arrayKey, singletonKey })`: collect survey candidate entries from `surveys` arrays/scoped arrays and optional singleton aliases.
+- `runSurveySequence(container, surveys, buttonIdPrefix)`: run sequential surveys with standardized button id handling.
+- `attachSurveyResults(record, surveys)`: attach survey run payloads onto a trial/result record.
+- `findFirstSurveyScore(surveys, scoreKey)`: read first finite numeric score for a key across survey runs.
+- `renderSimpleInstructionScreenHtml(ctx, options)`: simple standardized instruction renderer for intro append + optional block label behavior.
+- `createInstructionRenderer(options)`: renderer factory for common task instruction patterns (intro append, block-label policy, optional summary-card section rendering, page resolver hook).
+- `buildTaskInstructionConfig(args)`: build standardized task instruction config (`intro/pre/post/end`, block intro template, block label policy) from raw task instructions + defaults.
+- `applyTaskInstructionConfig(taskConfig, instructions)`: apply standardized instruction config onto task instruction surfaces for orchestrator flows.
 
 ### DRT as a Task Module
 
@@ -395,6 +424,47 @@ Behavior:
 - Session lifecycle events and trial results are emitted incrementally as envelopes.
 - Local CSV/JSON save remains available for testing and debugging.
 - Task adapters should not implement JATOS submission directly.
+
+### TaskOrchestrator Instruction Defaults
+
+`TaskOrchestrator.run(args)` now auto-derives instruction UI from config unless explicitly overridden:
+- task-level pages: `instructions.introPages`, `instructions.endPages`
+- block-level defaults: `instructions.preBlockPages`, `instructions.postBlockPages`
+- block intro template: `instructions.blockIntroTemplate`
+- block flags: `instructions.showBlockLabel`, `instructions.preBlockBeforeBlockIntro`
+- block page merging: global pre/post pages are merged with `block.beforeBlockScreens` / `block.afterBlockScreens`
+
+For adapters that parse/normalize instructions before orchestration, use `args.instructionDefaults` to provide the same surfaces once (instead of manually wiring `introPages`, `endPages`, and `getBlockUi` per task).
+
+To avoid per-task orchestrator wiring, core also exposes:
+- `applyResolvedTaskInstructionSurfaces(taskConfig, surfaces)`
+
+This hydrates normalized instruction surfaces back onto `taskConfig.instructions`, so `TaskOrchestrator` can consume them without adapter-level `instructionDefaults`.
+
+### TaskOrchestrator Staircase Phase
+
+`TaskOrchestrator.run(args)` supports a standardized pre-main staircase phase:
+
+- `args.staircase.run`: async callback executed after intro flow and before block/session execution
+- `args.staircase.enabled` (optional): explicit enable/disable override
+- if `args.staircase.enabled` is omitted, orchestrator runs staircase only when `taskConfig.staircase.enabled === true`
+
+This keeps staircase as a core lifecycle slot (instead of task-specific intro hooks), so any task can use the same orchestration surface.
+
+### TaskOrchestrator Module Auto-Start Filter
+
+`TaskOrchestrator.run(args)` supports:
+- `args.shouldAutoStartModule(ctx)`
+- `args.resolveModuleContext(ctx)`
+
+This predicate is evaluated for each configured task module at block/trial scope before `startScopedModules` is invoked. It enables selective opt-out of orchestrator auto-start for specific modules without task-level raw config mutation.
+
+Module config resolution is now layered centrally:
+1. `rawTaskConfig.task.modules` (task-level baseline)
+2. `block.modules` / `block.task.modules` (block-level override)
+3. `trial.modules` / `trial.task.modules` (trial-level override)
+
+Merging is deep and scope-aware (`config.scope` still determines whether a module starts at block or trial boundaries).
 
 ## 8. Events, outcomes, feedback
 

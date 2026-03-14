@@ -40,6 +40,21 @@ Defines the blocks and trial distributions.
     - `trials`: Total trials in block.
     - `changeProbability`: Probability of a "change" trial (default: 0.5).
     - `setSizes`: Array of set sizes to sample from (e.g., `[4, 6, 8]`).
+    - `label` (optional block label)
+    - `beforeBlockScreens` / `preBlockInstructions` (optional pre-block screens)
+    - `afterBlockScreens` / `postBlockInstructions` (optional post-block screens)
+
+### `instructions`
+Change Detection now uses shared core instruction-slot keys:
+- intro: `pages|introPages|intro|screens`
+- pre-block: `preBlockPages|beforeBlockPages|beforeBlockScreens`
+- post-block: `postBlockPages|afterBlockPages|afterBlockScreens`
+- end: `endPages|outroPages|end|outro`
+
+Additional controls:
+- `blockIntroTemplate` (supports `{blockLabel}` and `{nTrials}`)
+- `showBlockLabel` (default `true`)
+- `preBlockBeforeBlockIntro` (default `false`)
 
 ## 3. Data Output
 

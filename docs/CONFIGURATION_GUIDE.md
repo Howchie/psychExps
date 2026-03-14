@@ -12,7 +12,7 @@ Config objects are merged in the following order (higher items overwrite lower i
 4. **Runtime overrides:** `selection.overrides` (JATOS overrides if present, else URL `overrides`).
 
 Current repository state:
-- `taskDefaults` is currently empty for all tasks (`sft`, `nback_pm_old`, `nback`, `bricks`, `stroop`, `tracking`).
+- `taskDefaults` is currently empty for all active tasks (`sft`, `nback`, `bricks`, `stroop`, `tracking`, `change_detection`).
 - Effective baseline behavior therefore comes from the selected variant config JSON.
 
 ### Merger Behavior: `buildMergedConfig`
@@ -92,9 +92,9 @@ Resolution order:
 3. URL `auto=...` (final override for enabled/disabled)
 
 Behavior:
-- jsPsych tasks (`sft`, `nback_pm_old`, `nback`, `stroop`) run in jsPsych simulation mode.
+- jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode.
 - Continue screens auto-advance with sampled delays.
-- Native Bricks auto-starts, applies synthetic holds, and enforces a max trial duration guard in auto mode.
+- Native tasks (`bricks`, `tracking`, `change_detection`) auto-start and apply task-specific synthetic timing guards.
 
 ---
 
@@ -203,7 +203,7 @@ The framework supports dynamic redirect URLs upon completion. These are configur
 
 ## 6. Instruction Slots (Shared Pattern)
 
-For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`), `instructions` supports:
+For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`, `bricks`, `sft`, `stroop`, `change_detection`), `instructions` supports:
 
 - `pages` (preferred intro pages): string, object, or array
   - aliases: `introPages`, `intro`, `screens`
@@ -440,9 +440,17 @@ The framework supports several namespaces:
 If your config changes aren't taking effect, check the following:
 
 1. **Isolation Check:** The framework validates `taskConfig` isolation. Root-level keys belonging to *other* tasks (e.g., putting `mapping` in an SFT config) are rejected by `validateTaskConfigIsolation`.
-2. **Schema Errors:** Check the browser console. The parsers (`parseSftConfig`, `parsePmConfig`) will throw descriptive errors if required sections are missing or malformed.
+2. **Schema Errors:** Check the browser console. Task parsers (for example `parseSftConfig`) throw descriptive errors when required sections are missing or malformed.
 3. **Variant source:** `?config=...` replaces variant manifest mapping for that launch.
 4. **Runtime source precedence:** JATOS input overrides URL `overrides`.
+
+Instruction orchestration note:
+- Active tasks now hydrate normalized instruction surfaces into `taskConfig.instructions` via core helper (`applyResolvedTaskInstructionSurfaces`) and rely on `TaskOrchestrator` to consume them centrally (`introPages`, `preBlockPages`, `postBlockPages`, `endPages`, `blockIntroTemplate`, `showBlockLabel`, `preBlockBeforeBlockIntro`).
+- `sft` staircase runs through the core `TaskOrchestrator` staircase slot (`taskConfig.staircase.enabled === true`).
+
+Module orchestration note:
+- `TaskOrchestrator` now resolves module config centrally from task/block/trial layers (`task.modules` + `block.modules` + `trial.modules`) with deep merge, and starts/stops by scope.
+- Tasks can provide module display targeting through `resolveModuleContext` instead of manual module lifecycle wrappers.
 
 ---
 
@@ -454,8 +462,12 @@ Use URL flag:
 - `exportStimuli=true` (or `export_stimuli=true`)
 
 Supported tasks:
+- `sft`
 - `nback`
-- `nback_pm_old`
+- `bricks`
+- `stroop`
+- `tracking`
+- `change_detection`
 
 Behavior:
 - Task runtime builds planned blocks/trials but skips trial execution.

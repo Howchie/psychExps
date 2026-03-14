@@ -4,9 +4,9 @@ const asObject = (value: unknown): value is JSONObject =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 const forbiddenByTask: Record<string, string[]> = {
-  sft: ["nback_pm_old", "bricks"],
-  nback_pm_old: ["sft", "bricks"],
-  bricks: ["sft", "nback_pm_old"],
+  sft: ["nback", "bricks"],
+  bricks: ["sft", "nback"],
+  nback: ["sft", "bricks"],
 };
 
 export function validateTaskConfigIsolation(taskId: string, config: JSONObject, knownTaskIds?: string[]): void {

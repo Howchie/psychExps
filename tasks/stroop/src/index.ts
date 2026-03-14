@@ -11,52 +11,54 @@ import {
   createMulberry32,
   createSemanticResolver,
   createResponseSemantics,
-  appendJsPsychInstructionScreens,
-  appendJsPsychTaskIntroScreen,
-  appendJsPsychBlockIntroScreen,
   drawCanvasCenteredText,
   drawCanvasFramedScene,
   drawTrialFeedbackOnCanvas,
   escapeHtml,
   evaluateTrialOutcome,
-  finalizeTaskRun,
   hashSeed,
   installKeyScrollBlocker,
   loadCsvDictionary,
   loadTokenPool,
   normalizeKey,
   parseTrialFeedbackConfig,
-  pushJsPsychContinueScreen,
-  recordsToCsv,
-  resolveJsPsychContentHost,
+  buildTaskInstructionConfig,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
   setCursorHidden,
+  TaskOrchestrator,
+  createInstructionRenderer,
   toJsPsychChoices,
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
-  waitForContinue,
   ensureJsPsychCanvasCentered,
-  isStimulusExportOnly,
-  exportStimulusRows,
+  maybeExportStimulusRows,
+  applyTaskInstructionConfig,
+  createTaskAdapter,
   type JSONObject,
   type RtTiming,
-  type TaskAdapter,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
   type ResponseSemantics,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
-import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
 type StroopMode = "congruence" | "valence";
 type StroopCondition = "congruent" | "incongruent" | "neutral" | "positive" | "negative";
 
 interface ParsedStroopConfig {
   title: string;
-  instructions: string;
+  instructions: {
+    introPages: string[];
+    preBlockPages: string[];
+    postBlockPages: string[];
+    endPages: string[];
+    blockIntroTemplate: string;
+    showBlockLabel: boolean;
+    preBlockBeforeBlockIntro: boolean;
+  };
   mode: StroopMode;
   mapping: {
     redKey: string;
@@ -154,44 +156,29 @@ function shouldHideCursorForPhase(phase: unknown): boolean {
   return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
 }
 
-class StroopTaskAdapter implements TaskAdapter {
-  readonly manifest: TaskAdapter["manifest"] = {
-    taskId: "stroop",
-    label: "Stroop",
-    variants: [
-      { id: "default", label: "Classic Congruence", configPath: "stroop/default" },
-      { id: "arbitrary_words", label: "Arbitrary Word Pool", configPath: "stroop/arbitrary_words" },
-      { id: "emotional_valence", label: "Emotional Stroop", configPath: "stroop/emotional_valence" },
-    ],
-  };
+const stroopManifest = {
+  taskId: "stroop",
+  label: "Stroop",
+  variants: [
+    { id: "default", label: "Classic Congruence", configPath: "stroop/default" },
+    { id: "arbitrary_words", label: "Arbitrary Word Pool", configPath: "stroop/arbitrary_words" },
+    { id: "emotional_valence", label: "Emotional Stroop", configPath: "stroop/emotional_valence" },
+  ],
+};
 
-  private context: TaskAdapterContext | null = null;
-  private removeKeyScrollBlocker: (() => void) | null = null;
+let stroopRemoveKeyScrollBlocker: (() => void) | null = null;
 
-  async initialize(context: TaskAdapterContext): Promise<void> {
-    this.context = context;
-  }
-
-  async execute(): Promise<unknown> {
-    if (!this.context) throw new Error("Stroop Task not initialized");
-    const result = await runStroopTask(this.context);
-    return result;
-  }
-
-  async terminate(): Promise<void> {
+export const stroopAdapter = createTaskAdapter({
+  manifest: stroopManifest,
+  run: runStroopTask,
+  terminate: async () => {
     setCursorHidden(false);
-    if (this.removeKeyScrollBlocker) {
-      this.removeKeyScrollBlocker();
-      this.removeKeyScrollBlocker = null;
+    if (stroopRemoveKeyScrollBlocker) {
+      stroopRemoveKeyScrollBlocker();
+      stroopRemoveKeyScrollBlocker = null;
     }
-  }
-
-  setKeyScrollRemover(remover: () => void) {
-    this.removeKeyScrollBlocker = remover;
-  }
-}
-
-export const stroopAdapter = new StroopTaskAdapter();
+  },
+});
 
 async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = await parseStroopConfig(context.taskConfig);
@@ -203,27 +190,26 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   const eventLogger = createEventLogger(selection);
   const plannedBlocks = buildStroopPlan(parsed, baseRng);
 
-  if (isStimulusExportOnly(context.taskConfig)) {
-    const rows = plannedBlocks.flatMap((block, blockIndex) =>
-      block.trials.map((trial) => ({
-        block_index: blockIndex,
-        block_id: block.id,
-        block_label: block.label,
-        trial_index: trial.trialIndex,
-        trial_id: trial.id,
-        word: trial.word,
-        font_color_token: trial.fontColorToken,
-        condition_label: trial.conditionLabel,
-        trial_code: trial.conditionLabel,
-        correct_response: trial.correctResponse,
-      })),
-    );
-    return exportStimulusRows({
-      context,
-      rows,
-      suffix: "stroop_stimulus_list",
-    });
-  }
+  const rows = plannedBlocks.flatMap((block, blockIndex) =>
+    block.trials.map((trial) => ({
+      block_index: blockIndex,
+      block_id: block.id,
+      block_label: block.label,
+      trial_index: trial.trialIndex,
+      trial_id: trial.id,
+      word: trial.word,
+      font_color_token: trial.fontColorToken,
+      condition_label: trial.conditionLabel,
+      trial_code: trial.conditionLabel,
+      correct_response: trial.correctResponse,
+    })),
+  );
+  const stimulusExport = await maybeExportStimulusRows({
+    context,
+    rows,
+    suffix: "stroop_stimulus_list",
+  });
+  if (stimulusExport) return stimulusExport;
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -231,77 +217,20 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   ensureJsPsychCanvasCentered(root);
 
   const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-  if (stroopAdapter instanceof StroopTaskAdapter) {
-    stroopAdapter.setKeyScrollRemover(removeKeyScrollBlocker);
-  }
-  
-  eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
+  stroopRemoveKeyScrollBlocker = removeKeyScrollBlocker;
 
-  const timeline: any[] = [];
-  appendJsPsychTaskIntroScreen({
-    timeline,
-    plugin: CallFunctionPlugin,
-    container: root,
-    title: parsed.title,
-    participantId,
-    phase: "intro_start",
-    buttonId: "stroop-continue-intro_start",
-  });
-  appendJsPsychInstructionScreens({
-    timeline,
-    plugin: CallFunctionPlugin,
-    container: root,
-    pages: [parsed.instructions],
-    section: "intro",
-    buttonIdPrefix: "stroop-continue-intro_instructions",
-    phase: "intro_instructions",
-    renderHtml: (ctx) =>
-      `<p>${escapeHtml(ctx.pageText)}</p><p><b>Respond to the font color:</b> red = <code>${escapeHtml(parsed.mapping.redKey)}</code>, green = <code>${escapeHtml(parsed.mapping.greenKey)}</code></p>`,
-    data: (ctx) => ({ introIndex: ctx.pageIndex }),
-  });
-
-  let lastBlockIntroSignature: string | null = null;
-  for (let blockIndex = 0; blockIndex < plannedBlocks.length; blockIndex += 1) {
-    const block = plannedBlocks[blockIndex];
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_start_hook", blockIndex, blockId: block.id },
-      func: () => {
-        eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
-      },
-    });
-
-    const blockIntroText = "Press continue when ready.";
-    const blockIntroSignature = `${block.label}::${blockIntroText}`;
-    if (blockIntroSignature !== lastBlockIntroSignature) {
-      appendJsPsychBlockIntroScreen({
-        timeline,
-        plugin: CallFunctionPlugin,
-        container: root,
-        blockLabel: block.label,
-        introText: blockIntroText,
-        phase: "block_start",
-        buttonId: `stroop-continue-block_start-${blockIndex}`,
-        data: { blockIndex },
-      });
-      lastBlockIntroSignature = blockIntroSignature;
-    }
-    appendJsPsychInstructionScreens({
-      timeline,
-      plugin: CallFunctionPlugin,
-      container: root,
-      pages: block.beforeBlockScreens,
-      section: "preBlock",
-      buttonIdPrefix: `stroop-continue-block_pre_instruction-${blockIndex}`,
-      phase: "block_pre_instruction",
-      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
-      data: (ctx) => ({ blockIndex, instructionIndex: ctx.pageIndex }),
-    });
-
-    for (const trial of block.trials) {
+  let jsPsych: ReturnType<typeof initJsPsych> | null = null;
+  const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
+  applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+  const payload = await orchestrator.run({
+    buttonIdPrefix: "stroop-continue",
+    getBlocks: () => plannedBlocks,
+    getTrials: ({ block }) => block.trials,
+    runTrial: async ({ block, blockIndex, trial }) => {
+      if (!jsPsych) throw new Error("jsPsych not initialized");
+      const trialTimeline: any[] = [];
       appendStroopTrialTimeline({
-        timeline,
+        timeline: trialTimeline,
         parsed,
         block,
         blockIndex,
@@ -311,93 +240,57 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
         records,
         eventLogger,
       });
-    }
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_end_hook", blockIndex, blockId: block.id },
-      func: () => {
-        const blockRows = records.filter((row) => row.blockIndex === blockIndex);
-        const accuracy = blockRows.length > 0 ? Math.round((blockRows.reduce((acc, row) => acc + row.responseCorrect, 0) / blockRows.length) * 1000) / 10 : 0;
-        eventLogger.emit("block_end", { blockId: block.id, label: block.label, accuracy }, { blockIndex });
-      },
-    });
-
-    timeline.push({
-      type: CallFunctionPlugin,
-      data: { phase: "block_end", blockIndex, blockId: block.id },
-      async: true,
-      func: (done: () => void) => {
-        const blockRows = records.filter((row) => row.blockIndex === blockIndex);
-        const accuracy = blockRows.length > 0 ? Math.round((blockRows.reduce((acc, row) => acc + row.responseCorrect, 0) / blockRows.length) * 1000) / 10 : 0;
-        const host = resolveJsPsychContentHost(root);
-        void waitForContinue(host, `<h3>End of ${escapeHtml(block.label)}</h3><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`, {
-          buttonId: `stroop-end-${block.id}`,
-        }).then(done);
-      },
-    });
-    appendJsPsychInstructionScreens({
-      timeline,
-      plugin: CallFunctionPlugin,
-      container: root,
-      pages: block.afterBlockScreens,
-      section: "postBlock",
-      buttonIdPrefix: `stroop-continue-block_post_instruction-${blockIndex}`,
-      phase: "block_post_instruction",
-      renderHtml: (ctx) => `<h3>${escapeHtml(block.label)}</h3><p>${escapeHtml(ctx.pageText)}</p>`,
-      data: (ctx) => ({ blockIndex, instructionIndex: ctx.pageIndex }),
-    });
-  }
-
-  const jsPsych = initJsPsych({
-    display_element: root,
-    on_trial_start: (trial: Record<string, unknown>) => {
-      const data = asObject(trial?.data);
-      setCursorHidden(shouldHideCursorForPhase(data?.phase));
+      await runJsPsychTimeline(jsPsych, trialTimeline);
+      return records[records.length - 1];
     },
-    on_finish: () => {
+    onTaskStart: () => {
+      jsPsych = initJsPsych({
+        display_element: root,
+        on_trial_start: (trial: Record<string, unknown>) => {
+          const data = asObject(trial?.data);
+          setCursorHidden(shouldHideCursorForPhase(data?.phase));
+        },
+        on_finish: () => {
+          setCursorHidden(false);
+        },
+      });
+      eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
+    },
+    onBlockStart: ({ block, blockIndex }) => {
+      eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
+    },
+    onBlockEnd: ({ block, blockIndex }) => {
+      const blockRows = records.filter((row) => row.blockIndex === blockIndex);
+      const accuracy =
+        blockRows.length > 0
+          ? Math.round((blockRows.reduce((acc, row) => acc + row.responseCorrect, 0) / blockRows.length) * 1000) / 10
+          : 0;
+      eventLogger.emit("block_end", { blockId: block.id, label: block.label, accuracy }, { blockIndex });
+    },
+    onTaskEnd: () => {
+      eventLogger.emit("task_end", {
+        task: "stroop",
+        mode: parsed.mode,
+        trials: records.length,
+      });
       setCursorHidden(false);
-    }
+    },
+    csvOptions: {
+      suffix: "stroop_trials",
+      getRecords: () => records,
+    },
+    getEvents: () => eventLogger.events,
+    getTaskMetadata: () => ({
+      runner: "jspsych",
+      mode: parsed.mode,
+      records,
+      jsPsychData: jsPsych?.data.get().values() ?? [],
+    }),
+    renderInstruction: createInstructionRenderer({
+      showBlockLabel: parsed.instructions.showBlockLabel,
+      introAppendHtml: `<p><b>Respond to the font color:</b> red = <code>${escapeHtml(parsed.mapping.redKey)}</code>, green = <code>${escapeHtml(parsed.mapping.greenKey)}</code></p>`,
+    }),
   });
-
-  try {
-    await runJsPsychTimeline(jsPsych, timeline);
-  } finally {
-    setCursorHidden(false);
-  }
-
-  eventLogger.emit("task_end", {
-    task: "stroop",
-    mode: parsed.mode,
-    trials: records.length,
-  });
-
-  const csv = recordsToCsv(records);
-  const payload = {
-    selection,
-    runner: "jspsych",
-    mode: parsed.mode,
-    records,
-    events: eventLogger.events,
-    jsPsychData: jsPsych.data.get().values(),
-  };
-
-  await finalizeTaskRun({
-    coreConfig: context.coreConfig,
-    selection,
-    payload,
-    csv: csv ? { contents: csv, suffix: "stroop_trials" } : null,
-    completionStatus: "complete",
-  });
-
-  const host = resolveJsPsychContentHost(root);
-  const accuracy = records.length > 0 ? Math.round((records.reduce((acc, row) => acc + row.responseCorrect, 0) / records.length) * 1000) / 10 : 0;
-  await waitForContinue(
-    host,
-    `<h2>Task complete</h2><p>Trials: <b>${records.length}</b></p><p>Accuracy: <b>${accuracy.toFixed(1)}%</b></p>`,
-    { buttonId: "stroop-task-complete" },
-  );
-  
   return payload;
 }
 
@@ -687,6 +580,7 @@ function extractTrialResponse(data: Record<string, unknown>): { key: string | nu
 
 async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig> {
   const taskRaw = asObject(config.task);
+  const instructionsRaw = asObject(config.instructions);
   const conditionsRaw = asObject(config.conditions);
   const displayRaw = asObject(config.display);
   const stimuliRaw = asObject(config.stimuli);
@@ -802,11 +696,21 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
     }
   }
 
+  const instructionConfig = buildTaskInstructionConfig({
+    title: asString(taskRaw?.title) || "Stroop Task",
+    instructions: instructionsRaw,
+    defaults: {
+      intro: [
+        asString(taskRaw?.instructions) ||
+          "Respond to the FONT COLOR of each word as quickly and accurately as possible.",
+      ],
+    },
+    blockIntroTemplateDefault: "Press continue when ready.",
+  });
+
   return {
     title: asString(taskRaw?.title) || "Stroop Task",
-    instructions:
-      asString(taskRaw?.instructions) ||
-      "Respond to the FONT COLOR of each word as quickly and accurately as possible.",
+    instructions: instructionConfig,
     mode,
     mapping,
     responseSemantics,

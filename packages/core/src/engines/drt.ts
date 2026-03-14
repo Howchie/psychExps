@@ -643,6 +643,7 @@ export class DrtController {
           handleKey: (key) => {
             return controller.handleKey(key);
           },
+          controller,
         };
       },
     };
@@ -1010,7 +1011,8 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
       },
       handleKey: (key) => {
         return controller.handleKey(key);
-      }
+      },
+      controller,
     };
   }
 }

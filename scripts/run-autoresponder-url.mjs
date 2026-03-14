@@ -11,6 +11,7 @@ function printUsage() {
 Options:
   --max-minutes <n>        Max wall time (default: 120)
   --goto-timeout-ms <n>    Initial navigation timeout in ms (default: 120000)
+  --start-selector <css>   Explicit selector to click to launch from JATOS start page
   --done-selector <css>    Completion selector to wait for
   --done-text "<text>"     Completion body text snippet to wait for
   --artifact-dir <path>    Directory for logs/screenshots
@@ -25,6 +26,7 @@ function parseArgs(argv) {
     maxMinutes: 120,
     gotoTimeoutMs: 120_000,
     doneSelector: "",
+    startSelector: "",
     doneText: "",
     artifactDir: "",
     headful: false,
@@ -61,6 +63,11 @@ function parseArgs(argv) {
     }
     if (key === "--done-selector" && next) {
       out.doneSelector = String(next);
+      i += 1;
+      continue;
+    }
+    if (key === "--start-selector" && next) {
+      out.startSelector = String(next);
       i += 1;
       continue;
     }
@@ -146,6 +153,111 @@ async function pageHasDoneSignal(page, doneSelector, doneText) {
   return false;
 }
 
+async function clickLaunchIfNeeded(page, startSelector) {
+  const currentUrl = page.url();
+  const isJatosStart = /\/publix\/.+\/start(\?|$)/i.test(currentUrl);
+  if (!isJatosStart) return false;
+
+  const selectors = [];
+  if (startSelector) selectors.push(startSelector);
+  selectors.push(
+    'button:has-text("Start")',
+    'button:has-text("Begin")',
+    'button:has-text("Continue")',
+    'a:has-text("Start")',
+    'a:has-text("Begin")',
+    'a:has-text("Continue")',
+    'input[type="submit"]'
+  );
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (count === 0) continue;
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    const enabled = await locator.isEnabled().catch(() => false);
+    if (!enabled) continue;
+    console.log(`Clicking launch control: ${selector}`);
+    await locator.click({ timeout: 10_000 }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+async function clickFullscreenGateIfNeeded(page) {
+  const currentUrl = page.url();
+  if (!/jatos|publix/i.test(currentUrl)) return false;
+  const bodyText = (await page.evaluate(() => document.body?.innerText || "").catch(() => "")).toLowerCase();
+  const looksLikeFullscreenGate =
+    bodyText.includes("fullscreen") ||
+    bodyText.includes("full screen");
+  if (!looksLikeFullscreenGate) return false;
+
+  const selectors = [
+    'button:has-text("Start in Fullscreen")',
+    'button:has-text("Start in full screen")',
+    'button:has-text("Enter Fullscreen")',
+    'button:has-text("Enter full screen")',
+    'button:has-text("Fullscreen")',
+    'button:has-text("Full screen")',
+    'button:has-text("Start")',
+    'button:has-text("Continue")',
+    'a:has-text("Start")',
+    'a:has-text("Continue")',
+    'input[type="submit"]'
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (count === 0) continue;
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    const enabled = await locator.isEnabled().catch(() => false);
+    if (!enabled) continue;
+    console.log(`Clicking fullscreen/start gate: ${selector}`);
+    await locator.click({ timeout: 10_000 }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+async function clickInTaskContinueIfNeeded(page) {
+  const selectors = [
+    '.exp-continue-btn[data-action="continue"]',
+    'button[data-action="continue"]',
+    'button:has-text("I Consent")',
+    'button:has-text("Continue")',
+    'button:has-text("Next")',
+    'button:has-text("Start")',
+    'a:has-text("Continue")',
+    'a:has-text("Next")',
+    'input[type="submit"]'
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (count === 0) continue;
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    const enabled = await locator.isEnabled().catch(() => false);
+    if (!enabled) continue;
+
+    const text = (await locator.innerText().catch(() => "")).trim().toLowerCase();
+    const action = (await locator.getAttribute("data-action").catch(() => "")) || "";
+    if (action === "exit") continue;
+    if (text.includes("disagree")) continue;
+    if (text.includes("exit study")) continue;
+
+    console.log(`Clicking in-task continue control: ${selector}`);
+    await locator.click({ timeout: 10_000 }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.url) {
@@ -221,6 +333,10 @@ async function main() {
         await browser.close();
         process.exit(0);
       }
+
+      await clickLaunchIfNeeded(page, args.startSelector);
+      await clickFullscreenGateIfNeeded(page);
+      await clickInTaskContinueIfNeeded(page);
 
       if (elapsed - lastHeartbeatMs >= 60_000) {
         lastHeartbeatMs = elapsed;

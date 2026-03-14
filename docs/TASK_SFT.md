@@ -32,12 +32,20 @@ Top-level sections consumed:
 ### 2.1 `task`
 
 - `title`
-- `instructions`
+- `instructions` (legacy intro fallback)
 
 Note:
-- SFT currently uses a single intro instruction string from `task.instructions`.
-- It does not currently use the shared instruction-slot keys (`instructions.pages`, `preBlockPages`, `postBlockPages`, `endPages`).
+- SFT now uses shared instruction-slot parsing from `instructions`:
+  - intro: `pages|introPages|intro|screens`
+  - pre-block: `preBlockPages|beforeBlockPages|beforeBlockScreens`
+  - post-block: `postBlockPages|afterBlockPages|afterBlockScreens`
+  - end: `endPages|outroPages|end|outro`
+- `task.instructions` remains a fallback default intro page.
 - SFT now supports `instructions.blockSummary` (core-level) for block-end computed summary cards.
+- SFT also supports:
+  - `instructions.blockIntroTemplate` (default `"Rule: {blockRule}. Trials: {nTrials}."`)
+  - `instructions.showBlockLabel` (default `true`)
+  - `instructions.preBlockBeforeBlockIntro` (default `false`)
 
 ### 2.2 `design`
 
@@ -48,8 +56,8 @@ Required:
 Manipulation parsing supports:
 - `id`
 - `rule` (`OR|AND|XOR|ID|MIXED`)
-- optional `trial_plan.variants[]`
-- optional `trial_plan.schedule`
+- optional `trialPlan.variants[]` or `trial_plan.variants[]`
+- optional `trialPlan.schedule` or `trial_plan.schedule`
 
 `MIXED` without explicit variants expands into OR/AND/XOR variants.
 
@@ -74,14 +82,14 @@ Optional:
   - each block using `manipulationPool` draws participant-seeded without replacement
 
 Variant-level trial plan fields:
-- `trial_plan.variants[].id`
-- `trial_plan.variants[].rule`
-- `trial_plan.variants[].weight`
-- `trial_plan.variants[].trial_pool`
-- `trial_plan.variants[].trial_pool_schedule`
-- `trial_plan.variants[].layout`
-- `trial_plan.variants[].show_rule_cue`
-- `trial_plan.variants[].rule_cue_label`
+- `trialPlan/trial_plan.variants[].id`
+- `trialPlan/trial_plan.variants[].rule`
+- `trialPlan/trial_plan.variants[].weight`
+- `trialPlan/trial_plan.variants[].trial_pool`
+- `trialPlan/trial_plan.variants[].trial_pool_schedule`
+- `trialPlan/trial_plan.variants[].layout`
+- `trialPlan/trial_plan.variants[].show_rule_cue`
+- `trialPlan/trial_plan.variants[].rule_cue_label`
 
 Schedule modes (`trial_plan.schedule` and `trial_pool_schedule`) are powered by core `buildScheduledItems`:
 - `weighted` (default)

@@ -8,37 +8,35 @@ import {
   computeTrackingDistance,
   createEventLogger,
   createMulberry32,
-  finalizeTaskRun,
+  createManipulationOverrideMap,
+  createManipulationPoolAllocator,
+  resolveBlockManipulationIds,
+  applyManipulationOverridesToBlock,
   hashSeed,
   normalizeKey,
-  recordsToCsv,
-  resolveInstructionFlowPages,
-  runBlockEndFlow,
-  runBlockStartFlow,
-  runTaskEndFlow,
-  runTaskIntroFlow,
-  runTaskSession,
+  buildTaskInstructionConfig,
+  applyTaskInstructionConfig,
+  resolveScopedModuleConfig,
+  TaskOrchestrator,
   runTrialWithEnvelope,
   setCursorHidden,
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
-  isStimulusExportOnly,
-  exportStimulusRows,
+  maybeExportStimulusRows,
+  createTaskAdapter,
   type DrtEvent,
   type ScopedDrtConfig,
-  type TaskAdapter,
   type TaskAdapterContext,
   type TrackingMotionConfig,
   type TrackingTargetGeometry,
   type TaskModuleAddress,
-  startDrtModuleScope,
-  stopModuleScope,
+  type SelectionContext,
 } from "@experiments/core";
 import { createTrackingRenderer, type TrackingRendererBackend } from "./renderer";
 
-class TrackingTaskAdapter implements TaskAdapter {
-  readonly manifest: TaskAdapter["manifest"] = {
+export const trackingAdapter = createTaskAdapter({
+  manifest: {
     taskId: "tracking",
     label: "Tracking",
     variants: [
@@ -46,26 +44,12 @@ class TrackingTaskAdapter implements TaskAdapter {
       { id: "drt_demo", label: "Tracking DRT Demo", configPath: "tracking/drt_demo" },
       { id: "mot_demo", label: "Tracking MOT Demo", configPath: "tracking/mot_demo" },
     ],
-  };
-
-  private context: TaskAdapterContext | null = null;
-
-  async initialize(context: TaskAdapterContext): Promise<void> {
-    this.context = context;
-  }
-
-  async execute(): Promise<unknown> {
-    if (!this.context) throw new Error("Tracking Task not initialized");
-    const result = await runTrackingTask(this.context, this.context.moduleRunner);
-    return result;
-  }
-
-  async terminate(): Promise<void> {
+  },
+  run: (context) => runTrackingTask(context, context.moduleRunner),
+  terminate: async () => {
     setCursorHidden(false);
-  }
-}
-
-export const trackingAdapter = new TrackingTaskAdapter();
+  },
+});
 
 type TrackingShape = "circle" | "square";
 type TrackingTrialMode = "pursuit" | "mot";
@@ -122,6 +106,7 @@ interface ParsedTrackingBlock {
   label: string;
   phase: string;
   trials: number;
+  manipulationId: string | null;
   beforeBlockScreens: string[];
   afterBlockScreens: string[];
   trialTemplate: ParsedTrackingTrialTemplate;
@@ -135,9 +120,11 @@ interface ParsedTrackingConfig {
     preBlockPages: string[];
     postBlockPages: string[];
     endPages: string[];
+    blockIntroTemplate: string;
+    showBlockLabel: boolean;
+    preBlockBeforeBlockIntro: boolean;
   };
   display: TrackingDisplayConfig;
-  blockIntroTemplate: string;
   interTrialIntervalMs: number;
   blocks: ParsedTrackingBlock[];
 }
@@ -173,6 +160,7 @@ interface TrackingTrialRecord {
   variantId: string;
   blockIndex: number;
   blockLabel: string;
+  manipulationId: string | null;
   trialIndex: number;
   phase: string;
   trialMode: TrackingTrialMode;
@@ -236,14 +224,13 @@ interface MotTrialRuntimeResult {
 type TrackingTrialRuntimeResult = PursuitTrialRuntimeResult | MotTrialRuntimeResult;
 
 async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterContext["moduleRunner"]): Promise<unknown> {
-  const parsed = parseTrackingConfig(context.taskConfig);
-  if (isStimulusExportOnly(context.taskConfig)) {
-    return exportStimulusRows({
-      context,
-      rows: buildTrackingStimulusRows(parsed),
-      suffix: "tracking_stimulus_list",
-    });
-  }
+  const parsed = parseTrackingConfig(context.taskConfig, context.selection);
+  const stimulusExport = await maybeExportStimulusRows({
+    context,
+    rows: buildTrackingStimulusRows(parsed),
+    suffix: "tracking_stimulus_list",
+  });
+  if (stimulusExport) return stimulusExport;
   const participantId = context.selection.participant.participantId;
   const variantId = context.selection.variantId;
   const eventLogger = createEventLogger(context.selection);
@@ -288,50 +275,23 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
     }
   });
 
-  const startDrtScope = (
-    drtConfig: TrackingDrtConfig,
-    scope: "block" | "trial",
-    blockIndex: number,
-    trialIndex: number | null,
-  ): void => {
-    startDrtModuleScope({
-      runner,
-      drtConfig,
-      scope,
-      blockIndex,
-      trialIndex,
-      participantId: context.selection.participant.participantId,
-      sessionId: context.selection.participant.sessionId,
-      variantId: context.selection.variantId,
-      taskSeedKey: "tracking_drt",
-      context: {
+  const orchestrator = new TaskOrchestrator<ParsedTrackingBlock, number, TrackingTrialRuntimeResult>(context);
+  applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+  try {
+    return await orchestrator.run({
+      buttonIdPrefix: "tracking-continue",
+      getBlocks: () =>
+        parsed.blocks.map((block) => ({
+          ...block,
+          modules: {
+            drt: block.drt,
+          },
+        })),
+      resolveModuleContext: () => ({
         displayElement: stageShell,
         borderTargetElement: stageShell,
         borderTargetRect: resolveTrackingDisplayFrameRect,
-      },
-    });
-  };
-
-  const stopDrtScope = (scope: "block" | "trial", blockIndex: number, trialIndex: number | null): void => {
-    stopModuleScope({ runner, scope, blockIndex, trialIndex });
-  };
-
-  eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
-
-  await runTaskIntroFlow({
-    container: root,
-    title: parsed.title,
-    participantId,
-    introPages: parsed.instructions.introPages,
-    buttonIdPrefix: "tracking-continue",
-  });
-
-  root.innerHTML = "";
-  root.appendChild(stageShell);
-
-  try {
-    await runTaskSession<ParsedTrackingBlock, number, TrackingTrialRuntimeResult>({
-      blocks: parsed.blocks,
+      }),
       getTrials: ({ block }) => Array.from({ length: block.trials }, (_, trialIndex) => trialIndex),
       runTrial: async ({ block, blockIndex, trial, trialIndex }) =>
         runTrialWithEnvelope<
@@ -340,7 +300,6 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
         >({
           context: { block, blockIndex, trial, trialIndex },
           before: ({ block, blockIndex, trialIndex }) => {
-            startDrtScope(block.drt, "trial", blockIndex, trialIndex);
             eventLogger.emit(
               "trial_start",
               { label: block.label, phase: block.phase, mode: block.trialTemplate.mode },
@@ -374,6 +333,7 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
                 variantId,
                 blockIndex,
                 blockLabel: block.label,
+                manipulationId: block.manipulationId,
                 trialIndex,
                 phase: block.phase,
                 trialMode: "pursuit",
@@ -407,6 +367,7 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
                 variantId,
                 blockIndex,
                 blockLabel: block.label,
+                manipulationId: block.manipulationId,
                 trialIndex,
                 phase: block.phase,
                 trialMode: "mot",
@@ -432,7 +393,6 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
               });
             }
 
-            stopDrtScope("trial", blockIndex, trialIndex);
             eventLogger.emit(
               "trial_end",
               {
@@ -461,95 +421,62 @@ async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterC
             }
           },
         }),
-      hooks: {
-        onBlockStart: async ({ block, blockIndex }) => {
-          const blockIntro = formatBlockIntro(parsed.blockIntroTemplate, block.trials, block.phase);
-          await runBlockStartFlow({
-            container: root,
-            blockLabel: block.label,
-            blockIndex,
-            buttonIdPrefix: "tracking-continue",
-            introText: blockIntro || "Press continue when ready.",
-            preBlockPages: [...parsed.instructions.preBlockPages, ...block.beforeBlockScreens],
-          });
-
-          root.innerHTML = "";
-          root.appendChild(stageShell);
-
-          eventLogger.emit("block_start", { label: block.label, phase: block.phase, trials: block.trials }, { blockIndex });
-          startDrtScope(block.drt, "block", blockIndex, null);
-        },
-        onBlockEnd: async ({ block, blockIndex }) => {
-          stopDrtScope("block", blockIndex, null);
-          eventLogger.emit(
-            "block_end",
-            {
-              label: block.label,
-              phase: block.phase,
-              meanInsideRate: computeBlockInsideRate(trialRecords, blockIndex),
-            },
-            { blockIndex },
-          );
-
-          await runBlockEndFlow({
-            container: root,
-            blockLabel: block.label,
-            blockIndex,
-            buttonIdPrefix: "tracking-continue",
-            postBlockPages: [...parsed.instructions.postBlockPages, ...block.afterBlockScreens],
-          });
-          root.innerHTML = "";
-          root.appendChild(stageShell);
-        },
+      onTaskStart: () => {
+        eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
       },
+      onBlockStart: async ({ block, blockIndex }) => {
+        root.innerHTML = "";
+        root.appendChild(stageShell);
+        eventLogger.emit(
+          "block_start",
+          { label: block.label, phase: block.phase, trials: block.trials, manipulationId: block.manipulationId },
+          { blockIndex },
+        );
+      },
+      onBlockEnd: async ({ block, blockIndex }) => {
+        eventLogger.emit(
+          "block_end",
+          {
+            label: block.label,
+            phase: block.phase,
+            manipulationId: block.manipulationId,
+            meanInsideRate: computeBlockInsideRate(trialRecords, blockIndex),
+          },
+          { blockIndex },
+        );
+        root.innerHTML = "";
+        root.appendChild(stageShell);
+      },
+      onTaskEnd: () => {
+        eventLogger.emit("task_complete", { task: "tracking", nTrials: trialRecords.length });
+      },
+      csvOptions: {
+        suffix: "tracking_trials",
+        getRecords: () => trialRecords,
+      },
+      getEvents: () => eventLogger.events,
+      getTaskMetadata: () => ({
+        config: parsed,
+        records: trialRecords,
+        trialBins,
+        rawSamples,
+        drt: {
+          scopeRecords: runner.getResults().map((res: any) => ({
+            address: res.address ?? { scope: res.scope, blockIndex: res.blockIndex, trialIndex: res.trialIndex },
+            data: res.data,
+            transforms: res.data?.transforms,
+            responseRows: res.data?.responseRows,
+          })),
+        },
+        drtTransformEstimates: eventLogger.events
+          .filter((entry) => entry.eventType === "drt_transform_estimate")
+          .map((entry) => entry.eventData),
+        eventLog: eventLogger.events,
+      }),
     });
   } finally {
     setCursorHidden(false);
   }
-
-  eventLogger.emit("task_complete", { task: "tracking", nTrials: trialRecords.length });
-
-  const payload = {
-    selection: context.selection,
-    config: parsed,
-    records: trialRecords,
-    trialBins,
-    rawSamples,
-    drt: {
-      scopeRecords: runner.getResults().map((res: any) => ({
-        address: res.address ?? { scope: res.scope, blockIndex: res.blockIndex, trialIndex: res.trialIndex },
-        data: res.data,
-        transforms: res.data?.transforms,
-        responseRows: res.data?.responseRows,
-      })),
-    },
-    drtTransformEstimates: eventLogger.events
-      .filter((entry) => entry.eventType === "drt_transform_estimate")
-      .map((entry) => entry.eventData),
-    eventLog: eventLogger.events,
-  };
-
-  await finalizeTaskRun({
-    coreConfig: context.coreConfig,
-    selection: context.selection,
-    payload,
-    csv: {
-      contents: recordsToCsv(trialRecords),
-      suffix: "tracking_trials",
-    },
-    completionStatus: "complete",
-  });
-
-  await runTaskEndFlow({
-    container: root,
-    endPages: parsed.instructions.endPages,
-    buttonIdPrefix: "tracking-continue",
-    completeTitle: "Complete",
-    completeMessage: "Task complete. You can close this tab.",
-    doneButtonLabel: "Done",
-  });
-  
-  return payload;
 }
 
 function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<string, string | number | boolean | null>> {
@@ -559,6 +486,7 @@ function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<s
       rows.push({
         block_index: blockIndex,
         block_label: block.label,
+        manipulation_id: block.manipulationId,
         trial_index: trialIndex,
         phase: block.phase,
         trial_mode: block.trialTemplate.mode,
@@ -970,12 +898,12 @@ function computeSampleDistance(
   return { inside: result.inside, boundaryDistancePx: result.boundaryDistancePx };
 }
 
-function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackingConfig {
+function parseTrackingConfig(taskConfig: Record<string, unknown>, selection: SelectionContext): ParsedTrackingConfig {
   const taskRaw = asObject(taskConfig.task) ?? {};
   const title = asString(taskRaw.title) ?? "Continuous Tracking";
 
   const instructionsRaw = asObject(taskConfig.instructions) ?? {};
-  const instructionSlots = resolveInstructionFlowPages({
+  const instructionConfig = buildTaskInstructionConfig({
     title,
     instructions: instructionsRaw,
     defaults: {
@@ -984,6 +912,7 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
         "Performance is computed from continuous samples in 2-second bins (inside vs outside, plus boundary distance).",
       ],
     },
+    blockIntroTemplateDefault: "Block with {nTrials} tracking trials. Phase: {phase}.",
   });
 
   const displayRaw = asObject(taskConfig.display) ?? {};
@@ -1001,7 +930,7 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
   const targetDefaultsRaw = asObject(trialDefaultsRaw.target) ?? {};
   const motDefaultsRaw = asObject(trialDefaultsRaw.mot) ?? {};
 
-  const drtTaskRaw = resolveTrackingDrtOverride(taskRaw) ?? resolveTrackingDrtOverride(taskConfig);
+  const drtTaskRaw = resolveScopedModuleConfig(taskRaw, "drt") ?? resolveScopedModuleConfig(taskConfig, "drt");
   const drtDefault = resolveTrackingDrtConfig(
     {
       enabled: false,
@@ -1017,9 +946,26 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
   );
 
   const planRaw = asObject(taskConfig.plan) ?? {};
+  const planManipulations = createManipulationOverrideMap(planRaw.manipulations);
+  const planPoolAllocator = createManipulationPoolAllocator(
+    planRaw.manipulationPools,
+    [
+      selection.participant.participantId,
+      selection.participant.sessionId,
+      selection.variantId,
+      "tracking_plan_manipulation_pools",
+    ],
+  );
   const blocksRaw = asArray(planRaw.blocks);
   const blocks = (blocksRaw.length > 0 ? blocksRaw : [{}]).map((entry, index) => {
-    const raw = asObject(entry) ?? {};
+    const manipulationIds = resolveBlockManipulationIds(entry, planPoolAllocator);
+    const mergedEntry = applyManipulationOverridesToBlock(
+      entry,
+      manipulationIds,
+      planManipulations,
+      `Invalid Tracking plan: block ${index + 1}`,
+    );
+    const raw = asObject(mergedEntry) ?? {};
 
     const motionRaw = asObject(raw.motion) ?? motionDefaultsRaw;
     const targetRaw = asObject(raw.target) ?? targetDefaultsRaw;
@@ -1064,24 +1010,18 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>): ParsedTrackin
       label: asString(raw.label) ?? `Block ${index + 1}`,
       phase: asString(raw.phase) ?? "main",
       trials: toPositiveNumber(raw.trials, 8),
-      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens),
-      afterBlockScreens: toStringScreens(raw.afterBlockScreens),
+      manipulationId: manipulationIds.length > 0 ? manipulationIds.join("+") : null,
+      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens ?? raw.preBlockInstructions),
+      afterBlockScreens: toStringScreens(raw.afterBlockScreens ?? raw.postBlockInstructions),
       trialTemplate,
-      drt: resolveTrackingDrtConfig(drtDefault, resolveTrackingDrtOverride(raw)),
+      drt: resolveTrackingDrtConfig(drtDefault, resolveScopedModuleConfig(raw, "drt")),
     } satisfies ParsedTrackingBlock;
   });
 
   return {
     title,
-    instructions: {
-      introPages: instructionSlots.intro,
-      preBlockPages: instructionSlots.preBlock,
-      postBlockPages: instructionSlots.postBlock,
-      endPages: instructionSlots.end,
-    },
+    instructions: instructionConfig,
     display,
-    blockIntroTemplate: asString(instructionsRaw.blockIntroTemplate)
-      ?? "Block with {nTrials} tracking trials. Phase: {phase}.",
     interTrialIntervalMs: toNonNegativeNumber(taskConfig.interTrialIntervalMs, 300),
     blocks,
   };
@@ -1115,16 +1055,6 @@ function resolveTrackingDrtConfig(
   return coerceScopedDrtConfig(base, overrideRaw);
 }
 
-function resolveTrackingDrtOverride(
-  raw: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  const source = asObject(raw);
-  if (!source) return null;
-  const taskModules = asObject(asObject(source.task)?.modules);
-  const localModules = asObject(source.modules);
-  return asObject(localModules?.drt) ?? asObject(taskModules?.drt) ?? null;
-}
-
 function computeBlockInsideRate(records: TrackingTrialRecord[], blockIndex: number): number {
   const rows = records.filter((entry) => entry.blockIndex === blockIndex && entry.trialMode === "pursuit");
   if (rows.length === 0) return 0;
@@ -1149,10 +1079,4 @@ async function sleep(ms: number): Promise<void> {
   await new Promise<void>((resolve) => {
     window.setTimeout(() => resolve(), Math.max(0, ms));
   });
-}
-
-function formatBlockIntro(template: string, nTrials: number, phase: string): string {
-  return String(template || "")
-    .replaceAll("{nTrials}", String(nTrials))
-    .replaceAll("{phase}", String(phase));
 }

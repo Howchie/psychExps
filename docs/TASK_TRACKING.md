@@ -113,6 +113,9 @@ Example:
 - `label`
 - `phase`
 - `trials`
+- `manipulation` (optional single manipulation id)
+- `manipulations` (optional ordered manipulation id list)
+- `manipulationPool` (optional pool id; draws one manipulation bundle from `plan.manipulationPools`)
 - `trialDurationMs` (block override for `trialDefaults.durationMs`)
 - `sampleIntervalMs`
 - `binMs`
@@ -121,9 +124,19 @@ Example:
 - `motion` (block override)
 - `mode` (block override)
 - `mot` (block override)
-- `beforeBlockScreens`
-- `afterBlockScreens`
+- `beforeBlockScreens` (alias: `preBlockInstructions`)
+- `afterBlockScreens` (alias: `postBlockInstructions`)
 - `drt` (or `embeds.drt`) block-level DRT override
+
+### 4.6 `plan.manipulations[]` and `plan.manipulationPools`
+
+- `plan.manipulations[]` entries support:
+  - `id` (required)
+  - `overrides` (deep-merged into block config when selected)
+- `plan.manipulationPools` entries support participant-seeded shuffled bundle draws:
+  - `poolId: [ [\"manipA\"], [\"manipB\", \"manipC\"], ... ]`
+- Unknown manipulation ids fail fast during config parsing.
+- Resolved manipulation ids are emitted as a joined `manipulationId` string on block/trial outputs.
 
 ## 5. Output
 

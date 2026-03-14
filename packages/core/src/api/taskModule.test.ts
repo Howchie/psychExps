@@ -129,4 +129,33 @@ describe('TaskModuleRunner', () => {
     expect(stopB).toHaveBeenCalledTimes(1);
     expect(after).toHaveLength(0);
   });
+
+  it('getActiveHandle should return exact scoped handle match', () => {
+    const handle = { stop: () => ({ ok: true }), getData: () => ({ ok: true }), controller: { id: 'ctrl' } } as any;
+    const module: TaskModule = { id: 'drt', start: () => handle };
+    const runner = new TaskModuleRunner();
+    runner.start({
+      module,
+      address: { scope: 'trial', blockIndex: 2, trialIndex: 4 },
+      config: { enabled: true, scope: 'trial' },
+      context: {},
+    });
+
+    const found = runner.getActiveHandle({
+      moduleId: 'drt',
+      scope: 'trial',
+      blockIndex: 2,
+      trialIndex: 4,
+    });
+    const missing = runner.getActiveHandle({
+      moduleId: 'drt',
+      scope: 'trial',
+      blockIndex: 2,
+      trialIndex: 5,
+    });
+
+    expect(found).toBe(handle);
+    expect((found as any)?.controller).toEqual({ id: 'ctrl' });
+    expect(missing).toBeNull();
+  });
 });

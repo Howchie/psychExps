@@ -8,11 +8,21 @@ describe('validation utilities', () => {
     });
 
     it('should throw for forbidden root key', () => {
-      expect(() => validateTaskConfigIsolation('sft', { nback_pm_old: {} })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('sft', { nback: {} })).toThrow('Config isolation violation');
     });
 
     it('should throw for forbidden task namespace key', () => {
-      expect(() => validateTaskConfigIsolation('sft', { task: { nback_pm_old: {} } })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('sft', { task: { nback: {} } })).toThrow('Config isolation violation');
+    });
+
+    it('should throw when bricks config includes nback namespace', () => {
+      expect(() => validateTaskConfigIsolation('bricks', { nback: {} })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('bricks', { task: { nback: {} } })).toThrow('Config isolation violation');
+    });
+
+    it('should throw when nback config includes bricks namespace', () => {
+      expect(() => validateTaskConfigIsolation('nback', { bricks: {} })).toThrow('Config isolation violation');
+      expect(() => validateTaskConfigIsolation('nback', { task: { bricks: {} } })).toThrow('Config isolation violation');
     });
   });
 
