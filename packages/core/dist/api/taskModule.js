@@ -235,5 +235,22 @@ export class TaskModuleRunner {
         }
         return output;
     }
+    /**
+     * Returns the active module handle at an exact address (optionally filtered by module id).
+     */
+    getActiveHandle(criteria) {
+        for (const entry of this.active.values()) {
+            if (criteria.moduleId && entry.moduleId !== criteria.moduleId)
+                continue;
+            if (entry.address.scope !== criteria.scope)
+                continue;
+            if (entry.address.blockIndex !== criteria.blockIndex)
+                continue;
+            if (entry.address.trialIndex !== criteria.trialIndex)
+                continue;
+            return entry.handle;
+        }
+        return null;
+    }
 }
 //# sourceMappingURL=taskModule.js.map

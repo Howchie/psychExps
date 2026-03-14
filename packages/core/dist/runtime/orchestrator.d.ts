@@ -45,6 +45,26 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
     getTaskMetadata?: (sessionResult: any) => Record<string, unknown>;
     getEvents?: (sessionResult: any) => unknown[];
     resolveUiContainer?: (baseContainer: HTMLElement) => HTMLElement;
+    shouldAutoStartModule?: (ctx: {
+        scope: "block" | "trial";
+        moduleName: string;
+        moduleConfig: unknown;
+        block: TBlock;
+        blockIndex: number;
+        trial?: TTrial;
+        trialIndex: number | null;
+    }) => boolean;
+    resolveModuleContext?: (ctx: {
+        scope: "block" | "trial";
+        block: TBlock;
+        blockIndex: number;
+        trial?: TTrial;
+        trialIndex: number | null;
+    }) => Partial<{
+        displayElement: HTMLElement;
+        borderTargetElement: HTMLElement;
+        borderTargetRect: () => DOMRect | null;
+    }>;
     buttonIdPrefix: string;
     autoFinalize?: boolean;
     csvOptions?: {
@@ -59,8 +79,24 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
         section: string;
         blockLabel?: string | null;
     }) => string;
+    staircase?: {
+        enabled?: boolean;
+        run: () => Promise<void> | void;
+    };
     introPages?: unknown;
     endPages?: unknown;
+    completeTitle?: string;
+    completeMessage?: string;
+    doneButtonLabel?: string;
+    instructionDefaults?: {
+        introPages?: unknown;
+        preBlockPages?: unknown;
+        postBlockPages?: unknown;
+        endPages?: unknown;
+        blockIntroTemplate?: unknown;
+        showBlockLabel?: boolean;
+        preBlockBeforeIntro?: boolean;
+    };
     dataSink?: TaskDataSink<TBlock, TTrial, TTrialResult>;
     getBlockUi?: (ctx: {
         block: TBlock;
@@ -68,9 +104,9 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
         blockAttempt?: number;
     }) => {
         introText?: string | null;
-        preBlockPages?: string[];
-        postBlockPages?: string[];
-        repeatPostBlockPages?: string[];
+        preBlockPages?: unknown;
+        postBlockPages?: unknown;
+        repeatPostBlockPages?: unknown;
         showBlockLabel?: boolean;
         preBlockBeforeIntro?: boolean;
     };

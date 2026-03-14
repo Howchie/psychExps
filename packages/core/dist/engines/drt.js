@@ -405,6 +405,7 @@ export class DrtController {
                     handleKey: (key) => {
                         return controller.handleKey(key);
                     },
+                    controller,
                 };
             },
         };
@@ -750,6 +751,9 @@ export class DrtModule {
     start(config, address, context) {
         const controller = new DrtController(config, {}, {
             ...this.options,
+            displayElement: context.displayElement,
+            borderTargetElement: context.borderTargetElement,
+            borderTargetRect: context.borderTargetRect,
         });
         controller.start(0);
         return {
@@ -763,7 +767,8 @@ export class DrtModule {
             },
             handleKey: (key) => {
                 return controller.handleKey(key);
-            }
+            },
+            controller,
         };
     }
 }

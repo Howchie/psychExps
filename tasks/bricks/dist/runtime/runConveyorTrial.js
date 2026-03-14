@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { applyButtonStyleOverrides, createDrtPresentationBridge, createScaledCanvasHost, getAutoResponderProfile, isAutoResponderEnabled, normalizeKey, resolveButtonStyleOverrides, sampleAutoHoldDurationMs, sampleAutoInteractionDelayMs, } from '@experiments/core';
+import { applyButtonStyleOverrides, createDrtPresentationBridge, createScaledCanvasHost, getAutoResponderProfile, isAutoResponderEnabled, normalizeKey, resolveScopedModuleConfig, resolveButtonStyleOverrides, sampleAutoHoldDurationMs, sampleAutoInteractionDelayMs, } from '@experiments/core';
 import { GameState } from './game_state.js';
 import { ConveyorRenderer } from './renderer_pixi.js';
 import { estimateTrialDifficulty } from './difficulty_estimator.js';
@@ -54,14 +54,6 @@ const asRecord = (value) => {
         return null;
     return value;
 };
-const resolveBricksDrtOverride = (raw) => {
-    const source = asRecord(raw);
-    if (!source)
-        return null;
-    const localModules = asRecord(source.modules);
-    const taskModules = asRecord(asRecord(source.task)?.modules);
-    return asRecord(localModules?.drt) ?? asRecord(taskModules?.drt) ?? null;
-};
 export async function runConveyorTrial(args) {
     const trial = args;
     const display_element = args.displayElement;
@@ -79,7 +71,7 @@ export async function runConveyorTrial(args) {
     });
     const resolvedCfg = applyDisplayPreset(cfg, resolvedDisplayPresetId);
     const injectedDrtRuntime = args.drtRuntime ?? null;
-    const legacyDrtRaw = resolveBricksDrtOverride(resolvedCfg) ?? {};
+    const legacyDrtRaw = resolveScopedModuleConfig(resolvedCfg, "drt") ?? {};
     const resolvedDrtConfig = injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
     const drtController = injectedDrtRuntime?.controller ?? null;
     if (resolvedDrtConfig.enabled && !drtController) {

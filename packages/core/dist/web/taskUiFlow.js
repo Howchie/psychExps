@@ -67,6 +67,7 @@ export async function runBlockStartFlow(args) {
             blockLabel: args.blockLabel,
             introText: args.introText,
             showBlockLabel: args.showBlockLabel,
+            variables: args.variables,
         }), {
             buttonId: `${args.buttonIdPrefix}-block-start-${args.blockIndex}`,
             buttonStyle: args.continueButtonStyle,

@@ -995,6 +995,9 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
       {},
       {
         ...this.options,
+        displayElement: context.displayElement,
+        borderTargetElement: context.borderTargetElement,
+        borderTargetRect: context.borderTargetRect,
       }
     );
 

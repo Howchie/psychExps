@@ -29,6 +29,49 @@ export function renderInstructionScreenHtml(ctx) {
         return `<p>${escapeHtml(ctx.pageText)}</p>`;
     return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
 }
+export function renderSimpleInstructionScreenHtml(ctx, options = {}) {
+    const section = String(ctx.section ?? "");
+    const blockLabel = options.showBlockLabel === false ? null : ctx.blockLabel;
+    const base = renderInstructionScreenHtml({ ...ctx, title: ctx.title ?? null, blockLabel });
+    if (!section.startsWith("intro"))
+        return base;
+    const append = typeof options.introAppendHtml === "function"
+        ? options.introAppendHtml(ctx)
+        : options.introAppendHtml;
+    return append ? `${base}${append}` : base;
+}
+export function createInstructionRenderer(options = {}) {
+    return (ctx) => {
+        const resolved = options.resolvePage ? options.resolvePage(ctx) : {
+            pageText: ctx.pageText,
+            ...(ctx.pageHtml ? { pageHtml: ctx.pageHtml } : {}),
+            ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
+        };
+        if (options.summarySectionPattern &&
+            !resolved.pageHtml &&
+            options.summarySectionPattern.test(String(ctx.section ?? ""))) {
+            const lines = resolved.pageText
+                .split(/\n+/)
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0);
+            if (lines.length > 0) {
+                const [titleLine, ...bodyLines] = lines;
+                const blockLabelHtml = options.showBlockLabel !== false && ctx.blockLabel ? `<h3>${escapeHtml(ctx.blockLabel)}</h3>` : "";
+                const bodyHtml = bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+                return `${blockLabelHtml}<h2>${escapeHtml(titleLine)}</h2>${bodyHtml}`;
+            }
+        }
+        return renderSimpleInstructionScreenHtml({
+            ...ctx,
+            pageText: resolved.pageText,
+            ...(resolved.pageHtml ? { pageHtml: resolved.pageHtml } : {}),
+            ...(resolved.pageTitle ? { pageTitle: resolved.pageTitle } : {}),
+        }, {
+            showBlockLabel: options.showBlockLabel,
+            introAppendHtml: options.introAppendHtml,
+        });
+    };
+}
 export function renderTaskIntroCardHtml(args) {
     const participantHtml = args.participantId
         ? `<p>Participant: <code>${escapeHtml(args.participantId)}</code></p>`
@@ -36,10 +79,15 @@ export function renderTaskIntroCardHtml(args) {
     return `<h2>${escapeHtml(args.title)}</h2>${participantHtml}`;
 }
 export function renderBlockIntroCardHtml(args) {
-    const introText = args.introText ?? "";
+    let introText = args.introText ?? "Press continue when ready.";
     const showBlockLabel = args.showBlockLabel !== false;
     const titleHtml = showBlockLabel ? `<h3>${escapeHtml(args.blockLabel)}</h3>` : "";
-    return `${titleHtml}<p>${escapeHtml(introText || "Press continue when ready.")}</p>`;
+    if (args.variables) {
+        for (const [key, value] of Object.entries(args.variables)) {
+            introText = introText.replaceAll(`{${key}}`, String(value));
+        }
+    }
+    return `${titleHtml}<p>${escapeHtml(introText)}</p>`;
 }
 export function buildInstructionScreens(args) {
     const pages = toInstructionScreenSpecs(args.pages);

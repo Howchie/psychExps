@@ -289,10 +289,18 @@ export function createVariableResolver(args = {}) {
     };
     const resolveInValueInternal = (value, context, stack) => {
         if (Array.isArray(value)) {
-            return value.flatMap((entry) => {
+            const out = [];
+            for (const entry of value) {
                 const resolved = resolveInValueInternal(entry, context, stack);
-                return Array.isArray(resolved) ? resolved : [resolved];
-            });
+                // Only flatten if the entry was a string (potential token) and it resolved to an array
+                if (Array.isArray(resolved) && typeof entry === "string" && (entry.startsWith("$") || entry.includes("${"))) {
+                    out.push(...resolved);
+                }
+                else {
+                    out.push(resolved);
+                }
+            }
+            return out;
         }
         if (isObject(value)) {
             const out = {};

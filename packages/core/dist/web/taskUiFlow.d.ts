@@ -41,6 +41,7 @@ export interface RunBlockUiFlowArgs {
     postBlockPages?: InstructionPage[];
     beforePostInsertions?: InstructionPage[][];
     afterPostInsertions?: InstructionPage[][];
+    variables?: Record<string, unknown>;
     continueButtonStyle?: ButtonStyleOverrides;
     autoFocusContinueButton?: boolean;
     renderHtml?: (ctx: {

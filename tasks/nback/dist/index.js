@@ -1,8 +1,110 @@
-import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, lockPageScroll, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, toJsPsychChoices, createResponseSemantics, computeRtPhaseDurations, resolveRtTaskConfig, mergeRtTaskConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, coerceScopedDrtConfig, resolveInstructionFlowPages, asObject, asArray, asString, asStringArray, asPositiveNumberArray, toStringScreens, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, isStimulusExportOnly, exportStimulusRows, TaskOrchestrator, } from "@experiments/core";
+import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, evaluateTrialOutcome, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, lockPageScroll, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, toJsPsychChoices, createResponseSemantics, computeRtPhaseDurations, resolveRtTaskConfig, mergeRtTaskConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, coerceScopedDrtConfig, createInstructionRenderer, buildTaskInstructionConfig, applyTaskInstructionConfig, maybeExportStimulusRows, resolveScopedModuleConfig, asObject, asArray, asString, asStringArray, asPositiveNumberArray, toStringScreens, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, TaskOrchestrator, createTaskAdapter, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
-class NbackTaskAdapter {
-    manifest = {
+let nbackContext = null;
+let nbackRuntime = null;
+let nbackRemoveKeyScrollBlocker = null;
+let nbackRemovePageScrollLock = null;
+let nbackRootPresentationState = null;
+async function runNbackTask(context) {
+    const runtime = nbackRuntime;
+    if (!runtime) {
+        throw new Error("NBack runtime not initialized");
+    }
+    const stimulusExport = await exportNbackStimulusList(context, runtime);
+    if (stimulusExport)
+        return stimulusExport;
+    const { parsed, eventLogger } = runtime;
+    applyTaskInstructionConfig(context.taskConfig, {
+        ...parsed.instructions,
+        blockSummary: {
+            enabled: true,
+            metrics: { correctField: "responseCorrect" },
+        },
+    });
+    const root = context.container;
+    let jsPsych = null;
+    const orchestrator = new TaskOrchestrator(context);
+    return orchestrator.run({
+        buttonIdPrefix: "nback",
+        resolveUiContainer: () => resolveJsPsychContentHost(root),
+        getBlocks: () => runtime.plan.map((block) => ({
+            ...block,
+            modules: {
+                drt: block.drt,
+            },
+        })),
+        getTrials: ({ block }) => block.trials,
+        csvOptions: {
+            suffix: "nback",
+        },
+        renderInstruction: createInstructionRenderer({
+            showBlockLabel: true,
+            summarySectionPattern: /^blockEnd(Before|After)Post_/,
+        }),
+        getTaskMetadata: () => ({
+            jsPsychData: jsPsych?.data.get().values() ?? [],
+        }),
+        getEvents: () => eventLogger.events,
+        onTaskStart: () => {
+            const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
+            nbackRemoveKeyScrollBlocker = removeKeyScrollBlocker;
+            nbackRemovePageScrollLock = lockPageScroll();
+            nbackRootPresentationState = applyNbackRootPresentation(root);
+            jsPsych = initJsPsych({
+                display_element: root,
+                on_trial_start: (trial) => {
+                    window.scrollTo(0, 0);
+                    root.scrollTop = 0;
+                    const data = asObject(trial?.data);
+                    setCursorHidden(shouldHideCursorForPhase(data?.phase));
+                },
+                on_finish: () => {
+                    setCursorHidden(false);
+                },
+            });
+            eventLogger.emit("task_start", { task: "nback", runner: "jspsych" });
+        },
+        onBlockStart: (ctx) => {
+            primeUpcomingBlockStimuli(parsed, ctx.block, 0, runtime.variableResolver, 10);
+            eventLogger.emit("block_start", { label: ctx.block.label, nLevel: ctx.block.nLevel }, { blockIndex: ctx.blockIndex });
+        },
+        runTrial: async (ctx) => {
+            if (!jsPsych)
+                throw new Error("jsPsych not initialized");
+            const { block, trial } = ctx;
+            const timeline = [];
+            primeUpcomingBlockStimuli(parsed, block, trial.trialIndex + 1, runtime.variableResolver, 10);
+            const resolvedStimulus = resolveStimulusPath(parsed, block, trial.item, trial.trialIndex, runtime.variableResolver);
+            const preloaded = await preloadNbackStimulus(resolvedStimulus);
+            const timelineCapture = appendJsPsychNbackTrial({
+                timeline,
+                parsed,
+                block,
+                trial,
+                resolvedStimulus,
+                runtime,
+                preloaded,
+                eventLogger,
+            });
+            await runJsPsychTimeline(jsPsych, timeline);
+            const trialData = readNbackTrialResponseRow(timelineCapture, block.blockIndex, trial.trialIndex);
+            const records = collectNbackRecords([trialData], runtime.participantId, runtime.variantId);
+            return records[0];
+        },
+        onBlockEnd: (ctx) => {
+            const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
+            const blockResponded = ctx.trialResults.reduce((acc, row) => acc + (row?.responseKey ? 1 : 0), 0);
+            const accuracy = ctx.trialResults.length > 0 ? Math.round((blockCorrect / ctx.trialResults.length) * 1000) / 10 : 0;
+            eventLogger.emit("block_end", { label: ctx.block.label, nLevel: ctx.block.nLevel, accuracy, responded: blockResponded }, { blockIndex: ctx.blockIndex });
+            // We can optionally override the block end screen here if we want the accuracy info
+            // But orchestrator handles standard screens. 
+            // If we want the custom accuracy info, we might need a custom hook in orchestrator.
+        }
+    });
+}
+export const nbackAdapter = createTaskAdapter({
+    manifest: {
         taskId: "nback",
         label: "NBack",
         variants: [
@@ -12,167 +114,32 @@ class NbackTaskAdapter {
             { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
             { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
             { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
+            { id: "modern", label: "NBack Modern", configPath: "nback/nirvanaExp1" },
         ],
-    };
-    context = null;
-    runtime = null;
-    removeKeyScrollBlocker = null;
-    removePageScrollLock = null;
-    rootPresentationState = null;
-    async initialize(context) {
-        this.context = context;
-        this.runtime = await prepareNbackRuntime(context);
-    }
-    async execute() {
-        if (!this.context || !this.runtime) {
-            throw new Error("NBack Task not initialized");
-        }
-        if (isStimulusExportOnly(this.context.taskConfig)) {
-            return exportNbackStimulusList(this.context, this.runtime);
-        }
-        const { context, runtime } = this;
-        const { parsed, eventLogger } = runtime;
-        const resolvedIntroPages = toStringScreens(runtime.variableResolver.resolveInValue(parsed.instructions.introPages));
-        const resolvedEndPages = toStringScreens(runtime.variableResolver.resolveInValue(parsed.instructions.endPages));
-        const root = context.container;
-        let jsPsych = null;
-        const orchestrator = new TaskOrchestrator(context);
-        return orchestrator.run({
-            buttonIdPrefix: "nback",
-            resolveUiContainer: () => resolveJsPsychContentHost(root),
-            getBlocks: () => runtime.plan,
-            getTrials: ({ block }) => block.trials,
-            introPages: resolvedIntroPages,
-            endPages: resolvedEndPages,
-            getBlockUi: ({ block, blockIndex }) => {
-                const resolverContext = {
-                    blockIndex,
-                    locals: block.variables,
-                };
-                const resolvedIntroTemplate = runtime.variableResolver.resolveInValue(parsed.instructions.blockIntroTemplate, resolverContext);
-                const introTemplate = asString(resolvedIntroTemplate) || parsed.instructions.blockIntroTemplate;
-                const introText = introTemplate.replace("{nLevel}", String(block.nLevel));
-                return {
-                    introText,
-                    preBlockPages: [...parsed.instructions.preBlockPages, ...block.beforeBlockScreens],
-                    postBlockPages: [...parsed.instructions.postBlockPages, ...block.afterBlockScreens],
-                    repeatPostBlockPages: block.repeatAfterBlockScreens,
-                    showBlockLabel: parsed.instructions.showBlockLabel,
-                    preBlockBeforeIntro: parsed.instructions.preBlockBeforeBlockIntro,
-                };
-            },
-            csvOptions: {
-                suffix: "nback",
-            },
-            renderInstruction: (ctx) => {
-                if (ctx.pageHtml) {
-                    const headerText = ctx.pageTitle ?? ctx.blockLabel ?? null;
-                    if (!headerText)
-                        return ctx.pageHtml;
-                    return `<h3>${escapeHtml(headerText)}</h3>${ctx.pageHtml}`;
-                }
-                // Render computed block-summary insertions as title + body instead of a single plain paragraph.
-                if (/^blockEnd(Before|After)Post_/.test(ctx.section)) {
-                    const lines = ctx.pageText
-                        .split(/\n+/)
-                        .map((line) => line.trim())
-                        .filter((line) => line.length > 0);
-                    if (lines.length > 0) {
-                        const [titleLine, ...bodyLines] = lines;
-                        const blockLabelHtml = ctx.blockLabel ? `<h3>${escapeHtml(ctx.blockLabel)}</h3>` : "";
-                        const bodyHtml = bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
-                        return `${blockLabelHtml}<h2>${escapeHtml(titleLine)}</h2>${bodyHtml}`;
-                    }
-                }
-                const headerText = ctx.blockLabel || null;
-                if (!headerText)
-                    return `<p>${escapeHtml(ctx.pageText)}</p>`;
-                return `<h3>${escapeHtml(headerText)}</h3><p>${escapeHtml(ctx.pageText)}</p>`;
-            },
-            getTaskMetadata: () => ({
-                jsPsychData: jsPsych?.data.get().values() ?? [],
-            }),
-            getEvents: () => eventLogger.events,
-            onTaskStart: () => {
-                const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-                this.setKeyScrollRemover(removeKeyScrollBlocker);
-                this.setPageScrollLockRemover(lockPageScroll());
-                this.rootPresentationState = applyNbackRootPresentation(root);
-                jsPsych = initJsPsych({
-                    display_element: root,
-                    on_trial_start: (trial) => {
-                        window.scrollTo(0, 0);
-                        root.scrollTop = 0;
-                        const data = asObject(trial?.data);
-                        setCursorHidden(shouldHideCursorForPhase(data?.phase));
-                    },
-                    on_finish: () => {
-                        setCursorHidden(false);
-                    },
-                });
-                eventLogger.emit("task_start", { task: "nback", runner: "jspsych" });
-            },
-            onBlockStart: (ctx) => {
-                primeUpcomingBlockStimuli(parsed, ctx.block, 0, runtime.variableResolver, 10);
-                eventLogger.emit("block_start", { label: ctx.block.label, nLevel: ctx.block.nLevel }, { blockIndex: ctx.blockIndex });
-            },
-            runTrial: async (ctx) => {
-                if (!jsPsych)
-                    throw new Error("jsPsych not initialized");
-                const { block, trial } = ctx;
-                const timeline = [];
-                primeUpcomingBlockStimuli(parsed, block, trial.trialIndex + 1, runtime.variableResolver, 10);
-                const resolvedStimulus = resolveStimulusPath(parsed, block, trial.item, trial.trialIndex, runtime.variableResolver);
-                const preloaded = await preloadNbackStimulus(resolvedStimulus);
-                const timelineCapture = appendJsPsychNbackTrial({
-                    timeline,
-                    parsed,
-                    block,
-                    trial,
-                    resolvedStimulus,
-                    runtime,
-                    preloaded,
-                    eventLogger,
-                });
-                await runJsPsychTimeline(jsPsych, timeline);
-                const trialData = readNbackTrialResponseRow(timelineCapture, block.blockIndex, trial.trialIndex);
-                const records = collectNbackRecords([trialData], runtime.participantId, runtime.variantId);
-                return records[0];
-            },
-            onBlockEnd: (ctx) => {
-                const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
-                const blockResponded = ctx.trialResults.reduce((acc, row) => acc + (row?.responseKey ? 1 : 0), 0);
-                const accuracy = ctx.trialResults.length > 0 ? Math.round((blockCorrect / ctx.trialResults.length) * 1000) / 10 : 0;
-                eventLogger.emit("block_end", { label: ctx.block.label, nLevel: ctx.block.nLevel, accuracy, responded: blockResponded }, { blockIndex: ctx.blockIndex });
-                // We can optionally override the block end screen here if we want the accuracy info
-                // But orchestrator handles standard screens. 
-                // If we want the custom accuracy info, we might need a custom hook in orchestrator.
-            }
-        });
-    }
-    async terminate() {
+    },
+    initialize: async (context) => {
+        nbackContext = context;
+        nbackRuntime = await prepareNbackRuntime(context);
+    },
+    run: runNbackTask,
+    terminate: async () => {
         setCursorHidden(false);
-        if (this.context?.container) {
-            restoreNbackRootPresentation(this.context.container, this.rootPresentationState);
-            this.rootPresentationState = null;
+        if (nbackContext?.container) {
+            restoreNbackRootPresentation(nbackContext.container, nbackRootPresentationState);
+            nbackRootPresentationState = null;
         }
-        if (this.removePageScrollLock) {
-            this.removePageScrollLock();
-            this.removePageScrollLock = null;
+        if (nbackRemovePageScrollLock) {
+            nbackRemovePageScrollLock();
+            nbackRemovePageScrollLock = null;
         }
-        if (this.removeKeyScrollBlocker) {
-            this.removeKeyScrollBlocker();
-            this.removeKeyScrollBlocker = null;
+        if (nbackRemoveKeyScrollBlocker) {
+            nbackRemoveKeyScrollBlocker();
+            nbackRemoveKeyScrollBlocker = null;
         }
-    }
-    setKeyScrollRemover(remover) {
-        this.removeKeyScrollBlocker = remover;
-    }
-    setPageScrollLockRemover(remover) {
-        this.removePageScrollLock = remover;
-    }
-}
-export const nbackAdapter = new NbackTaskAdapter();
+        nbackRuntime = null;
+        nbackContext = null;
+    },
+});
 async function exportNbackStimulusList(context, runtime) {
     const exportBlockType = (block) => {
         if (block.isPractice)
@@ -188,11 +155,12 @@ async function exportNbackStimulusList(context, runtime) {
         n_level: block.nLevel,
         trial_index: trial.trialIndex,
         trial_type: trial.trialType,
+        trial_code: trial.trialType.startsWith("L") ? `lure_${trial.trialType.substring(1)}` : trial.trialType,
         item: trial.item,
         source_category: trial.sourceCategory,
         correct_response: trial.correctResponse,
     })));
-    return exportStimulusRows({
+    return maybeExportStimulusRows({
         context,
         rows,
         suffix: "nback_stimulus_list",
@@ -218,14 +186,6 @@ function parseOptionalResponseKey(value) {
 function resolveNbackDrtConfig(base, overrideRaw) {
     return coerceScopedDrtConfig(base, overrideRaw);
 }
-function resolveNbackDrtOverride(raw) {
-    const source = asObject(raw);
-    if (!source)
-        return null;
-    const taskModules = asObject(asObject(source.task)?.modules);
-    const localModules = asObject(source.modules);
-    return asObject(localModules?.drt) ?? asObject(taskModules?.drt) ?? null;
-}
 const NBACK_IMAGE_CACHE = new Map();
 async function prepareNbackRuntime(context) {
     const config = context.taskConfig;
@@ -237,7 +197,17 @@ async function prepareNbackRuntime(context) {
     });
     const parsed = parseNbackConfig(config, context.selection, context.resolver, stimuliByCategory, context.moduleRunner, context.rawTaskConfig);
     const rng = new SeededRandom(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId));
-    const moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
+    let moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
+    const mappingRaw = asObject(context.rawTaskConfig.mapping);
+    if (asString(asObject(context.rawTaskConfig.task)?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
+        moduleConfigs = {
+            ...moduleConfigs,
+            pm: {
+                enabled: true,
+                key: asString(mappingRaw?.pmKey) || "space",
+            },
+        };
+    }
     let plan = buildExperimentPlan(parsed, rng, context.moduleRunner, moduleConfigs, context.resolver);
     const eventLogger = createEventLogger(context.selection);
     return {
@@ -562,6 +532,7 @@ function collectNbackRecords(rows, participantId, variantId) {
             nLevel: Number(row.nLevel ?? -1),
             trialIndex: Number(row.trialIndex ?? -1),
             trialType: asString(row.trialType) || "",
+            trial_code: asString(row.trialType) || "",
             item: asString(row.item) || "",
             stimulusPath: asString(row.stimulusPath) || "",
             stimulusVariant: Number(row.stimulusVariant ?? -1),
@@ -592,7 +563,17 @@ function parseNbackConfig(config, selection, variableResolver, stimuliByCategory
         throw new Error("Invalid NBack mapping: target and nonTarget keys must be distinct.");
     }
     // Modular semantics: extract response keys from all active modules
-    const moduleConfigs = asObject(taskRaw?.modules) ?? {};
+    let moduleConfigs = asObject(taskRaw?.modules) ?? {};
+    // Support legacy jspsych_pm implementation by injecting a pm module
+    if (asString(taskRaw?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
+        moduleConfigs = {
+            ...moduleConfigs,
+            pm: {
+                enabled: true,
+                key: asString(mappingRaw?.pmKey) || "space",
+            },
+        };
+    }
     const modularSemantics = variableResolver.resolveInValue(moduleRunner.getModularSemantics(moduleConfigs, { resolver: variableResolver }));
     const responseSemantics = createResponseSemantics({
         ...(nonTargetKey
@@ -623,7 +604,7 @@ function parseNbackConfig(config, selection, variableResolver, stimuliByCategory
         defaultEnabled: false,
         defaultResponseTerminatesTrial: false,
     });
-    const drtRaw = resolveNbackDrtOverride(taskRaw);
+    const drtRaw = resolveScopedModuleConfig(taskRaw, "drt");
     const drt = resolveNbackDrtConfig({
         enabled: false,
         scope: "block",
@@ -718,9 +699,15 @@ function parseNbackConfig(config, selection, variableResolver, stimuliByCategory
     ensureStimulusCategories(stimuliByCategory, referencedCategories);
     const instructionsRaw = asObject(config.instructions);
     const rawInstructions = asObject(rawConfig?.instructions);
-    const instructionSlots = resolveInstructionFlowPages({
+    const instructionSource = {
+        ...(instructionsRaw ?? {}),
+        ...(asString(rawInstructions?.blockIntroTemplate)
+            ? { blockIntroTemplate: asString(rawInstructions?.blockIntroTemplate) }
+            : {}),
+    };
+    const instructionConfig = buildTaskInstructionConfig({
         title: asString(taskRaw?.title) || "NBack Task",
-        instructions: instructionsRaw,
+        instructions: instructionSource,
         defaults: {
             intro: [
                 nonTargetKey
@@ -728,6 +715,9 @@ function parseNbackConfig(config, selection, variableResolver, stimuliByCategory
                     : "Respond only to n-back targets. Withhold response for non-targets.",
             ],
         },
+        blockIntroTemplateDefault: "This is a {nLevel}-back block.",
+        showBlockLabelDefault: instructionsRaw?.showBlockLabel !== false,
+        preBlockBeforeBlockIntroDefault: instructionsRaw?.preBlockBeforeBlockIntro === true,
     });
     const completeRaw = asObject(config.completion);
     const redirectRaw = asObject(completeRaw?.redirect);
@@ -762,17 +752,7 @@ function parseNbackConfig(config, selection, variableResolver, stimuliByCategory
         }),
         variableDefinitions,
         allowedKeys: finalAllowedKeys,
-        instructions: {
-            introPages: instructionSlots.intro,
-            preBlockPages: instructionSlots.preBlock,
-            postBlockPages: instructionSlots.postBlock,
-            endPages: instructionSlots.end,
-            blockIntroTemplate: asString(rawInstructions?.blockIntroTemplate) ||
-                asString(instructionsRaw?.blockIntroTemplate) ||
-                "This is a {nLevel}-back block.",
-            showBlockLabel: instructionsRaw?.showBlockLabel !== false,
-            preBlockBeforeBlockIntro: instructionsRaw?.preBlockBeforeBlockIntro === true,
-        },
+        instructions: instructionConfig,
         practiceBlocks: parsedPracticeBlocks,
         mainBlocks: parsedMainBlocks,
         stimuliByCategory,
@@ -811,7 +791,7 @@ function parseBlock(entry, index, isPractice, variableResolver, feedbackFallback
     const rawBlockSummary = b.blockSummary;
     const rawRepeatUntil = b.repeatUntil;
     const rawRtTask = b.rtTask;
-    const rawDrt = resolveNbackDrtOverride(b);
+    const rawDrt = resolveScopedModuleConfig(b, "drt");
     const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
     const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
     const resolvedRepeatAfterBlockScreens = variableResolver.resolveInValue(rawRepeatAfterBlockScreens, scope);

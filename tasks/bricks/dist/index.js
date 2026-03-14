@@ -1,25 +1,254 @@
-import { buildScheduledItems, createAtwitSurvey, createMulberry32, createSurveyFromPreset, createEventLogger, deepClone, deepMerge, createManipulationPoolAllocator, resolveBlockManipulationIds, escapeHtml, hashSeed, resolveInstructionScreenSlots, resolveButtonStyleOverrides, resolveTemplatedString, runSurvey, isStimulusExportOnly, exportStimulusRows, asObject, asArray, startDrtModuleScope, TaskOrchestrator, } from '@experiments/core';
+import { buildScheduledItems, createAtwitSurvey, createMulberry32, createEventLogger, collectSurveyEntries, createInstructionRenderer, deepClone, deepMerge, findFirstSurveyScore, createManipulationPoolAllocator, resolveBlockManipulationIds, hashSeed, attachSurveyResults, maybeExportStimulusRows, parseSurveyDefinitions, applyTaskInstructionConfig, resolveInstructionScreenSlots, resolveTemplatedString, runSurveySequence, asObject, asString, resolveScopedModuleConfig, TaskOrchestrator, createTaskAdapter, } from '@experiments/core';
 import { resolveBricksDrtConfig } from './runtime/drtConfig.js';
 import { addTrialStatsToAccumulator, applyResetRulesAt, buildHudBaseStats, createBricksStatsAccumulator, resolveBricksStatsPresentation, } from './runtime/statsPresentation.js';
 import { runConveyorTrial, } from './runtime/runConveyorTrial.js';
-function asRecord(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-        return null;
-    return value;
-}
 function toBricksDrtScopeId(blockIndex, trialIndex) {
     return `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`;
 }
-function resolveBricksDrtOverride(raw) {
-    const source = asRecord(raw);
-    if (!source)
-        return null;
-    const localModules = asRecord(source.modules);
-    const taskModules = asRecord(asRecord(source.task)?.modules);
-    return asRecord(localModules?.drt) ?? asRecord(taskModules?.drt) ?? null;
+async function runBricksTask(context) {
+    const { taskConfig, selection, resolver, container, moduleRunner } = context;
+    const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId));
+    const blockPlan = buildBlockPlan(taskConfig, rng, selection);
+    const instructionsRaw = asObject(taskConfig.instructions) ?? {};
+    const instructionSlots = resolveInstructionScreenSlots(instructionsRaw);
+    const blockIntroTemplate = asString(instructionsRaw.blockIntroTemplate);
+    const showBlockLabel = instructionsRaw.showBlockLabel !== false;
+    const preBlockBeforeBlockIntro = instructionsRaw.preBlockBeforeBlockIntro === true;
+    const statsPresentation = resolveBricksStatsPresentation(taskConfig);
+    const statsAccumulator = createBricksStatsAccumulator();
+    const stimulusExport = await maybeExportStimulusRows({
+        context,
+        rows: buildBricksStimulusRows(blockPlan),
+        suffix: "bricks_stimulus_list",
+    });
+    if (stimulusExport)
+        return stimulusExport;
+    const eventLogger = createEventLogger(selection);
+    const activeDrtScopes = new Map();
+    const blockDrtPreviousStats = new Map();
+    moduleRunner.setOptions({
+        onEvent: (event) => {
+            const address = event.address;
+            const scopeId = (address?.blockIndex != null)
+                ? toBricksDrtScopeId(address.blockIndex, address.trialIndex)
+                : null;
+            const active = scopeId ? activeDrtScopes.get(scopeId) : undefined;
+            if (event.type === "bricks_drt" || event.type.startsWith("drt_")) {
+                active?.bindings?.onEvent(event);
+            }
+            eventLogger.emit(event.type, event, {
+                blockIndex: address?.blockIndex ?? -1,
+                ...(typeof address?.trialIndex === "number" ? { trialIndex: address.trialIndex } : {}),
+            });
+        }
+    });
+    const orchestrator = new TaskOrchestrator(context);
+    applyTaskInstructionConfig(taskConfig, {
+        introPages: instructionSlots.intro,
+        preBlockPages: instructionSlots.preBlock,
+        postBlockPages: instructionSlots.postBlock,
+        endPages: instructionSlots.end,
+        blockIntroTemplate: blockIntroTemplate ?? "Press continue when ready.",
+        showBlockLabel,
+        preBlockBeforeBlockIntro: preBlockBeforeBlockIntro,
+    });
+    return await orchestrator.run({
+        buttonIdPrefix: "bricks",
+        resolveModuleContext: ({ scope, blockIndex, trialIndex }) => {
+            const scopeId = scope === "trial"
+                ? toBricksDrtScopeId(blockIndex, trialIndex)
+                : toBricksDrtScopeId(blockIndex, null);
+            return {
+                displayElement: container,
+                borderTargetRect: () => activeDrtScopes.get(scopeId)?.bindings?.displayElement?.getBoundingClientRect() ?? null,
+            };
+        },
+        getBlocks: () => blockPlan,
+        getTrials: ({ block }) => block.trialConfigs,
+        getEvents: () => eventLogger.events,
+        onTaskStart: () => {
+            eventLogger.emit("task_start", { task: "bricks" });
+        },
+        renderInstruction: createInstructionRenderer({
+            showBlockLabel: false,
+            resolvePage: (ctx) => {
+                const blockIndex = ctx.blockLabel ? blockPlan.findIndex((b) => b.label === ctx.blockLabel) : undefined;
+                const resolveField = (value) => {
+                    if (!value)
+                        return "";
+                    return resolveTemplatedString({
+                        template: value,
+                        vars: taskConfig,
+                        resolver,
+                        context: typeof blockIndex === "number" && blockIndex >= 0 ? { blockIndex } : undefined,
+                    });
+                };
+                const title = resolveField(ctx.pageTitle);
+                const html = resolveField(ctx.pageHtml);
+                const text = resolveField(ctx.pageText);
+                return {
+                    pageText: text,
+                    ...(html ? { pageHtml: html } : {}),
+                    ...(title ? { pageTitle: title } : {}),
+                };
+            },
+        }),
+        onBlockStart: async ({ block, blockIndex }) => {
+            eventLogger.emit("block_start", { label: block.label, manipulationId: block.manipulationId }, { blockIndex });
+            blockDrtPreviousStats.delete(blockIndex);
+            statsAccumulator.block = { spawned: 0, cleared: 0, dropped: 0, points: 0 };
+            applyResetRulesAt(statsAccumulator, statsPresentation, "block_start", {
+                label: block.label,
+                manipulationId: block.manipulationId,
+                phase: block.phase,
+                isPractice: block.isPractice,
+            });
+        },
+        runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
+            const stageHost = document.createElement("div");
+            stageHost.style.width = "100%";
+            stageHost.style.minHeight = "70vh";
+            stageHost.style.display = "flex";
+            stageHost.style.justifyContent = "center";
+            stageHost.style.alignItems = "center";
+            container.innerHTML = "";
+            container.appendChild(stageHost);
+            const resolvedDrtConfig = resolveBricksDrtConfig(resolveScopedModuleConfig(trial, "drt"));
+            let injectedDrtRuntime;
+            const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
+            if (resolvedDrtConfig.enabled) {
+                const moduleAddress = resolvedDrtConfig.scope === "trial"
+                    ? { scope: "trial", blockIndex, trialIndex }
+                    : { scope: "block", blockIndex, trialIndex: null };
+                const handle = moduleRunner.getActiveHandle({
+                    moduleId: "drt",
+                    ...moduleAddress,
+                });
+                const controller = handle?.controller ?? null;
+                if (!controller) {
+                    throw new Error(`Bricks DRT is enabled for ${resolvedDrtConfig.scope} scope but no active DRT module handle was found at block ${blockIndex + 1}, trial ${trialIndex + 1}.`);
+                }
+                const active = activeDrtScopes.get(scopeId) ?? {
+                    config: resolvedDrtConfig,
+                    bindings: null,
+                    activeTrialIndex: null,
+                };
+                active.config = resolvedDrtConfig;
+                activeDrtScopes.set(scopeId, active);
+                injectedDrtRuntime = {
+                    config: active.config,
+                    controller,
+                    stopOnCleanup: false,
+                    attachBindings: (bindings) => {
+                        active.bindings = bindings;
+                        active.activeTrialIndex = trialIndex;
+                    },
+                    detachBindings: () => {
+                        active.bindings = null;
+                        active.activeTrialIndex = null;
+                    },
+                };
+            }
+            let record = await runConveyorTrial({
+                displayElement: stageHost,
+                blockLabel: block.label,
+                blockIndex: block.index,
+                trialIndex,
+                config: trial,
+                drtRuntime: injectedDrtRuntime,
+                hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
+            });
+            if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "trial") {
+                const trialHandle = moduleRunner.getActiveHandle({
+                    moduleId: "drt",
+                    scope: "trial",
+                    blockIndex,
+                    trialIndex,
+                });
+                const controller = trialHandle?.controller ?? null;
+                if (controller) {
+                    const responseRows = controller.exportResponseRows();
+                    const latestEstimate = responseRows
+                        .slice()
+                        .reverse()
+                        .map((row) => row.estimate)
+                        .find((estimate) => Boolean(estimate)) ?? null;
+                    const drtData = controller.exportData();
+                    record = {
+                        ...record,
+                        drt: {
+                            ...drtData,
+                            transforms: controller.exportTransformData(),
+                            responseRows,
+                            ...(latestEstimate ? { transform_latest: latestEstimate } : {}),
+                        },
+                        drt_response_rows: responseRows,
+                    };
+                }
+                activeDrtScopes.delete(scopeId);
+            }
+            // Handle block-scoped DRT stats
+            if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "block") {
+                const previousStats = blockDrtPreviousStats.get(blockIndex) ?? {};
+                const activeData = moduleRunner.getActiveData({ moduleId: "drt", blockIndex });
+                const currentDrtData = activeData[0]?.data;
+                const currentStats = extractNumericStats((currentDrtData?.stats ?? {}));
+                const deltaStats = subtractStats(currentStats, previousStats);
+                record.drt_cumulative = currentDrtData;
+                record.drt = {
+                    ...(currentDrtData ?? {}),
+                    stats: deltaStats,
+                };
+                blockDrtPreviousStats.set(blockIndex, currentStats);
+            }
+            const surveyResults = await runConfiguredTrialSurveys(container, trial);
+            record = withSurveyResults(record, surveyResults);
+            eventLogger.emit("trial_complete", {
+                endReason: record.end_reason,
+                trialDurationMs: record.trial_duration_ms,
+                game: record.game?.stats ?? {},
+                drt: record.drt?.stats ?? {},
+                surveys: surveyResults.map((entry) => ({
+                    surveyId: entry.surveyId,
+                    scores: entry.scores ?? {},
+                })),
+            }, { blockIndex, trialIndex });
+            addTrialStatsToAccumulator(statsAccumulator, record?.game?.stats ?? {});
+            record.stats_scope_totals = {
+                block: { ...statsAccumulator.block },
+                experiment: { ...statsAccumulator.experiment },
+            };
+            return record;
+        },
+        onBlockEnd: async ({ block, blockIndex, trialResults }) => {
+            const totals = summarizeBlockTrials(trialResults);
+            eventLogger.emit("block_end", { label: block.label, totals }, { blockIndex });
+            applyResetRulesAt(statsAccumulator, statsPresentation, "block_end", {
+                label: block.label,
+                manipulationId: block.manipulationId,
+                phase: block.phase,
+                isPractice: block.isPractice,
+            });
+            activeDrtScopes.delete(toBricksDrtScopeId(blockIndex, null));
+            blockDrtPreviousStats.delete(blockIndex);
+        },
+        csvOptions: {
+            suffix: "bricks_drt_rows",
+            getRecords: (res) => buildBricksDrtRows(res.blocks.flatMap((b) => b.trialResults), blockPlan, {
+                participantId: selection.participant.participantId,
+                variantId: selection.variantId,
+            }),
+        },
+        getTaskMetadata: (res) => ({
+            drt_rows: buildBricksDrtRows(res.blocks.flatMap((b) => b.trialResults), blockPlan, {
+                participantId: selection.participant.participantId,
+                variantId: selection.variantId,
+            }),
+        }),
+    });
 }
-class BricksTaskAdapter {
-    manifest = {
+export const bricksAdapter = createTaskAdapter({
+    manifest: {
         taskId: 'bricks',
         label: 'Bricks (DiscoveryProject)',
         variants: [
@@ -30,295 +259,24 @@ class BricksTaskAdapter {
             { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No SPotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
             { id: 'drt_block_demo', label: 'DRT Block Scope Demo', configPath: 'bricks/drt_block_demo' },
         ],
-    };
-    context = null;
-    async initialize(context) {
-        this.context = context;
-    }
-    async execute() {
-        if (!this.context)
-            throw new Error("Bricks Task not initialized");
-        const { context } = this;
-        const { taskConfig, rawTaskConfig, selection, resolver, container, moduleRunner } = context;
-        const rawTaskNode = asRecord(rawTaskConfig.task);
-        const rawTaskModules = asRecord(rawTaskNode?.modules);
-        const rawTaskDrt = asRecord(rawTaskModules?.drt);
-        const rawTaskDrtEnabledBefore = rawTaskDrt ? rawTaskDrt.enabled : undefined;
-        if (rawTaskDrt) {
-            // Bricks manages DRT scopes manually via startDrtModuleScope; prevent orchestrator auto-start duplication.
-            rawTaskDrt.enabled = false;
-        }
-        const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId));
-        const blockPlan = buildBlockPlan(taskConfig, rng, selection);
-        const instructionSlots = resolveInstructionScreenSlots(taskConfig.instructions);
-        const statsPresentation = resolveBricksStatsPresentation(taskConfig);
-        const statsAccumulator = createBricksStatsAccumulator();
-        if (isStimulusExportOnly(taskConfig)) {
-            return exportStimulusRows({
-                context,
-                rows: buildBricksStimulusRows(blockPlan),
-                suffix: "bricks_stimulus_list",
-            });
-        }
-        const eventLogger = createEventLogger(selection);
-        const activeDrtScopes = new Map();
-        const blockDrtPreviousStats = new Map();
-        moduleRunner.setOptions({
-            onEvent: (event) => {
-                const address = event.address;
-                const scopeId = (address?.blockIndex != null)
-                    ? toBricksDrtScopeId(address.blockIndex, address.trialIndex)
-                    : null;
-                const active = scopeId ? activeDrtScopes.get(scopeId) : undefined;
-                if (event.type === "bricks_drt" || event.type.startsWith("drt_")) {
-                    active?.bindings?.onEvent(event);
-                }
-                eventLogger.emit(event.type, event, {
-                    blockIndex: address?.blockIndex ?? -1,
-                    ...(typeof address?.trialIndex === "number" ? { trialIndex: address.trialIndex } : {}),
-                });
-            }
-        });
-        const orchestrator = new TaskOrchestrator(context);
-        try {
-            return await orchestrator.run({
-                buttonIdPrefix: "bricks",
-                introPages: instructionSlots.intro,
-                endPages: instructionSlots.end,
-                getBlocks: () => blockPlan,
-                getTrials: ({ block }) => block.trialConfigs,
-                getEvents: () => eventLogger.events,
-                onTaskStart: () => {
-                    eventLogger.emit("task_start", { task: "bricks" });
-                },
-                renderInstruction: (ctx) => {
-                    const sectionPages = instructionSlots[ctx.section] ?? [];
-                    const pageSpec = sectionPages[ctx.pageIndex];
-                    if (!pageSpec)
-                        return ctx.pageHtml ?? ctx.pageText;
-                    const resolved = resolveInstructionPagesForContext({
-                        pages: [pageSpec],
-                        templateVars: taskConfig,
-                        resolver,
-                        blockIndex: ctx.blockLabel ? blockPlan.findIndex((b) => b.label === ctx.blockLabel) : undefined,
-                    })[0];
-                    return renderBricksInstructionPage(resolved || {}, ctx.pageText);
-                },
-                onBlockStart: async ({ block, blockIndex }) => {
-                    eventLogger.emit("block_start", { label: block.label, manipulationId: block.manipulationId }, { blockIndex });
-                    blockDrtPreviousStats.delete(blockIndex);
-                    statsAccumulator.block = { spawned: 0, cleared: 0, dropped: 0, points: 0 };
-                    applyResetRulesAt(statsAccumulator, statsPresentation, "block_start", {
-                        label: block.label,
-                        manipulationId: block.manipulationId,
-                        phase: block.phase,
-                        isPractice: block.isPractice,
-                    });
-                    const blockScopedDrt = resolveBlockScopedDrtConfig(block.trialConfigs);
-                    if (blockScopedDrt && blockScopedDrt.enabled && blockScopedDrt.scope === "block") {
-                        const scopeId = toBricksDrtScopeId(blockIndex, null);
-                        const activeScope = {
-                            scopeId,
-                            config: blockScopedDrt,
-                            controller: null,
-                            bindings: null,
-                            activeTrialIndex: null,
-                        };
-                        startDrtModuleScope({
-                            runner: moduleRunner,
-                            drtConfig: blockScopedDrt,
-                            scope: "block",
-                            blockIndex,
-                            trialIndex: null,
-                            participantId: selection.participant.participantId,
-                            sessionId: selection.participant.sessionId,
-                            variantId: selection.variantId,
-                            taskSeedKey: "bricks_drt",
-                            seedSuffix: scopeId,
-                            onControllerCreated: (controller) => { activeScope.controller = controller; },
-                            context: {
-                                displayElement: container,
-                                borderTargetElement: undefined,
-                                borderTargetRect: () => activeScope.bindings?.displayElement?.getBoundingClientRect() ?? null,
-                            },
-                        });
-                        activeDrtScopes.set(scopeId, activeScope);
-                    }
-                },
-                runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
-                    const stageHost = document.createElement("div");
-                    stageHost.style.width = "100%";
-                    stageHost.style.minHeight = "70vh";
-                    stageHost.style.display = "flex";
-                    stageHost.style.justifyContent = "center";
-                    stageHost.style.alignItems = "center";
-                    container.innerHTML = "";
-                    container.appendChild(stageHost);
-                    const resolvedDrtConfig = resolveBricksDrtConfig(resolveBricksDrtOverride(trial));
-                    let injectedDrtRuntime;
-                    const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
-                    if (resolvedDrtConfig.enabled) {
-                        if (resolvedDrtConfig.scope === "trial") {
-                            const activeScope = {
-                                scopeId,
-                                config: resolvedDrtConfig,
-                                controller: null,
-                                bindings: null,
-                                activeTrialIndex: trialIndex,
-                            };
-                            startDrtModuleScope({
-                                runner: moduleRunner,
-                                drtConfig: resolvedDrtConfig,
-                                scope: "trial",
-                                blockIndex,
-                                trialIndex,
-                                participantId: selection.participant.participantId,
-                                sessionId: selection.participant.sessionId,
-                                variantId: selection.variantId,
-                                taskSeedKey: "bricks_drt",
-                                seedSuffix: scopeId,
-                                onControllerCreated: (controller) => { activeScope.controller = controller; },
-                                context: {
-                                    displayElement: stageHost,
-                                    borderTargetElement: undefined,
-                                    borderTargetRect: () => activeScope.bindings?.displayElement?.getBoundingClientRect() ?? null,
-                                },
-                            });
-                            activeDrtScopes.set(scopeId, activeScope);
-                        }
-                        const active = activeDrtScopes.get(scopeId);
-                        if (active) {
-                            injectedDrtRuntime = {
-                                config: active.config,
-                                controller: active.controller,
-                                stopOnCleanup: false,
-                                attachBindings: (bindings) => {
-                                    active.bindings = bindings;
-                                    active.activeTrialIndex = trialIndex;
-                                },
-                                detachBindings: () => {
-                                    active.bindings = null;
-                                    active.activeTrialIndex = null;
-                                },
-                            };
-                        }
-                    }
-                    let record = await runConveyorTrial({
-                        displayElement: stageHost,
-                        blockLabel: block.label,
-                        blockIndex: block.index,
-                        trialIndex,
-                        config: trial,
-                        drtRuntime: injectedDrtRuntime,
-                        hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
-                    });
-                    // Handle DRT results if trial-scoped
-                    if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "trial") {
-                        const trialScopeResults = moduleRunner.stopScopedModules({
-                            scope: "trial",
-                            blockIndex,
-                            trialIndex,
-                        });
-                        const trialResult = trialScopeResults.find((r) => r.moduleId === "drt");
-                        if (trialResult) {
-                            const responseRows = (trialResult.responseRows ?? []);
-                            const latestEstimate = responseRows
-                                .slice()
-                                .reverse()
-                                .map((row) => row.estimate)
-                                .find((estimate) => Boolean(estimate)) ?? null;
-                            record = {
-                                ...record,
-                                drt: {
-                                    ...(trialResult.data ?? {}),
-                                    ...(latestEstimate ? { transform_latest: latestEstimate } : {}),
-                                },
-                                drt_response_rows: responseRows,
-                            };
-                        }
-                        activeDrtScopes.delete(scopeId);
-                    }
-                    // Handle block-scoped DRT stats
-                    if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "block") {
-                        const previousStats = blockDrtPreviousStats.get(blockIndex) ?? {};
-                        const activeData = moduleRunner.getActiveData({ moduleId: "drt", blockIndex });
-                        const currentDrtData = activeData[0]?.data;
-                        const currentStats = extractNumericStats((currentDrtData?.stats ?? {}));
-                        const deltaStats = subtractStats(currentStats, previousStats);
-                        record.drt_cumulative = currentDrtData;
-                        record.drt = {
-                            ...(currentDrtData ?? {}),
-                            stats: deltaStats,
-                        };
-                        blockDrtPreviousStats.set(blockIndex, currentStats);
-                    }
-                    const surveyResults = await runConfiguredTrialSurveys(container, trial);
-                    record = withSurveyResults(record, surveyResults);
-                    eventLogger.emit("trial_complete", {
-                        endReason: record.end_reason,
-                        trialDurationMs: record.trial_duration_ms,
-                        game: record.game?.stats ?? {},
-                        drt: record.drt?.stats ?? {},
-                        surveys: surveyResults.map((entry) => ({
-                            surveyId: entry.surveyId,
-                            scores: entry.scores ?? {},
-                        })),
-                    }, { blockIndex, trialIndex });
-                    addTrialStatsToAccumulator(statsAccumulator, record?.game?.stats ?? {});
-                    record.stats_scope_totals = {
-                        block: { ...statsAccumulator.block },
-                        experiment: { ...statsAccumulator.experiment },
-                    };
-                    return record;
-                },
-                onBlockEnd: async ({ block, blockIndex, trialResults }) => {
-                    const totals = summarizeBlockTrials(trialResults);
-                    eventLogger.emit("block_end", { label: block.label, totals }, { blockIndex });
-                    applyResetRulesAt(statsAccumulator, statsPresentation, "block_end", {
-                        label: block.label,
-                        manipulationId: block.manipulationId,
-                        phase: block.phase,
-                        isPractice: block.isPractice,
-                    });
-                    activeDrtScopes.delete(toBricksDrtScopeId(blockIndex, null));
-                    blockDrtPreviousStats.delete(blockIndex);
-                },
-                csvOptions: {
-                    suffix: "bricks_drt_rows",
-                    getRecords: (res) => buildBricksDrtRows(res.blocks.flatMap((b) => b.trialResults), blockPlan, {
-                        participantId: selection.participant.participantId,
-                        variantId: selection.variantId,
-                    }),
-                },
-                getTaskMetadata: (res) => ({
-                    drt_rows: buildBricksDrtRows(res.blocks.flatMap((b) => b.trialResults), blockPlan, {
-                        participantId: selection.participant.participantId,
-                        variantId: selection.variantId,
-                    }),
-                }),
-            });
-        }
-        finally {
-            if (rawTaskDrt) {
-                rawTaskDrt.enabled = rawTaskDrtEnabledBefore;
-            }
-        }
-    }
-    async terminate() { }
-}
-export const bricksAdapter = new BricksTaskAdapter();
+    },
+    run: runBricksTask,
+});
 function buildBlockPlan(config, rng, selection) {
+    const planNode = asObject(config.plan);
     const blocks = Array.isArray(config.blocks)
         ? config.blocks
-        : [];
-    const manipulations = Array.isArray(config.manipulations) ? config.manipulations : [];
+        : (Array.isArray(planNode?.blocks) ? planNode.blocks : []);
+    const manipulations = Array.isArray(config.manipulations)
+        ? config.manipulations
+        : (Array.isArray(planNode?.manipulations) ? planNode.manipulations : []);
     const manipulationById = new Map();
     for (const manipulation of manipulations) {
         const id = typeof manipulation.id === 'string' ? manipulation.id.trim() : '';
         if (id)
             manipulationById.set(id, manipulation);
     }
-    const poolAllocator = createManipulationPoolAllocator(config.manipulationPools, [
+    const poolAllocator = createManipulationPoolAllocator(config.manipulationPools ?? planNode?.manipulationPools, [
         selection.participant.participantId,
         selection.participant.sessionId,
         selection.variantId,
@@ -343,6 +301,9 @@ function buildBlockPlan(config, rng, selection) {
             : (typeof phase === 'string' && phase.toLowerCase().includes('practice'));
         const trialsRaw = Number(block.trials ?? 1);
         const trials = Number.isFinite(trialsRaw) ? Math.max(1, Math.floor(trialsRaw)) : 1;
+        const beforeBlockScreens = block.beforeBlockScreens ?? block.preBlockInstructions;
+        const afterBlockScreens = block.afterBlockScreens ?? block.postBlockInstructions;
+        const repeatAfterBlockScreens = block.repeatAfterBlockScreens ?? block.repeatPostBlockScreens;
         const blockConfigBase = deepClone(config);
         for (const manipulation of selectedManipulations) {
             if (manipulation.overrides && typeof manipulation.overrides === 'object') {
@@ -355,9 +316,10 @@ function buildBlockPlan(config, rng, selection) {
         const trialPlanSource = selectedManipulations
             .slice()
             .reverse()
-            .find((entry) => typeof entry?.trialPlan === "object" && entry?.trialPlan !== null) ?? null;
-        const variants = normalizeVariants(trialPlanSource?.trialPlan?.variants);
-        const schedule = trialPlanSource?.trialPlan?.schedule;
+            .map((entry) => resolveManipulationTrialPlan(entry))
+            .find((entry) => Boolean(entry)) ?? null;
+        const variants = normalizeVariants(trialPlanSource?.variants);
+        const schedule = asObject(trialPlanSource?.schedule) ?? null;
         const scheduledVariants = variants.length
             ? buildScheduledItems({
                 items: variants,
@@ -391,6 +353,11 @@ function buildBlockPlan(config, rng, selection) {
             trialConfig.trial.planVariantLabel = (variant?.label ?? null);
             return trialConfig;
         });
+        const blockScopedDrt = resolveBlockScopedDrtConfig(trialConfigs);
+        const blockModules = deepClone(asObject(block.modules) ?? {});
+        if (blockScopedDrt && blockScopedDrt.enabled && blockScopedDrt.scope === "block") {
+            blockModules.drt = blockScopedDrt;
+        }
         return {
             ...block,
             index,
@@ -399,14 +366,23 @@ function buildBlockPlan(config, rng, selection) {
             manipulationId,
             phase,
             isPractice,
+            beforeBlockScreens,
+            afterBlockScreens,
+            repeatAfterBlockScreens,
+            ...(Object.keys(blockModules).length > 0
+                ? { modules: blockModules }
+                : {}),
             trialConfigs,
         };
     });
 }
+function resolveManipulationTrialPlan(manipulation) {
+    return asObject(manipulation.trialPlan) ?? asObject(manipulation.trial_plan);
+}
 function buildBricksStimulusRows(blockPlan) {
     return blockPlan.flatMap((block) => block.trialConfigs.map((trialConfig, trialIndex) => {
-        const trialNode = asRecord(trialConfig.trial);
-        const drt = resolveBricksDrtConfig(resolveBricksDrtOverride(trialConfig));
+        const trialNode = asObject(trialConfig.trial);
+        const drt = resolveBricksDrtConfig(resolveScopedModuleConfig(trialConfig, "drt"));
         const planVariantId = typeof trialNode?.planVariantId === "string" ? trialNode.planVariantId : null;
         return {
             block_index: block.index,
@@ -443,7 +419,7 @@ function normalizeVariants(input) {
 }
 function resolveBlockScopedDrtConfig(trialConfigs) {
     const blockScoped = trialConfigs
-        .map((trialConfig) => resolveBricksDrtConfig(resolveBricksDrtOverride(trialConfig)))
+        .map((trialConfig) => resolveBricksDrtConfig(resolveScopedModuleConfig(trialConfig, "drt")))
         .filter((entry) => entry.enabled && entry.scope === "block");
     if (blockScoped.length === 0)
         return null;
@@ -626,21 +602,15 @@ async function runConfiguredTrialSurveys(container, trialConfig) {
     const surveys = resolvePostTrialSurveys(trialConfig);
     if (surveys.length === 0)
         return [];
-    const results = [];
-    for (let i = 0; i < surveys.length; i++) {
-        const result = await runSurvey(container, surveys[i], {
-            buttonId: `bricks-survey-submit-${i + 1}`,
-        });
-        results.push(result);
-    }
-    return results;
+    return runSurveySequence(container, surveys, "bricks-survey-submit");
 }
 function resolvePostTrialSurveys(trialConfig) {
-    const candidates = collectModernSurveyCandidates(trialConfig);
+    const candidates = collectSurveyEntries(trialConfig, {
+        arrayKey: "postTrial",
+        singletonKey: "survey",
+    });
     if (candidates.length > 0) {
-        return candidates
-            .map((entry, index) => toSurveyDefinition(entry, index))
-            .filter((entry) => Boolean(entry));
+        return parseSurveyDefinitions(candidates);
     }
     const selfReport = asObject(trialConfig.selfReport);
     if (!selfReport || selfReport.enable !== true)
@@ -655,118 +625,19 @@ function resolvePostTrialSurveys(trialConfig) {
         }),
     ];
 }
-function collectModernSurveyCandidates(trialConfig) {
-    const output = [];
-    const surveysNode = trialConfig.surveys;
-    if (Array.isArray(surveysNode)) {
-        output.push(...surveysNode);
-    }
-    else if (asObject(surveysNode)) {
-        const postTrial = asArray(surveysNode.postTrial);
-        if (postTrial.length > 0)
-            output.push(...postTrial);
-    }
-    const singleSurvey = trialConfig.survey;
-    if (singleSurvey !== undefined && singleSurvey !== null) {
-        output.unshift(singleSurvey);
-    }
-    return output;
-}
-function toSurveyDefinition(entry, index) {
-    const obj = asObject(entry);
-    if (!obj)
-        return null;
-    if (Array.isArray(obj.questions)) {
-        const normalizedId = typeof obj.id === 'string' && obj.id.trim() ? obj.id.trim() : `survey_${index + 1}`;
-        return {
-            id: normalizedId,
-            title: typeof obj.title === 'string' ? obj.title : undefined,
-            description: typeof obj.description === 'string' ? obj.description : undefined,
-            showQuestionNumbers: typeof obj.showQuestionNumbers === 'boolean' ? obj.showQuestionNumbers : undefined,
-            showRequiredAsterisk: typeof obj.showRequiredAsterisk === 'boolean' ? obj.showRequiredAsterisk : undefined,
-            submitButtonStyle: resolveButtonStyleOverrides(obj.submitButtonStyle),
-            autoFocusSubmitButton: typeof obj.autoFocusSubmitButton === 'boolean' ? obj.autoFocusSubmitButton : undefined,
-            questions: obj.questions,
-            submitLabel: typeof obj.submitLabel === 'string' ? obj.submitLabel : undefined,
-            computeScores: typeof obj.computeScores === 'function'
-                ? obj.computeScores
-                : undefined,
-        };
-    }
-    const preset = obj.preset;
-    if (preset === "atwit" || preset === "nasa_tlx") {
-        return createSurveyFromPreset(obj);
-    }
-    return null;
-}
-function resolveInstructionPagesForContext(args) {
-    return args.pages
-        .map((entry) => {
-        const context = typeof args.blockIndex === "number" ? { blockIndex: args.blockIndex } : undefined;
-        const title = entry.title
-            ? resolveTemplatedString({
-                template: entry.title,
-                vars: args.templateVars,
-                resolver: args.resolver,
-                context,
-            }).trim()
-            : "";
-        const text = entry.text
-            ? resolveTemplatedString({
-                template: entry.text,
-                vars: args.templateVars,
-                resolver: args.resolver,
-                context,
-            })
-            : "";
-        const html = entry.html
-            ? resolveTemplatedString({
-                template: entry.html,
-                vars: args.templateVars,
-                resolver: args.resolver,
-                context,
-            })
-            : "";
-        return {
-            ...(title ? { title } : {}),
-            ...(text ? { text } : {}),
-            ...(html ? { html } : {}),
-        };
-    })
-        .filter((entry) => Boolean(entry.text || entry.html));
-}
-function renderBricksInstructionPage(page, fallbackText) {
-    const heading = page.title || null;
-    const headingHtml = heading ? `<h3>${escapeHtml(heading)}</h3>` : "";
-    const bodyHtml = page.html ?? `<p>${escapeHtml(page.text ?? fallbackText)}</p>`;
-    return `${headingHtml}${bodyHtml}`;
-}
 function withSurveyResults(trialData, surveys) {
-    if (surveys.length === 0)
-        return trialData;
-    const next = {
-        ...trialData,
-        surveys,
-    };
-    const atwitOverall = surveys
-        .map((entry) => entry.scores?.overall)
-        .find((value) => typeof value === 'number' && Number.isFinite(value));
-    if (atwitOverall !== undefined) {
-        next.self_report = { workload: atwitOverall };
+    const merged = attachSurveyResults(trialData, surveys);
+    const atwitOverall = findFirstSurveyScore(surveys, "overall");
+    if (atwitOverall !== null) {
+        merged.self_report = { workload: atwitOverall };
     }
-    return next;
+    return merged;
 }
 function collectSurveySummaries(row) {
     const surveys = (row.surveys ?? []);
-    if (!Array.isArray(surveys) || surveys.length === 0) {
-        return { atwitOverall: null, nasaRawTlx: null };
-    }
-    const atwitOverall = surveys
-        .map((entry) => entry.scores?.overall)
-        .find((value) => typeof value === 'number' && Number.isFinite(value)) ?? null;
-    const nasaRawTlx = surveys
-        .map((entry) => entry.scores?.raw_tlx)
-        .find((value) => typeof value === 'number' && Number.isFinite(value)) ?? null;
-    return { atwitOverall, nasaRawTlx };
+    return {
+        atwitOverall: findFirstSurveyScore(surveys, "overall"),
+        nasaRawTlx: findFirstSurveyScore(surveys, "raw_tlx"),
+    };
 }
 //# sourceMappingURL=index.js.map

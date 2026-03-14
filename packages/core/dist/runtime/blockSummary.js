@@ -5,8 +5,8 @@ const DEFAULT_SUMMARY = {
     title: "End of {blockLabel}",
     lines: ["Accuracy: {accuracyPct}% ({correct}/{total})"],
     metrics: {
-        correctField: "correct",
-        rtField: "rt",
+        correctField: "responseCorrect",
+        rtField: "responseRtMs",
     },
 };
 function asObject(value) {

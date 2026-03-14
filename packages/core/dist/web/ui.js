@@ -272,22 +272,25 @@ export function applyButtonStyleOverrides(button, style) {
 export async function waitForContinue(container, html, options = {}) {
     const buttonId = options.buttonId ?? "exp-continue-btn";
     const buttonLabel = options.buttonLabel ?? "Continue";
+    const autoResponderEnabled = isAutoResponderEnabled();
     container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:900px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
     const btn = container.querySelector(`#${buttonId}`);
     if (!(btn instanceof HTMLButtonElement))
         return;
     applyButtonStyleOverrides(btn, options.buttonStyle);
-    if (isAutoResponderEnabled()) {
-        const delayMs = sampleAutoContinueDelayMs() ?? 0;
-        await sleep(delayMs);
-        container.innerHTML = "";
-        return;
-    }
     const clearScreen = () => {
         container.innerHTML = "";
     };
+    let onKeyRef = null;
+    let onClickRef = null;
+    const cleanup = () => {
+        if (onClickRef)
+            btn.removeEventListener("click", onClickRef);
+        if (onKeyRef)
+            window.removeEventListener("keydown", onKeyRef);
+    };
     await new Promise((resolve) => {
-        const onKey = (ev) => {
+        onKeyRef = (ev) => {
             if (normalizeKey(ev.key) !== "space")
                 return;
             if (!isEditableKeyTarget(ev.target))
@@ -295,21 +298,31 @@ export async function waitForContinue(container, html, options = {}) {
             cleanup();
             resolve();
         };
-        const onClick = () => {
+        onClickRef = () => {
             cleanup();
             resolve();
         };
-        const cleanup = () => {
-            btn.removeEventListener("click", onClick);
-            window.removeEventListener("keydown", onKey);
-        };
-        btn.addEventListener("click", onClick);
-        window.addEventListener("keydown", onKey);
+        if (autoResponderEnabled) {
+            void (async () => {
+                const delayMs = sampleAutoContinueDelayMs() ?? 0;
+                await sleep(delayMs);
+                cleanup();
+                if (buttonId.includes("complete")) {
+                    btn.disabled = true;
+                    btn.style.opacity = "0.5";
+                }
+                resolve();
+            })();
+        }
+        btn.addEventListener("click", onClickRef);
+        window.addEventListener("keydown", onKeyRef);
         if (options.autoFocusButton !== false) {
             btn.focus();
         }
     });
-    clearScreen();
+    if (!buttonId.includes("complete")) {
+        clearScreen();
+    }
 }
 export async function waitForContinueChoice(container, html, options) {
     const buttons = options.buttons ?? [];

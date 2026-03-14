@@ -169,14 +169,27 @@ export function sampleAutoHoldDurationMs() {
 }
 export async function runJsPsychTimeline(jsPsych, timeline) {
     if (activeProfile && typeof jsPsych?.simulate === "function") {
-        await jsPsych.simulate(timeline, "visual", {});
+        // We wrap in a promise to ensure we can definitely wait for completion
+        // regardless of whether simulate() returns a promise or relies on on_finish.
+        await new Promise((resolve, reject) => {
+            let finished = false;
+            const safeResolve = () => {
+                if (finished)
+                    return;
+                finished = true;
+                resolve();
+            };
+            const result = jsPsych.simulate(timeline, "data-only", {
+                on_finish: () => safeResolve(),
+            });
+            if (result && typeof result.then === "function") {
+                result.then(() => safeResolve()).catch(reject);
+            }
+        });
         return;
     }
     if (typeof jsPsych?.run === "function") {
-        const runResult = jsPsych.run(timeline);
-        if (runResult && typeof runResult.then === "function") {
-            await runResult;
-        }
+        await jsPsych.run(timeline);
         return;
     }
     throw new Error("Invalid jsPsych instance: missing run/simulate methods.");

@@ -41,6 +41,7 @@ export interface AppendJsPsychBlockIntroScreenArgs {
     container: HTMLElement;
     blockLabel: string;
     introText?: string | null;
+    showBlockLabel?: boolean;
     phase?: string;
     buttonId?: string;
     data?: Record<string, unknown>;

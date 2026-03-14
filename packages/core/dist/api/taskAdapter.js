@@ -5,6 +5,38 @@ import { DrtModule } from "../engines/drt";
 import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
 import { StimulusInjectorModule } from "../engines/stimulusInjector";
 /**
+ * Builds a standard TaskAdapter without requiring per-task wrapper classes.
+ * The returned adapter stores lifecycle context internally and executes `run(context)`.
+ */
+export function createTaskAdapter(options) {
+    let context = null;
+    return {
+        manifest: options.manifest,
+        async initialize(nextContext) {
+            context = nextContext;
+            if (options.initialize)
+                await options.initialize(nextContext);
+        },
+        async execute() {
+            if (!context) {
+                throw new Error(`Task adapter for ${options.manifest.taskId} was not initialized.`);
+            }
+            return options.run(context);
+        },
+        async terminate() {
+            if (!context)
+                return;
+            try {
+                if (options.terminate)
+                    await options.terminate(context);
+            }
+            finally {
+                context = null;
+            }
+        },
+    };
+}
+/**
  * Manages the full lifecycle of a task adapter.
  */
 export class LifecycleManager {
@@ -34,17 +66,23 @@ export class LifecycleManager {
                 "high_level_resolution",
             ],
         };
-        // 1. High-level resolver: restricted to participant scope to prevent over-resolution
+        // 1. High-level resolver: used for initial configuration resolution (e.g., basePaths, titles).
+        // Specifically restricted to participant scope.
         const highLevelResolver = createVariableResolver({
             ...commonResolverArgs,
             allowedScopes: ["participant"],
         });
         // 2. Full resolver: for the task adapter to handle block and trial scopes
         const taskResolver = createVariableResolver(commonResolverArgs);
-        // Resolve configuration variables after merging (static parts only)
+        // Resolve configuration metadata (static parts only)
         const configManager = new ConfigurationManager();
         configManager.validateLegacyKeys(taskConfig);
-        const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
+        const resolvedConfig = { ...taskConfig };
+        for (const field of Object.keys(resolvedConfig)) {
+            if (field === "variables" || field === "task")
+                continue;
+            resolvedConfig[field] = highLevelResolver.resolveInValue(resolvedConfig[field]);
+        }
         // Initialize module runner with standard core modules
         const moduleRunner = new TaskModuleRunner([
             new DrtModule(),

@@ -1,4 +1,4 @@
-import { asObject, asString, coerceInstructionInsertions, toInstructionScreenSpecs, toStringScreens, } from "../utils/coerce";
+import { asObject, asString, coerceInstructionInsertions, toInstructionScreenSpecs, } from "../utils/coerce";
 import { runTaskIntroFlow, runBlockStartFlow, runBlockEndFlow, runTaskEndFlow } from "../web/taskUiFlow";
 import { isInstructionFlowExitRequestedError } from "../web/instructionFlow";
 import { renderCenteredNotice, resolveButtonStyleOverrides } from "../web/ui";
@@ -8,6 +8,7 @@ import { recordsToCsv } from "../infrastructure/data";
 import { createDefaultTaskDataSink } from "../infrastructure/dataSink";
 import { buildBlockSummaryModel, coerceBlockSummaryConfig, mergeBlockSummaryConfig } from "./blockSummary";
 import { coerceBlockRepeatUntilConfig, evaluateBlockRepeatUntil } from "./blockRepeat";
+import { deepClone, deepMerge } from "../infrastructure/deepMerge";
 export class TaskOrchestrator {
     context;
     constructor(context) {
@@ -17,6 +18,34 @@ export class TaskOrchestrator {
         const { context } = this;
         const { taskConfig, rawTaskConfig, moduleRunner, container, selection } = context;
         const taskModules = asObject(asObject(rawTaskConfig.task)?.modules) ?? {};
+        const toModuleMap = (value) => asObject(value) ?? {};
+        const resolveScopedModules = (ctx) => {
+            const blockRecord = asObject(ctx.block);
+            const trialRecord = asObject(ctx.trial);
+            const blockModulesTask = toModuleMap(asObject(blockRecord?.task)?.modules);
+            const blockModulesLocal = toModuleMap(blockRecord?.modules);
+            const trialModulesTask = toModuleMap(asObject(trialRecord?.task)?.modules);
+            const trialModulesLocal = toModuleMap(trialRecord?.modules);
+            const merged = deepClone(taskModules);
+            deepMerge(merged, blockModulesTask);
+            deepMerge(merged, blockModulesLocal);
+            deepMerge(merged, trialModulesTask);
+            deepMerge(merged, trialModulesLocal);
+            return merged;
+        };
+        const applyModuleFilter = (modules, ctx) => {
+            if (!args.shouldAutoStartModule)
+                return modules;
+            return Object.fromEntries(Object.entries(modules).filter(([moduleName, moduleConfig]) => args.shouldAutoStartModule?.({
+                scope: ctx.scope,
+                moduleName,
+                moduleConfig,
+                block: ctx.block,
+                blockIndex: ctx.blockIndex,
+                trial: ctx.trial,
+                trialIndex: ctx.trialIndex,
+            })));
+        };
         const sinkContext = {
             coreConfig: context.coreConfig,
             selection,
@@ -103,11 +132,93 @@ export class TaskOrchestrator {
             })
                 .filter((pages) => pages.length > 0);
         };
-        const introPages = toInstructionScreenSpecs(args.introPages ?? context.resolver.resolveInValue(instructions?.introPages));
+        const toBlockObject = (block) => asObject(block) ?? {};
+        const resolveBlockContext = (block, blockIndex) => ({
+            blockIndex,
+            locals: asObject(asObject(block)?.variables) ?? {},
+        });
+        const resolveScreens = (value, block, blockIndex) => {
+            if (block && typeof blockIndex === "number") {
+                return toInstructionScreenSpecs(context.resolver.resolveInValue(value, resolveBlockContext(block, blockIndex)));
+            }
+            return toInstructionScreenSpecs(context.resolver.resolveInValue(value));
+        };
+        const mergeScreens = (first, second) => [...first, ...second];
+        const countBlockTrials = (block) => {
+            const directCount = Number(block.trials);
+            if (Number.isFinite(directCount) && directCount >= 0)
+                return Math.floor(directCount);
+            const trialsList = block.trials;
+            return Array.isArray(trialsList) ? trialsList.length : 0;
+        };
+        const resolveBlockIntroText = (templateRaw, block, blockIndex) => {
+            const resolvedTemplate = asString(context.resolver.resolveInValue(templateRaw, resolveBlockContext(block, blockIndex)));
+            if (!resolvedTemplate) {
+                return asString(block.introText);
+            }
+            const nTrials = countBlockTrials(block);
+            return resolvedTemplate.replace(/\{([a-zA-Z0-9_]+)\}/g, (token, key) => {
+                if (key === "blockIndex")
+                    return String(blockIndex + 1);
+                if (key === "nTrials")
+                    return String(nTrials);
+                if (key === "blockLabel")
+                    return asString(block.label) ?? token;
+                const value = block[key];
+                if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+                    return String(value);
+                }
+                return token;
+            });
+        };
+        const resolveDefaultBlockUi = (ctx) => {
+            const block = toBlockObject(ctx.block);
+            const preBlockGlobal = resolveScreens(instructions?.preBlockPages ?? args.instructionDefaults?.preBlockPages, ctx.block, ctx.blockIndex);
+            const postBlockGlobal = resolveScreens(instructions?.postBlockPages ?? args.instructionDefaults?.postBlockPages, ctx.block, ctx.blockIndex);
+            const beforeBlockScreens = toInstructionScreenSpecs(block.beforeBlockScreens);
+            const afterBlockScreens = toInstructionScreenSpecs(block.afterBlockScreens);
+            const repeatPostBlockPages = resolveScreens(block.repeatAfterBlockScreens ?? block.repeatPostBlockScreens, ctx.block, ctx.blockIndex);
+            return {
+                introText: resolveBlockIntroText(instructions?.blockIntroTemplate ?? args.instructionDefaults?.blockIntroTemplate, block, ctx.blockIndex),
+                preBlockPages: mergeScreens(preBlockGlobal, beforeBlockScreens),
+                postBlockPages: mergeScreens(postBlockGlobal, afterBlockScreens),
+                repeatPostBlockPages,
+                showBlockLabel: (typeof instructions?.showBlockLabel === "boolean"
+                    ? instructions.showBlockLabel
+                    : args.instructionDefaults?.showBlockLabel) ?? true,
+                preBlockBeforeIntro: (typeof instructions?.preBlockBeforeBlockIntro === "boolean"
+                    ? instructions.preBlockBeforeBlockIntro
+                    : args.instructionDefaults?.preBlockBeforeIntro) ?? false,
+            };
+        };
+        const resolveMergedBlockUi = (ctx) => {
+            const defaultBlockUi = resolveDefaultBlockUi(ctx);
+            const customBlockUi = args.getBlockUi ? args.getBlockUi(ctx) : null;
+            if (!customBlockUi)
+                return defaultBlockUi;
+            return {
+                introText: customBlockUi.introText ?? defaultBlockUi.introText,
+                preBlockPages: customBlockUi.preBlockPages
+                    ? toInstructionScreenSpecs(customBlockUi.preBlockPages)
+                    : defaultBlockUi.preBlockPages,
+                postBlockPages: customBlockUi.postBlockPages
+                    ? toInstructionScreenSpecs(customBlockUi.postBlockPages)
+                    : defaultBlockUi.postBlockPages,
+                repeatPostBlockPages: customBlockUi.repeatPostBlockPages
+                    ? toInstructionScreenSpecs(customBlockUi.repeatPostBlockPages)
+                    : defaultBlockUi.repeatPostBlockPages,
+                showBlockLabel: customBlockUi.showBlockLabel ?? defaultBlockUi.showBlockLabel,
+                preBlockBeforeIntro: customBlockUi.preBlockBeforeIntro ?? defaultBlockUi.preBlockBeforeIntro,
+            };
+        };
+        const introPages = toInstructionScreenSpecs(args.introPages ??
+            context.resolver.resolveInValue(instructions?.introPages ?? args.instructionDefaults?.introPages));
         const showTaskTitleCard = instructions?.showTaskTitleCard !== false;
         const introBeforeInsertions = selectInsertionGroups("task_intro_before");
         const introAfterInsertions = selectInsertionGroups("task_intro_after");
         let sessionResult;
+        // Cache for trials to avoid redundant calls between onBlockStart and the session runner.
+        const trialsCache = new Map();
         try {
             if ((introPages && Array.isArray(introPages) && introPages.length > 0) ||
                 introBeforeInsertions.length > 0 ||
@@ -126,17 +237,53 @@ export class TaskOrchestrator {
                     renderHtml: args.renderInstruction,
                 });
             }
+            if (args.staircase) {
+                const staircaseEnabledFromConfig = asObject(taskConfig.staircase)?.enabled;
+                const staircaseEnabled = typeof args.staircase.enabled === "boolean"
+                    ? args.staircase.enabled
+                    : staircaseEnabledFromConfig === true;
+                if (staircaseEnabled) {
+                    await args.staircase.run();
+                }
+            }
             // 3. Main Session
             sessionResult = await runTaskSession({
                 blocks: args.getBlocks(taskConfig),
-                getTrials: args.getTrials,
+                getTrials: async (ctx) => {
+                    const key = String(ctx.blockIndex);
+                    if (trialsCache.has(key)) {
+                        const trials = trialsCache.get(key);
+                        trialsCache.delete(key);
+                        return trials;
+                    }
+                    return await args.getTrials(ctx);
+                },
                 runTrial: async (ctx) => {
+                    const trialScopedModules = applyModuleFilter(resolveScopedModules({
+                        block: ctx.block,
+                        blockIndex: ctx.blockIndex,
+                        trial: ctx.trial,
+                        trialIndex: ctx.trialIndex,
+                    }), {
+                        scope: "trial",
+                        block: ctx.block,
+                        blockIndex: ctx.blockIndex,
+                        trial: ctx.trial,
+                        trialIndex: ctx.trialIndex,
+                    });
+                    const resolvedTrialModuleContext = args.resolveModuleContext?.({
+                        scope: "trial",
+                        block: ctx.block,
+                        blockIndex: ctx.blockIndex,
+                        trial: ctx.trial,
+                        trialIndex: ctx.trialIndex,
+                    });
                     // Auto-handle trial-scoped modules
                     moduleRunner.startScopedModules({
                         scope: "trial",
                         blockIndex: ctx.blockIndex,
                         trialIndex: ctx.trialIndex,
-                        moduleConfigs: taskModules,
+                        moduleConfigs: trialScopedModules,
                         context: {
                             block: ctx.block,
                             blockIndex: ctx.blockIndex,
@@ -144,7 +291,13 @@ export class TaskOrchestrator {
                             trialIndex: ctx.trialIndex,
                             resolver: context.resolver,
                             locals: ctx.block.variables,
-                            displayElement: container,
+                            displayElement: resolvedTrialModuleContext?.displayElement ?? container,
+                            ...(resolvedTrialModuleContext?.borderTargetElement
+                                ? { borderTargetElement: resolvedTrialModuleContext.borderTargetElement }
+                                : {}),
+                            ...(resolvedTrialModuleContext?.borderTargetRect
+                                ? { borderTargetRect: resolvedTrialModuleContext.borderTargetRect }
+                                : {}),
                         }
                     });
                     if (args.onTrialStart)
@@ -166,21 +319,47 @@ export class TaskOrchestrator {
                 },
                 hooks: {
                     onBlockStart: async (ctx) => {
+                        const blockScopedModules = applyModuleFilter(resolveScopedModules({
+                            block: ctx.block,
+                            blockIndex: ctx.blockIndex,
+                            trialIndex: null,
+                        }), {
+                            scope: "block",
+                            block: ctx.block,
+                            blockIndex: ctx.blockIndex,
+                            trialIndex: null,
+                        });
+                        const resolvedBlockModuleContext = args.resolveModuleContext?.({
+                            scope: "block",
+                            block: ctx.block,
+                            blockIndex: ctx.blockIndex,
+                            trialIndex: null,
+                        });
                         // Auto-handle block-scoped modules
                         moduleRunner.startScopedModules({
                             scope: "block",
                             blockIndex: ctx.blockIndex,
                             trialIndex: null,
-                            moduleConfigs: taskModules,
+                            moduleConfigs: blockScopedModules,
                             context: {
                                 block: ctx.block,
                                 blockIndex: ctx.blockIndex,
                                 resolver: context.resolver,
                                 locals: ctx.block.variables,
-                                displayElement: container,
+                                displayElement: resolvedBlockModuleContext?.displayElement ?? container,
+                                ...(resolvedBlockModuleContext?.borderTargetElement
+                                    ? { borderTargetElement: resolvedBlockModuleContext.borderTargetElement }
+                                    : {}),
+                                ...(resolvedBlockModuleContext?.borderTargetRect
+                                    ? { borderTargetRect: resolvedBlockModuleContext.borderTargetRect }
+                                    : {}),
                             }
                         });
-                        const blockUi = args.getBlockUi ? args.getBlockUi(ctx) : null;
+                        const blockUi = resolveMergedBlockUi(ctx);
+                        const trials = await args.getTrials(ctx);
+                        // Cache trials for the session runner.
+                        const key = String(ctx.blockIndex);
+                        trialsCache.set(key, trials);
                         await runBlockStartFlow({
                             container: uiContainer,
                             blockLabel: ctx.block.label || `Block ${ctx.blockIndex + 1}`,
@@ -188,13 +367,18 @@ export class TaskOrchestrator {
                             buttonIdPrefix: args.buttonIdPrefix,
                             continueButtonStyle,
                             autoFocusContinueButton,
-                            introText: blockUi?.introText ?? ctx.block.introText,
-                            preBlockPages: blockUi?.preBlockPages ?? ctx.block.beforeBlockScreens,
-                            showBlockLabel: blockUi?.showBlockLabel,
-                            preBlockBeforeIntro: blockUi?.preBlockBeforeIntro,
+                            introText: blockUi.introText ?? ctx.block.introText,
+                            preBlockPages: blockUi.preBlockPages,
+                            showBlockLabel: blockUi.showBlockLabel,
+                            preBlockBeforeIntro: blockUi.preBlockBeforeIntro,
                             beforeIntroInsertions: selectInsertionGroups("block_start_before_intro", ctx),
                             afterIntroInsertions: selectInsertionGroups("block_start_after_intro", ctx),
                             afterPreInsertions: selectInsertionGroups("block_start_after_pre", ctx),
+                            variables: {
+                                nTrials: trials.length,
+                                blockRule: ctx.block.rule ?? "",
+                                ...ctx.block.variables,
+                            },
                             renderHtml: args.renderInstruction,
                         });
                         if (args.onBlockStart)
@@ -203,7 +387,7 @@ export class TaskOrchestrator {
                     onBlockEnd: async (ctx) => {
                         if (args.onBlockEnd)
                             await args.onBlockEnd(ctx);
-                        const blockUi = args.getBlockUi ? args.getBlockUi(ctx) : null;
+                        const blockUi = resolveMergedBlockUi(ctx);
                         const blockResolverContext = {
                             blockIndex: ctx.blockIndex,
                             locals: asObject(asObject(ctx.block)?.variables) ?? {},
@@ -233,11 +417,11 @@ export class TaskOrchestrator {
                                 beforePostInsertions.push([{ text: summaryModel.text }]);
                             }
                         }
-                        const repeatPostBlockPages = toStringScreens(blockUi?.repeatPostBlockPages ??
+                        const repeatPostBlockPages = toInstructionScreenSpecs(blockUi.repeatPostBlockPages ??
                             context.resolver.resolveInValue(asObject(ctx.block)?.repeatAfterBlockScreens ?? asObject(ctx.block)?.repeatPostBlockScreens, blockResolverContext));
                         const postBlockPages = toInstructionScreenSpecs(repeatEvaluation.shouldRepeat
                             ? repeatPostBlockPages
-                            : (blockUi?.postBlockPages ?? ctx.block.afterBlockScreens));
+                            : (blockUi.postBlockPages ?? ctx.block.afterBlockScreens));
                         await runBlockEndFlow({
                             container: uiContainer,
                             blockLabel: ctx.block.label || `Block ${ctx.blockIndex + 1}`,
@@ -246,7 +430,7 @@ export class TaskOrchestrator {
                             continueButtonStyle,
                             autoFocusContinueButton,
                             postBlockPages,
-                            showBlockLabel: blockUi?.showBlockLabel,
+                            showBlockLabel: blockUi.showBlockLabel,
                             beforePostInsertions,
                             afterPostInsertions,
                             renderHtml: args.renderInstruction,
@@ -272,7 +456,8 @@ export class TaskOrchestrator {
                 },
             });
             // 4. Task End Flow
-            const endPages = toInstructionScreenSpecs(args.endPages ?? context.resolver.resolveInValue(instructions?.endPages));
+            const endPages = toInstructionScreenSpecs(args.endPages ??
+                context.resolver.resolveInValue(instructions?.endPages ?? args.instructionDefaults?.endPages));
             const endBeforeInsertions = selectInsertionGroups("task_end_before");
             const endAfterInsertions = selectInsertionGroups("task_end_after");
             if ((endPages && Array.isArray(endPages) && endPages.length > 0) ||
@@ -287,6 +472,9 @@ export class TaskOrchestrator {
                     continueButtonStyle,
                     autoFocusContinueButton,
                     renderHtml: args.renderInstruction,
+                    completeTitle: args.completeTitle,
+                    completeMessage: args.completeMessage,
+                    doneButtonLabel: args.doneButtonLabel,
                 });
             }
         }

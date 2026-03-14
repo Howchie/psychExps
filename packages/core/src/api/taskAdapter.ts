@@ -104,7 +104,8 @@ export class LifecycleManager {
       ],
     };
 
-    // 1. High-level resolver: restricted to participant scope to prevent over-resolution
+    // 1. High-level resolver: used for initial configuration resolution (e.g., basePaths, titles).
+    // Specifically restricted to participant scope.
     const highLevelResolver = createVariableResolver({
       ...commonResolverArgs,
       allowedScopes: ["participant"],
@@ -113,10 +114,15 @@ export class LifecycleManager {
     // 2. Full resolver: for the task adapter to handle block and trial scopes
     const taskResolver = createVariableResolver(commonResolverArgs);
 
-    // Resolve configuration variables after merging (static parts only)
+    // Resolve configuration metadata (static parts only)
     const configManager = new ConfigurationManager();
     configManager.validateLegacyKeys(taskConfig);
-    const resolvedConfig = configManager.resolve(taskConfig, highLevelResolver);
+
+    const resolvedConfig = { ...taskConfig };
+    for (const field of Object.keys(resolvedConfig)) {
+      if (field === "variables" || field === "task") continue;
+      resolvedConfig[field] = highLevelResolver.resolveInValue(resolvedConfig[field]);
+    }
 
     // Initialize module runner with standard core modules
     const moduleRunner = new TaskModuleRunner([

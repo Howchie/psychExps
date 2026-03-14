@@ -24,6 +24,10 @@ export function appendJsPsychTaskIntroScreen(args) {
     pushJsPsychContinueScreen(args.timeline, args.plugin, args.container, renderTaskIntroCardHtml({ title: args.title, participantId: args.participantId }), args.phase ?? "intro_start", args.buttonId ?? "continue-intro-start", args.data);
 }
 export function appendJsPsychBlockIntroScreen(args) {
-    pushJsPsychContinueScreen(args.timeline, args.plugin, args.container, renderBlockIntroCardHtml({ blockLabel: args.blockLabel, introText: args.introText }), args.phase ?? "block_start", args.buttonId ?? "continue-block-start", args.data);
+    pushJsPsychContinueScreen(args.timeline, args.plugin, args.container, renderBlockIntroCardHtml({
+        blockLabel: args.blockLabel,
+        introText: args.introText,
+        showBlockLabel: args.showBlockLabel,
+    }), args.phase ?? "block_start", args.buttonId ?? "continue-block-start", args.data);
 }
 //# sourceMappingURL=jspsychContinueFlow.js.map

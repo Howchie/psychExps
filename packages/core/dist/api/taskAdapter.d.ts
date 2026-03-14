@@ -25,6 +25,17 @@ export interface TaskAdapter {
      */
     launch?(context: TaskAdapterContext): Promise<void>;
 }
+export interface CreateTaskAdapterOptions {
+    manifest: TaskManifest;
+    run: (context: TaskAdapterContext) => Promise<unknown> | unknown;
+    initialize?: (context: TaskAdapterContext) => Promise<void> | void;
+    terminate?: (context: TaskAdapterContext) => Promise<void> | void;
+}
+/**
+ * Builds a standard TaskAdapter without requiring per-task wrapper classes.
+ * The returned adapter stores lifecycle context internally and executes `run(context)`.
+ */
+export declare function createTaskAdapter(options: CreateTaskAdapterOptions): TaskAdapter;
 /**
  * Manages the full lifecycle of a task adapter.
  */

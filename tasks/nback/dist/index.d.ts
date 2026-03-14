@@ -1,18 +1,5 @@
-import { createEventLogger, TaskModuleRunner, type TrialFeedbackConfig, type ResolvedRtTaskConfig, type DrtControllerConfig, type TaskAdapter, type TaskAdapterContext, type VariableResolver, type ResponseSemantics, type CsvStimulusConfig, type PoolDrawConfig } from "@experiments/core";
-declare class NbackTaskAdapter implements TaskAdapter {
-    readonly manifest: TaskAdapter["manifest"];
-    private context;
-    private runtime;
-    private removeKeyScrollBlocker;
-    private removePageScrollLock;
-    private rootPresentationState;
-    initialize(context: TaskAdapterContext): Promise<void>;
-    execute(): Promise<unknown>;
-    terminate(): Promise<void>;
-    setKeyScrollRemover(remover: () => void): void;
-    setPageScrollLockRemover(remover: () => void): void;
-}
-export declare const nbackAdapter: NbackTaskAdapter;
+import { createEventLogger, TaskModuleRunner, type TrialFeedbackConfig, type ResolvedRtTaskConfig, type DrtControllerConfig, type VariableResolver, type ResponseSemantics, type CsvStimulusConfig, type PoolDrawConfig, StandardTaskInstructionConfig } from "@experiments/core";
+export declare const nbackAdapter: import("@experiments/core").TaskAdapter;
 interface NbackMapping {
     targetKey: string;
     nonTargetKey: string | null;
@@ -121,15 +108,7 @@ interface ParsedNbackConfig {
     nbackPoolDraw: PoolDrawConfig;
     variableDefinitions: Record<string, unknown>;
     allowedKeys: string[];
-    instructions: {
-        introPages: string[];
-        preBlockPages: string[];
-        postBlockPages: string[];
-        endPages: string[];
-        blockIntroTemplate: string;
-        showBlockLabel: boolean;
-        preBlockBeforeBlockIntro: boolean;
-    };
+    instructions: StandardTaskInstructionConfig;
     practiceBlocks: NbackBlockConfig[];
     mainBlocks: NbackBlockConfig[];
     stimuliByCategory: Record<string, string[]>;

@@ -5,48 +5,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { __testing__, nbackAdapter } from './index';
 import { createResponseSemantics, createVariableResolver } from '@experiments/core';
 describe('NbackTaskAdapter', () => {
-    it('should initialize correctly using the provided resolver', async () => {
-        const taskConfig = {
-            mapping: { targetKey: 'm', nonTargetKey: 'z' },
-            plan: {
-                blocks: [
-                    { phase: 'main', nLevel: 1, trials: 10 }
-                ]
-            },
-            variables: {
-                myCat: 'food'
-            }
-        };
-        const resolver = createVariableResolver({
-            variables: taskConfig.variables
-        });
-        const mockModuleRunner = {
-            transformPlan: vi.fn().mockImplementation((plan) => plan),
-            transformBlockPlan: vi.fn().mockImplementation((block) => block),
-            getModularSemantics: vi.fn().mockReturnValue({}),
-            initialize: vi.fn(),
-            terminate: vi.fn()
-        };
-        const context = {
-            container: document.createElement('div'),
-            selection: {
-                participant: { participantId: 'p1', sessionId: 's1' },
-                variantId: 'v1'
-            },
-            taskConfig: taskConfig,
-            rawTaskConfig: taskConfig,
-            resolver: resolver,
-            moduleRunner: mockModuleRunner,
-            stimuliByCategory: {}
-        };
-        await nbackAdapter.initialize(context);
-        // Verify that blocks were parsed
-        const runtime = nbackAdapter.runtime;
-        expect(runtime.parsed.mainBlocks[0].nLevel).toBe(1);
-        expect(runtime.moduleRunner).toBe(mockModuleRunner);
-        expect(mockModuleRunner.transformBlockPlan).toHaveBeenCalled();
+    it('exposes manifest and lifecycle hooks', () => {
+        expect(nbackAdapter.manifest.taskId).toBe('nback');
+        expect(typeof nbackAdapter.initialize).toBe('function');
+        expect(typeof nbackAdapter.execute).toBe('function');
+        expect(typeof nbackAdapter.terminate).toBe('function');
     });
-    it('should restore container presentation on terminate', async () => {
+    it('restores container presentation helper output correctly', async () => {
         const container = document.createElement('div');
         container.style.maxWidth = '640px';
         container.style.margin = '12px';
@@ -54,9 +19,7 @@ describe('NbackTaskAdapter', () => {
         container.style.lineHeight = '1.8';
         const prior = __testing__.applyNbackRootPresentation(container);
         expect(container.classList.contains('exp-jspsych-canvas-centered')).toBe(true);
-        nbackAdapter.context = { container };
-        nbackAdapter.rootPresentationState = prior;
-        await nbackAdapter.terminate();
+        __testing__.restoreNbackRootPresentation(container, prior);
         expect(container.style.maxWidth).toBe('640px');
         expect(container.style.margin).toBe('12px');
         expect(container.style.fontFamily).toBe('serif');

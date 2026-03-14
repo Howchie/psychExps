@@ -41,6 +41,28 @@ export interface RunInstructionScreensArgs {
 }
 export declare function resolveInstructionFlowPages(config: InstructionFlowConfig): InstructionFlowPages;
 export declare function renderInstructionScreenHtml(ctx: InstructionScreenRenderContext): string;
+export declare function renderSimpleInstructionScreenHtml(ctx: Omit<InstructionScreenRenderContext, "title"> & {
+    title?: string | null;
+}, options?: {
+    showBlockLabel?: boolean;
+    introAppendHtml?: string | ((ctx: Omit<InstructionScreenRenderContext, "title"> & {
+        title?: string | null;
+    }) => string | null | undefined);
+}): string;
+export type TaskInstructionRenderContext = Omit<InstructionScreenRenderContext, "title"> & {
+    title?: string | null;
+};
+export interface CreateInstructionRendererOptions {
+    showBlockLabel?: boolean;
+    introAppendHtml?: string | ((ctx: TaskInstructionRenderContext) => string | null | undefined);
+    summarySectionPattern?: RegExp;
+    resolvePage?: (ctx: TaskInstructionRenderContext) => {
+        pageText: string;
+        pageHtml?: string;
+        pageTitle?: string;
+    };
+}
+export declare function createInstructionRenderer(options?: CreateInstructionRendererOptions): (ctx: TaskInstructionRenderContext) => string;
 export interface BuiltInstructionScreen {
     ctx: InstructionScreenRenderContext;
     buttonId: string;
@@ -54,6 +76,7 @@ export interface BlockIntroCardArgs {
     blockLabel: string;
     introText?: string | null;
     showBlockLabel?: boolean;
+    variables?: Record<string, unknown>;
 }
 export declare function renderBlockIntroCardHtml(args: BlockIntroCardArgs): string;
 export declare function buildInstructionScreens(args: {

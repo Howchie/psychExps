@@ -365,10 +365,17 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
 
   const resolveInValueInternal = <T>(value: T, context: VariableResolverContext | undefined, stack: Set<string>): T => {
     if (Array.isArray(value)) {
-      return value.flatMap((entry) => {
+      const out: any[] = [];
+      for (const entry of value) {
         const resolved = resolveInValueInternal(entry, context, stack);
-        return Array.isArray(resolved) ? resolved : [resolved];
-      }) as unknown as T;
+        // Only flatten if the entry was a string (potential token) and it resolved to an array
+        if (Array.isArray(resolved) && typeof entry === "string" && (entry.startsWith("$") || entry.includes("${"))) {
+          out.push(...resolved);
+        } else {
+          out.push(resolved);
+        }
+      }
+      return out as unknown as T;
     }
     if (isObject(value)) {
       const out: Record<string, unknown> = {};
