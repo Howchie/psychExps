@@ -28,6 +28,7 @@ import {
   setCursorHidden,
   TaskOrchestrator,
   createInstructionRenderer,
+  StandardTaskInstructionConfig,
   toJsPsychChoices,
   toNonNegativeNumber,
   toPositiveNumber,
@@ -44,21 +45,14 @@ import {
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
+import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
 type StroopMode = "congruence" | "valence";
 type StroopCondition = "congruent" | "incongruent" | "neutral" | "positive" | "negative";
 
 interface ParsedStroopConfig {
   title: string;
-  instructions: {
-    introPages: string[];
-    preBlockPages: string[];
-    postBlockPages: string[];
-    endPages: string[];
-    blockIntroTemplate: string;
-    showBlockLabel: boolean;
-    preBlockBeforeBlockIntro: boolean;
-  };
+  instructions: StandardTaskInstructionConfig;
   mode: StroopMode;
   mapping: {
     redKey: string;
@@ -221,7 +215,13 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
 
   let jsPsych: ReturnType<typeof initJsPsych> | null = null;
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
-  applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+  applyTaskInstructionConfig(context.taskConfig, {
+    ...parsed.instructions,
+    blockSummary: {
+      enabled: true,
+      metrics: { correctField: "responseCorrect" },
+    },
+  });
   const payload = await orchestrator.run({
     buttonIdPrefix: "stroop-continue",
     getBlocks: () => plannedBlocks,
@@ -241,7 +241,9 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
         eventLogger,
       });
       await runJsPsychTimeline(jsPsych, trialTimeline);
-      return records[records.length - 1];
+      const record = records.find((r) => r.blockIndex === blockIndex && r.trialIndex === trial.trialIndex);
+      if (!record) throw new Error(`Stroop record not found for block ${blockIndex} trial ${trial.trialIndex}`);
+      return record;
     },
     onTaskStart: () => {
       jsPsych = initJsPsych({

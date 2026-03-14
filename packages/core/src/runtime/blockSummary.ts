@@ -51,8 +51,8 @@ const DEFAULT_SUMMARY: BlockSummaryConfig = {
   title: "End of {blockLabel}",
   lines: ["Accuracy: {accuracyPct}% ({correct}/{total})"],
   metrics: {
-    correctField: "correct",
-    rtField: "rt",
+    correctField: "responseCorrect",
+    rtField: "responseRtMs",
   },
 };
 

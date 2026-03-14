@@ -72,6 +72,7 @@ import {
   type PoolDrawConfig,
   type CategoryDrawConfig,
   type TaskModuleAddress,
+  StandardTaskInstructionConfig,
   TaskOrchestrator,
   createTaskAdapter,
 } from "@experiments/core";
@@ -94,7 +95,13 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
   if (stimulusExport) return stimulusExport;
 
     const { parsed, eventLogger } = runtime;
-    applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+    applyTaskInstructionConfig(context.taskConfig, {
+      ...parsed.instructions,
+      blockSummary: {
+        enabled: true,
+        metrics: { correctField: "responseCorrect" },
+      },
+    });
     const root = context.container;
     let jsPsych: ReturnType<typeof initJsPsych> | null = null;
 
@@ -392,15 +399,7 @@ interface ParsedNbackConfig {
   nbackPoolDraw: PoolDrawConfig;
   variableDefinitions: Record<string, unknown>;
   allowedKeys: string[];
-  instructions: {
-    introPages: string[];
-    preBlockPages: string[];
-    postBlockPages: string[];
-    endPages: string[];
-    blockIntroTemplate: string;
-    showBlockLabel: boolean;
-    preBlockBeforeBlockIntro: boolean;
-  };
+  instructions: StandardTaskInstructionConfig;
   practiceBlocks: NbackBlockConfig[];
   mainBlocks: NbackBlockConfig[];
   stimuliByCategory: Record<string, string[]>;

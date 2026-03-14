@@ -17,6 +17,7 @@ import {
   buildTaskInstructionConfig,
   applyTaskInstructionConfig,
   resolveScopedModuleConfig,
+  StandardTaskInstructionConfig,
   TaskOrchestrator,
   runTrialWithEnvelope,
   setCursorHidden,
@@ -45,7 +46,7 @@ export const trackingAdapter = createTaskAdapter({
       { id: "mot_demo", label: "Tracking MOT Demo", configPath: "tracking/mot_demo" },
     ],
   },
-  run: (context) => runTrackingTask(context, context.moduleRunner),
+  run: (context) => runTrackingTask(context),
   terminate: async () => {
     setCursorHidden(false);
   },
@@ -115,15 +116,7 @@ interface ParsedTrackingBlock {
 
 interface ParsedTrackingConfig {
   title: string;
-  instructions: {
-    introPages: string[];
-    preBlockPages: string[];
-    postBlockPages: string[];
-    endPages: string[];
-    blockIntroTemplate: string;
-    showBlockLabel: boolean;
-    preBlockBeforeBlockIntro: boolean;
-  };
+  instructions: StandardTaskInstructionConfig;
   display: TrackingDisplayConfig;
   interTrialIntervalMs: number;
   blocks: ParsedTrackingBlock[];
@@ -223,7 +216,8 @@ interface MotTrialRuntimeResult {
 
 type TrackingTrialRuntimeResult = PursuitTrialRuntimeResult | MotTrialRuntimeResult;
 
-async function runTrackingTask(context: TaskAdapterContext, runner: TaskAdapterContext["moduleRunner"]): Promise<unknown> {
+async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
+  const runner = context.moduleRunner;
   const parsed = parseTrackingConfig(context.taskConfig, context.selection);
   const stimulusExport = await maybeExportStimulusRows({
     context,

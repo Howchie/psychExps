@@ -10,6 +10,7 @@ export interface ResolvedTaskInstructionSurfaces {
   blockIntroTemplate?: unknown;
   showBlockLabel?: boolean;
   preBlockBeforeIntro?: boolean;
+  blockSummary?: unknown;
 }
 
 export interface StandardTaskInstructionConfig {
@@ -20,6 +21,7 @@ export interface StandardTaskInstructionConfig {
   blockIntroTemplate: string;
   showBlockLabel: boolean;
   preBlockBeforeBlockIntro: boolean;
+  blockSummary?: unknown;
 }
 
 export function buildTaskInstructionConfig(args: {
@@ -53,6 +55,7 @@ export function buildTaskInstructionConfig(args: {
       typeof instructionsRaw.preBlockBeforeBlockIntro === "boolean"
         ? instructionsRaw.preBlockBeforeBlockIntro
         : (args.preBlockBeforeBlockIntroDefault ?? false),
+    blockSummary: instructionsRaw.blockSummary,
   };
 }
 
@@ -73,6 +76,7 @@ export function applyResolvedTaskInstructionSurfaces(
   if (typeof surfaces.preBlockBeforeIntro === "boolean") {
     merged.preBlockBeforeBlockIntro = surfaces.preBlockBeforeIntro;
   }
+  if (surfaces.blockSummary !== undefined) merged.blockSummary = surfaces.blockSummary;
 
   taskConfigRecord.instructions = merged;
 }
@@ -89,5 +93,6 @@ export function applyTaskInstructionConfig(
     blockIntroTemplate: instructions.blockIntroTemplate,
     showBlockLabel: instructions.showBlockLabel,
     preBlockBeforeIntro: instructions.preBlockBeforeBlockIntro,
+    blockSummary: instructions.blockSummary,
   });
 }

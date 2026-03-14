@@ -212,10 +212,7 @@ export async function runJsPsychTimeline(jsPsych: any, timeline: any[]): Promise
     return;
   }
   if (typeof jsPsych?.run === "function") {
-    const runResult = jsPsych.run(timeline);
-    if (runResult && typeof runResult.then === "function") {
-      await runResult;
-    }
+    await jsPsych.run(timeline);
     return;
   }
   throw new Error("Invalid jsPsych instance: missing run/simulate methods.");
