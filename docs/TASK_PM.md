@@ -1,11 +1,11 @@
 # Task: PM (N-Back) Implementation & Config
 
-This document describes the current PM adapter at `tasks/nback_pm_old/src/index.ts`.
+This document describes the current PM implementation integrated into `tasks/nback/src/index.ts`.
 
-Status note (2026-03-06):
-- Standalone PM is maintained as a parity harness/deprecation path.
-- Canonical PM integration direction is NBack + core PM module.
-- Standalone PM should receive stability fixes only, not net-new feature work.
+Status note (2026-03-14):
+- Standalone PM (`nback_pm_old`) has been fully removed.
+- All PM experiments now run through the modular `nback` task.
+- Legacy `pm` URLs are handled by the unified NBack adapter.
 
 ## 1. Implementation Details
 
@@ -27,7 +27,7 @@ Current task id is `nback_pm_old` (legacy `pm` URLs are aliased by the web shell
 For parity workflows, the legacy PM task can export planned stimulus lists without executing trials.
 
 Launch with:
-- `?task=nback_pm_old&variant=<variant>&exportStimuli=true`
+- `?task=nback&variant=<variant>&exportStimuli=true`
 
 Behavior:
 - Skips timeline execution.

@@ -208,6 +208,7 @@ export const nbackAdapter = createTaskAdapter({
       { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
       { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
       { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
+      { id: "modern", label: "NBack Modern", configPath: "nback/nirvanaExp1" },
     ],
   },
   initialize: async (context) => {
@@ -249,6 +250,7 @@ async function exportNbackStimulusList(context: TaskAdapterContext, runtime: Nba
       n_level: block.nLevel,
       trial_index: trial.trialIndex,
       trial_type: trial.trialType,
+      trial_code: trial.trialType.startsWith("L") ? `lure_${trial.trialType.substring(1)}` : trial.trialType,
       item: trial.item,
       source_category: trial.sourceCategory,
       correct_response: trial.correctResponse,
@@ -417,6 +419,7 @@ interface TrialRecord {
   nLevel: number;
   trialIndex: number;
   trialType: string;
+  trial_code: string;
   item: string;
   stimulusPath: string;
   stimulusVariant: number;
@@ -483,8 +486,18 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
       context.selection.variantId,
     ),
   );
-  
-  const moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
+
+  let moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
+  const mappingRaw = asObject(context.rawTaskConfig.mapping);
+  if (asString(asObject(context.rawTaskConfig.task)?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
+    moduleConfigs = {
+      ...moduleConfigs,
+      pm: {
+        enabled: true,
+        key: asString(mappingRaw?.pmKey) || "space",
+      },
+    };
+  }
   let plan = buildExperimentPlan(parsed, rng, context.moduleRunner, moduleConfigs, context.resolver);
 
   const eventLogger = createEventLogger(context.selection);
@@ -868,6 +881,7 @@ function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId
       nLevel: Number(row.nLevel ?? -1),
       trialIndex: Number(row.trialIndex ?? -1),
       trialType: asString(row.trialType) || "",
+      trial_code: asString(row.trialType) || "",
       item: asString(row.item) || "",
       stimulusPath: asString(row.stimulusPath) || "",
       stimulusVariant: Number(row.stimulusVariant ?? -1),
@@ -911,7 +925,19 @@ function parseNbackConfig(
   }
 
   // Modular semantics: extract response keys from all active modules
-  const moduleConfigs = asObject(taskRaw?.modules) ?? {};
+  let moduleConfigs = asObject(taskRaw?.modules) ?? {};
+
+  // Support legacy jspsych_pm implementation by injecting a pm module
+  if (asString(taskRaw?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
+    moduleConfigs = {
+      ...moduleConfigs,
+      pm: {
+        enabled: true,
+        key: asString(mappingRaw?.pmKey) || "space",
+      },
+    };
+  }
+
   const modularSemantics = variableResolver.resolveInValue(
     moduleRunner.getModularSemantics(moduleConfigs, { resolver: variableResolver }),
   );

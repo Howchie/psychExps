@@ -5,7 +5,7 @@ Date: 2026-03-10
 ## Scope
 
 Compared code paths:
-- Standalone PM task: `tasks/nback_pm_old/src/index.ts`
+- Modular PM task: integrated into `tasks/nback/src/index.ts`
 - Canonical PM-integration target: NBack + core PM module
   - `tasks/nback/src/index.ts`
   - `packages/core/src/engines/prospectiveMemory.ts`
@@ -36,7 +36,7 @@ Intent:
 Standalone PM:
 - Uses explicit block PM controls (`pmCount`, `minPmSeparation`, `maxPmSeparation`) with hard guarantees.
 - See `generatePmPositions` and validation in:
-  - `tasks/nback_pm_old/src/index.ts` (block plan build + integrity checks).
+  - `tasks/nback/src/index.ts` (block plan build + integrity checks).
 
 NBack + module:
 - Uses core module `generateProspectiveMemoryPositions`.

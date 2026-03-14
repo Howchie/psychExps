@@ -415,37 +415,53 @@ export async function waitForContinue(
   const btn = container.querySelector(`#${buttonId}`);
   if (!(btn instanceof HTMLButtonElement)) return;
   applyButtonStyleOverrides(btn, options.buttonStyle);
-  if (isAutoResponderEnabled()) {
-    const delayMs = sampleAutoContinueDelayMs() ?? 0;
-    await sleep(delayMs);
-    container.innerHTML = "";
-    return;
-  }
   const clearScreen = () => {
     container.innerHTML = "";
   };
+
+  let onKeyRef: ((ev: KeyboardEvent) => void) | null = null;
+  let onClickRef: (() => void) | null = null;
+
+  const cleanup = () => {
+    if (onClickRef) btn.removeEventListener("click", onClickRef);
+    if (onKeyRef) window.removeEventListener("keydown", onKeyRef);
+  };
+
   await new Promise<void>((resolve) => {
-    const onKey = (ev: KeyboardEvent) => {
+    onKeyRef = (ev: KeyboardEvent) => {
       if (normalizeKey(ev.key) !== "space") return;
       if (!isEditableKeyTarget(ev.target)) ev.preventDefault();
       cleanup();
       resolve();
     };
-    const onClick = () => {
+
+    onClickRef = () => {
       cleanup();
       resolve();
     };
-    const cleanup = () => {
-      btn.removeEventListener("click", onClick);
-      window.removeEventListener("keydown", onKey);
-    };
-    btn.addEventListener("click", onClick);
-    window.addEventListener("keydown", onKey);
+
+    if (isAutoResponderEnabled()) {
+      void (async () => {
+        const delayMs = sampleAutoContinueDelayMs() ?? 0;
+        await sleep(delayMs);
+        cleanup();
+        if (buttonId.includes("complete")) {
+          btn.disabled = true;
+          btn.style.opacity = "0.5";
+        } else {
+          clearScreen();
+        }
+        resolve();
+      })();
+      return;
+    }
+
+    btn.addEventListener("click", onClickRef);
+    window.addEventListener("keydown", onKeyRef);
     if (options.autoFocusButton !== false) {
       btn.focus();
     }
   });
-  clearScreen();
 }
 
 export async function waitForContinueChoice(

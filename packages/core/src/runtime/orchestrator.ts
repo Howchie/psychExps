@@ -87,6 +87,9 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   };
   introPages?: unknown;
   endPages?: unknown;
+  completeTitle?: string;
+  completeMessage?: string;
+  doneButtonLabel?: string;
   instructionDefaults?: {
     introPages?: unknown;
     preBlockPages?: unknown;
@@ -495,6 +498,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           });
 
           const blockUi = resolveMergedBlockUi(ctx);
+          const trials = args.getTrials(ctx);
           await runBlockStartFlow({
             container: uiContainer,
             blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
@@ -509,6 +513,11 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             beforeIntroInsertions: selectInsertionGroups("block_start_before_intro", ctx),
             afterIntroInsertions: selectInsertionGroups("block_start_after_intro", ctx),
             afterPreInsertions: selectInsertionGroups("block_start_after_pre", ctx),
+            variables: {
+              nTrials: trials.length,
+              blockRule: (ctx.block as any).rule ?? "",
+              ...(ctx.block as any).variables,
+            },
             renderHtml: args.renderInstruction,
           });
 
@@ -622,6 +631,9 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           continueButtonStyle,
           autoFocusContinueButton,
           renderHtml: args.renderInstruction,
+          completeTitle: args.completeTitle,
+          completeMessage: args.completeMessage,
+          doneButtonLabel: args.doneButtonLabel,
         });
       }
     } catch (error) {

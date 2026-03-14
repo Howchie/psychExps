@@ -269,7 +269,8 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
           : 0;
       eventLogger.emit("block_end", { blockId: block.id, label: block.label, accuracy }, { blockIndex });
     },
-    onTaskEnd: () => {
+    onTaskEnd: (payload) => {
+      console.log("Stroop task end triggered", payload.records.length);
       eventLogger.emit("task_end", {
         task: "stroop",
         mode: parsed.mode,
@@ -292,6 +293,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
       showBlockLabel: parsed.instructions.showBlockLabel,
       introAppendHtml: `<p><b>Respond to the font color:</b> red = <code>${escapeHtml(parsed.mapping.redKey)}</code>, green = <code>${escapeHtml(parsed.mapping.greenKey)}</code></p>`,
     }),
+    completeTitle: "Stroop complete",
   });
   return payload;
 }

@@ -208,7 +208,24 @@ export function sampleAutoHoldDurationMs(): number | null {
 
 export async function runJsPsychTimeline(jsPsych: any, timeline: any[]): Promise<void> {
   if (activeProfile && typeof jsPsych?.simulate === "function") {
-    await jsPsych.simulate(timeline, "visual", {});
+    // We wrap in a promise to ensure we can definitely wait for completion
+    // regardless of whether simulate() returns a promise or relies on on_finish.
+    await new Promise<void>((resolve, reject) => {
+      let finished = false;
+      const safeResolve = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+
+      const result = jsPsych.simulate(timeline, "data-only", {
+        on_finish: () => safeResolve(),
+      });
+
+      if (result && typeof result.then === "function") {
+        result.then(() => safeResolve()).catch(reject);
+      }
+    });
     return;
   }
   if (typeof jsPsych?.run === "function") {

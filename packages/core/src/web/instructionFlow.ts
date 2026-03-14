@@ -161,13 +161,21 @@ export interface BlockIntroCardArgs {
   blockLabel: string;
   introText?: string | null;
   showBlockLabel?: boolean;
+  variables?: Record<string, unknown>;
 }
 
 export function renderBlockIntroCardHtml(args: BlockIntroCardArgs): string {
-  const introText = args.introText ?? "";
+  let introText = args.introText ?? "Press continue when ready.";
   const showBlockLabel = args.showBlockLabel !== false;
   const titleHtml = showBlockLabel ? `<h3>${escapeHtml(args.blockLabel)}</h3>` : "";
-  return `${titleHtml}<p>${escapeHtml(introText || "Press continue when ready.")}</p>`;
+
+  if (args.variables) {
+    for (const [key, value] of Object.entries(args.variables)) {
+      introText = introText.replaceAll(`{${key}}`, String(value));
+    }
+  }
+
+  return `${titleHtml}<p>${escapeHtml(introText)}</p>`;
 }
 
 export function buildInstructionScreens(args: {

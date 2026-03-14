@@ -91,6 +91,7 @@ export interface RunBlockUiFlowArgs {
   postBlockPages?: InstructionPage[];
   beforePostInsertions?: InstructionPage[][];
   afterPostInsertions?: InstructionPage[][];
+  variables?: Record<string, unknown>;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
   renderHtml?: (ctx: {
@@ -128,6 +129,7 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         blockLabel: args.blockLabel,
         introText: args.introText,
         showBlockLabel: args.showBlockLabel,
+        variables: args.variables,
       }),
       {
         buttonId: `${args.buttonIdPrefix}-block-start-${args.blockIndex}`,

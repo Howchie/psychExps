@@ -45,7 +45,8 @@ async function bootstrap(): Promise<void> {
   ];
   const adapterMap = buildTaskMap(adapters);
 
-  const selection = await resolveSelectionWithJatosRetry(coreDefaultConfig);
+  const initialSelection = await resolveSelectionWithJatosRetry(coreDefaultConfig);
+  const selection = initialSelection;
   const adapter = adapterMap.get(selection.taskId);
   if (!adapter) {
     throw new Error(`Unknown task '${selection.taskId}'. Available: ${adapters.map((a) => a.manifest.taskId).join(", ")}`);
@@ -115,7 +116,7 @@ async function bootstrap(): Promise<void> {
 
   const removeGlobalScrollBlocker = installGlobalScrollBlocker();
   const removeFullscreenHooks = installFullscreenOnFirstInteraction(launchContainer);
-  
+
   const lifecycle = new LifecycleManager(adapter);
   try {
     await lifecycle.run({
@@ -133,10 +134,11 @@ async function bootstrap(): Promise<void> {
 const handleBootstrapError = (error: unknown): void => {
   const app = document.querySelector("#app");
   const errorMessage = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : "";
   if (app instanceof HTMLElement) {
-    app.innerHTML = `<div class=\"card\"><h1>Experiment shell failed</h1><pre>${errorMessage}</pre></div>`;
+    app.innerHTML = `<div class="card"><h1>Experiment shell failed</h1><p>${errorMessage}</p><pre style="font-size: 0.7rem; text-align: left; opacity: 0.7;">${stack}</pre></div>`;
   }
-  console.error(error);
+  console.error("Shell bootstrap failed:", error);
 };
 
 const startApp = (): void => {

@@ -304,12 +304,19 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
 
   let jsPsych: ReturnType<typeof initJsPsych> | null = null;
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
-  applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
+  applyTaskInstructionConfig(context.taskConfig, {
+    ...parsed.instructions,
+    blockSummary: {
+      enabled: true,
+      metrics: { correctField: "correct" },
+    },
+  });
   return orchestrator.run({
     buttonIdPrefix: "sft-continue",
     getBlocks: () => plan,
     getTrials: ({ block }) => block.trials,
     runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
+      console.log(`SFT trial start: block ${blockIndex} trial ${trialIndex}`);
       if (!jsPsych) throw new Error("jsPsych not initialized");
       let feedbackView: { text: string; color: string } | null = null;
       const timeline: any[] = [];
@@ -420,6 +427,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
 
       const beforeCount = jsPsych.data.get().values().length;
       await runJsPsychTimeline(jsPsych, timeline);
+      console.log(`SFT trial finished: block ${blockIndex} trial ${trialIndex}`);
       const deltaRows = jsPsych.data.get().values().slice(beforeCount) as Array<Record<string, unknown>>;
       const record = collectMainTrialRecords(deltaRows, context.selection.participant.participantId).at(-1);
       if (!record) {
@@ -484,29 +492,11 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     onBlockStart: ({ block, blockIndex }) => {
       eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
     },
-    onBlockEnd: async ({ block, blockIndex, trialResults }) => {
-      const correct = trialResults.reduce((acc, row) => acc + (row.correct ?? 0), 0);
-      const total = trialResults.length;
-      const accuracy = total > 0 ? (correct / total) * 100 : 0;
+    onBlockEnd: async ({ block, accuracy, blockIndex }) => {
       eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
-
-      const summaryModel = buildBlockSummaryModel({
-        config: parsed.blockSummary,
-        block: {
-          label: block.label,
-          blockType: "main",
-          isPractice: false,
-        },
-        blockIndex,
-        fallbackStats: { total, correct, accuracyPct: accuracy },
-      });
-      if (!summaryModel) return;
-      const host = resolveJsPsychContentHost(root);
-      await waitForContinue(host, renderBlockSummaryCardHtml(summaryModel), {
-        buttonId: `sft-end-${block.id}`,
-      });
     },
     onTaskEnd: () => {
+      console.log("SFT task end triggered");
       setCursorHidden(false);
     },
     csvOptions: {
@@ -526,6 +516,8 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       showBlockLabel: parsed.instructions.showBlockLabel,
       introAppendHtml: () => renderKeySummary(parsed.responses),
     }),
+    completeTitle: "SFT complete",
+    completeMessage: "Task complete. You can close this tab.",
   });
 }
 
