@@ -16,6 +16,7 @@ import {
   resolveTrialFeedbackView,
   runJsPsychTimeline,
   setCursorHidden,
+  computeAccuracy,
   shouldHideCursorForPhase,
   toJsPsychChoices,
   waitForContinue,
@@ -172,17 +173,13 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       onBlockEnd: (ctx) => {
         const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
         const blockResponded = ctx.trialResults.reduce((acc, row) => acc + (row?.responseKey ? 1 : 0), 0);
-        const accuracy = ctx.trialResults.length > 0 ? Math.round((blockCorrect / ctx.trialResults.length) * 1000) / 10 : 0;
+        const accuracy = computeAccuracy(blockCorrect, ctx.trialResults.length);
         
         eventLogger.emit(
           "block_end",
           { label: ctx.block.label, nLevel: ctx.block.nLevel, accuracy, responded: blockResponded },
           { blockIndex: ctx.blockIndex },
         );
-
-        // We can optionally override the block end screen here if we want the accuracy info
-        // But orchestrator handles standard screens. 
-        // If we want the custom accuracy info, we might need a custom hook in orchestrator.
       }
     });
 }

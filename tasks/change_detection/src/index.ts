@@ -31,10 +31,13 @@ import {
   createTaskAdapter,
   createEventLogger,
   setCursorHidden,
+  computeAccuracy,
+  TaskEnvironmentGuard,
 } from "@experiments/core";
 import { buildTrialPlan, type TrialPlanItem } from "./planner";
 
 const changeDetectionLayoutManager = new SpatialLayoutManager();
+const changeDetectionEnvironment = new TaskEnvironmentGuard();
 
 async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unknown> {
   const { container, taskConfig, selection } = context;
@@ -136,6 +139,7 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
       return result;
     },
     onTaskStart: () => {
+      changeDetectionEnvironment.installPageScrollLock();
       eventLogger.emit("task_start", { task: "change_detection", runner: "native_canvas" });
     },
     onBlockStart: ({ blockIndex }) => {
@@ -145,7 +149,7 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
     onBlockEnd: ({ blockIndex, trialResults }) => {
       const block = asObject(blocks[blockIndex]);
       const correct = trialResults.reduce((acc: number, r: any) => acc + (r?.responseCorrect ?? 0), 0);
-      const accuracy = trialResults.length > 0 ? Math.round((correct / trialResults.length) * 1000) / 10 : 0;
+      const accuracy = computeAccuracy(correct, trialResults.length);
       eventLogger.emit("block_end", { label: asString(block?.label) || `Block ${blockIndex + 1}`, accuracy }, { blockIndex });
     },
     onTaskEnd: () => {
@@ -309,6 +313,6 @@ export const changeDetectionAdapter = createTaskAdapter({
   },
   run: runChangeDetectionTask,
   terminate: async () => {
-    setCursorHidden(false);
+    changeDetectionEnvironment.cleanup();
   },
 });

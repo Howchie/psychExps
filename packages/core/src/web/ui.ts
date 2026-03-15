@@ -217,6 +217,12 @@ export function shouldHideCursorForPhase(phase: unknown): boolean {
   return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
 }
 
+/** Computes percentage accuracy (0-100) with one decimal place. */
+export function computeAccuracy(correct: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((correct / total) * 1000) / 10;
+}
+
 /**
  * Extract and normalize the response key and RT from a jsPsych trial data object.
  * Used by jsPsych-based RT tasks (SFT, Stroop, NBack) to standardize response extraction.

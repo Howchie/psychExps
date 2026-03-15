@@ -22,6 +22,7 @@ import {
   resolveTrialFeedbackView,
   runJsPsychTimeline,
   setCursorHidden,
+  computeAccuracy,
   computeRtPhaseDurations,
   toJsPsychChoices,
   buildTaskInstructionConfig,
@@ -474,7 +475,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     },
     onBlockEnd: async ({ block, blockIndex, trialResults }) => {
       const correct = trialResults.reduce((acc, row) => acc + (row.correct ?? 0), 0);
-      const accuracy = trialResults.length > 0 ? Math.round((correct / trialResults.length) * 1000) / 10 : 0;
+      const accuracy = computeAccuracy(correct, trialResults.length);
       eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
     },
     onTaskEnd: () => {

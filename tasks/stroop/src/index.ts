@@ -28,6 +28,7 @@ import {
   setCursorHidden,
   shouldHideCursorForPhase,
   extractJsPsychTrialResponse,
+  computeAccuracy,
   TaskOrchestrator,
   createInstructionRenderer,
   StandardTaskInstructionConfig,
@@ -255,10 +256,8 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
     },
     onBlockEnd: ({ block, blockIndex }) => {
       const blockRows = records.filter((row) => row.blockIndex === blockIndex);
-      const accuracy =
-        blockRows.length > 0
-          ? Math.round((blockRows.reduce((acc, row) => acc + row.responseCorrect, 0) / blockRows.length) * 1000) / 10
-          : 0;
+      const correct = blockRows.reduce((acc, row) => acc + row.responseCorrect, 0);
+      const accuracy = computeAccuracy(correct, blockRows.length);
       eventLogger.emit("block_end", { blockId: block.id, label: block.label, accuracy }, { blockIndex });
     },
     onTaskEnd: (payload) => {
