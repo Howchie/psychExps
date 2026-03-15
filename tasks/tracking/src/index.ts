@@ -21,6 +21,7 @@ import {
   TaskOrchestrator,
   runTrialWithEnvelope,
   setCursorHidden,
+  sleep,
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
@@ -1069,8 +1070,3 @@ function toFinitePositive(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    window.setTimeout(() => resolve(), Math.max(0, ms));
-  });
-}

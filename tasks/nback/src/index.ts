@@ -5,22 +5,18 @@ import {
   drawTrialFeedbackOnCanvas,
   escapeHtml,
   evaluateTrialOutcome,
-  finalizeTaskRun,
   hashSeed,
   normalizeKey,
   computeCanvasFrameLayout,
   drawCanvasFramedScene,
   drawCanvasCenteredText,
   ensureJsPsychCanvasCentered,
-  installKeyScrollBlocker,
-  lockPageScroll,
-  pushJsPsychContinueScreen,
+  TaskEnvironmentGuard,
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
-  renderCenteredNotice,
-  recordsToCsv,
   setCursorHidden,
+  shouldHideCursorForPhase,
   toJsPsychChoices,
   waitForContinue,
   resolveTemplate,
@@ -28,9 +24,6 @@ import {
   computeRtPhaseDurations,
   resolveRtTaskConfig,
   mergeRtTaskConfig,
-  appendJsPsychTaskIntroScreen,
-  appendJsPsychBlockIntroScreen,
-  appendJsPsychInstructionScreens,
   coerceCsvStimulusConfig,
   coerceCategoryDrawConfig,
   coercePoolDrawConfig,
@@ -48,7 +41,6 @@ import {
   createInstructionRenderer,
   buildTaskInstructionConfig,
   applyTaskInstructionConfig,
-  runTaskSession,
   maybeExportStimulusRows,
   resolveScopedModuleConfig,
   asObject,
@@ -82,8 +74,7 @@ import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
 let nbackContext: TaskAdapterContext | null = null;
 let nbackRuntime: NbackRuntimeState | null = null;
-let nbackRemoveKeyScrollBlocker: (() => void) | null = null;
-let nbackRemovePageScrollLock: (() => void) | null = null;
+const nbackEnvironment = new TaskEnvironmentGuard();
 let nbackRootPresentationState: RootPresentationState | null = null;
 
 async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
@@ -118,7 +109,7 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       })),
       getTrials: ({ block }) => block.trials,
       csvOptions: {
-        suffix: "nback",
+        suffix: "nback_trials",
       },
       renderInstruction: createInstructionRenderer({
         showBlockLabel: true,
@@ -129,9 +120,8 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       }),
       getEvents: () => eventLogger.events,
       onTaskStart: () => {
-        const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-        nbackRemoveKeyScrollBlocker = removeKeyScrollBlocker;
-        nbackRemovePageScrollLock = lockPageScroll();
+        nbackEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
+        nbackEnvironment.installPageScrollLock();
         nbackRootPresentationState = applyNbackRootPresentation(root);
         
         jsPsych = initJsPsych({
@@ -217,19 +207,11 @@ export const nbackAdapter = createTaskAdapter({
   },
   run: runNbackTask,
   terminate: async () => {
-    setCursorHidden(false);
     if (nbackContext?.container) {
       restoreNbackRootPresentation(nbackContext.container, nbackRootPresentationState);
       nbackRootPresentationState = null;
     }
-    if (nbackRemovePageScrollLock) {
-      nbackRemovePageScrollLock();
-      nbackRemovePageScrollLock = null;
-    }
-    if (nbackRemoveKeyScrollBlocker) {
-      nbackRemoveKeyScrollBlocker();
-      nbackRemoveKeyScrollBlocker = null;
-    }
+    nbackEnvironment.cleanup();
     nbackRuntime = null;
     nbackContext = null;
   },
@@ -263,10 +245,6 @@ async function exportNbackStimulusList(context: TaskAdapterContext, runtime: Nba
   });
 }
 
-function shouldHideCursorForPhase(phase: unknown): boolean {
-  if (typeof phase !== "string") return false;
-  return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
-}
 
 function parseOptionalResponseKey(value: unknown): string | null {
   const parsed = asString(value);

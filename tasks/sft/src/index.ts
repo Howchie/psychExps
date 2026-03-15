@@ -8,7 +8,6 @@ import {
   drawTrialFeedbackOnCanvas,
   escapeHtml,
   parseTrialFeedbackConfig,
-  finalizeTaskRun,
   hashSeed,
   normalizeKey,
   evaluateTrialOutcome,
@@ -16,14 +15,12 @@ import {
   drawCanvasFramedScene,
   drawCanvasCenteredText,
   ensureJsPsychCanvasCentered,
-  installKeyScrollBlocker,
+  TaskEnvironmentGuard,
   pushJsPsychContinueScreen,
   applyTaskInstructionConfig,
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
-  renderCenteredNotice,
-  recordsToCsv,
   setCursorHidden,
   computeRtPhaseDurations,
   toJsPsychChoices,
@@ -60,6 +57,9 @@ import {
   type TrialFeedbackConfig,
   type JSONObject,
   type TaskAdapterContext,
+  type StandardTaskInstructionConfig,
+  shouldHideCursorForPhase,
+  extractJsPsychTrialResponse,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
@@ -74,36 +74,19 @@ const sftManifest = {
   ],
 };
 
-let sftRemoveKeyScrollBlocker: (() => void) | null = null;
+const sftEnvironment = new TaskEnvironmentGuard();
 
 export const sftAdapter = createTaskAdapter({
   manifest: sftManifest,
   run: runSftTask,
   terminate: async () => {
-    setCursorHidden(false);
-    if (sftRemoveKeyScrollBlocker) {
-      sftRemoveKeyScrollBlocker();
-      sftRemoveKeyScrollBlocker = null;
-    }
+    sftEnvironment.cleanup();
   },
 });
 
-function shouldHideCursorForPhase(phase: unknown): boolean {
-  if (typeof phase !== "string") return false;
-  return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
-}
-
 interface SftParsedConfig {
   title: string;
-  instructions: {
-    introPages: string[];
-    preBlockPages: string[];
-    postBlockPages: string[];
-    endPages: string[];
-    blockIntroTemplate: string;
-    showBlockLabel: boolean;
-    preBlockBeforeBlockIntro: boolean;
-  };
+  instructions: StandardTaskInstructionConfig;
   timing: {
     fixationMs: number;
     blankMs: number;
@@ -263,7 +246,7 @@ interface StaircaseRecord {
 
 async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
-  const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, "sft"));
+  const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId, "sft"));
   const root = context.container;
   const plan = buildBlockPlan(parsed, rng);
 
@@ -298,8 +281,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const staircaseRecords: StaircaseRecord[] = [];
   const eventLogger = createEventLogger(context.selection);
   const allowedKeys = allKeys(parsed.responseSemantics);
-  const removeKeyScrollBlocker = installKeyScrollBlocker(allowedKeys);
-  sftRemoveKeyScrollBlocker = removeKeyScrollBlocker;
+  sftEnvironment.installKeyScrollBlocker(allowedKeys);
   applyGlobalSalience(parsed, parsed.salience);
 
   let jsPsych: ReturnType<typeof initJsPsych> | null = null;
@@ -316,7 +298,6 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     getBlocks: () => plan,
     getTrials: ({ block }) => block.trials,
     runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
-      console.log(`SFT trial start: block ${blockIndex} trial ${trialIndex}`);
       if (!jsPsych) throw new Error("jsPsych not initialized");
       let feedbackView: { text: string; color: string } | null = null;
       const timeline: any[] = [];
@@ -427,7 +408,6 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
 
       const beforeCount = jsPsych.data.get().values().length;
       await runJsPsychTimeline(jsPsych, timeline);
-      console.log(`SFT trial finished: block ${blockIndex} trial ${trialIndex}`);
       const deltaRows = jsPsych.data.get().values().slice(beforeCount) as Array<Record<string, unknown>>;
       const record = collectMainTrialRecords(deltaRows, context.selection.participant.participantId).at(-1);
       if (!record) {
@@ -492,15 +472,16 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     onBlockStart: ({ block, blockIndex }) => {
       eventLogger.emit("block_start", { blockId: block.id, label: block.label }, { blockIndex });
     },
-    onBlockEnd: async ({ block, accuracy, blockIndex }) => {
+    onBlockEnd: async ({ block, blockIndex, trialResults }) => {
+      const correct = trialResults.reduce((acc, row) => acc + (row.correct ?? 0), 0);
+      const accuracy = trialResults.length > 0 ? Math.round((correct / trialResults.length) * 1000) / 10 : 0;
       eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
     },
     onTaskEnd: () => {
-      console.log("SFT task end triggered");
       setCursorHidden(false);
     },
     csvOptions: {
-      suffix: "sft",
+      suffix: "sft_trials",
     },
     getEvents: () => eventLogger.events,
     getTaskMetadata: (sessionResult) => {

@@ -4,13 +4,18 @@ This document describes the current SFT adapter at `tasks/sft/src/index.ts`.
 
 ## 1. Implementation Details
 
-The SFT task is implemented using the standardized `TaskAdapter` interface.
+The SFT task is implemented using the `createTaskAdapter` factory:
 
-### `SftTaskAdapter` (Class)
+```typescript
+export const sftAdapter = createTaskAdapter({
+  manifest: { taskId: "sft", ... },
+  run: runSftTask,
+  terminate: async () => { sftEnvironment.cleanup(); },
+});
+```
 
-- **`initialize(context)`**: Sets up the task context.
-- **`execute()`**: Runs the main SFT task logic (QUEST+ calibration and main trials).
-- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+- **`run(context)`**: Parses configuration, runs optional QUEST+ staircase calibration, then executes main trials via `TaskOrchestrator`.
+- **`terminate()`**: Calls `sftEnvironment.cleanup()` (a `TaskEnvironmentGuard`) to reset the cursor and remove keyboard scroll blockers.
 
 ## 2. Runner behavior
 
@@ -171,25 +176,14 @@ Main trials are scored through `evaluateTrialOutcome`.
 
 ## 4. Final payload contract
 
-SFT final payload submitted/saved by `finalizeTaskRun`:
+SFT session finalization is handled internally by `TaskOrchestrator` (via the core data sink and JATOS submission pipeline). Task adapters do not call `finalizeTaskRun` directly.
 
-```json
-{
-  "selection": {},
-  "records": [],
-  "staircaseRecords": [],
-  "events": [],
-  "jsPsychData": []
-}
-```
+CSV export uses the suffix `sft_trials`.
 
-`records` are main-trial rows with:
-- participant/block/trial metadata
-- `rule`, `layout`, `stimCode`, channels, stimulus category
-- expected/observed response categories and keys
-- RT and correctness
-
-`staircaseRecords` are staircase-phase calibration rows.
+The session payload includes:
+- `records`: main-trial rows with participant/block/trial metadata, `rule`, `layout`, `stimCode`, channels, stimulus category, expected/observed response categories and keys, RT and correctness.
+- `staircaseRecords`: staircase-phase calibration rows (when staircase is enabled).
+- `events`: lifecycle event log (`task_start`, `block_start`, `block_end`, `task_end`).
 
 ## 5. Quick composition recipes
 

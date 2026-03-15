@@ -17,7 +17,7 @@ import {
   escapeHtml,
   evaluateTrialOutcome,
   hashSeed,
-  installKeyScrollBlocker,
+  TaskEnvironmentGuard,
   loadCsvDictionary,
   loadTokenPool,
   normalizeKey,
@@ -26,6 +26,8 @@ import {
   resolveTrialFeedbackView,
   runJsPsychTimeline,
   setCursorHidden,
+  shouldHideCursorForPhase,
+  extractJsPsychTrialResponse,
   TaskOrchestrator,
   createInstructionRenderer,
   StandardTaskInstructionConfig,
@@ -145,11 +147,6 @@ interface TrialRecord {
   responseCorrect: number;
 }
 
-function shouldHideCursorForPhase(phase: unknown): boolean {
-  if (typeof phase !== "string") return false;
-  return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
-}
-
 const stroopManifest = {
   taskId: "stroop",
   label: "Stroop",
@@ -160,17 +157,13 @@ const stroopManifest = {
   ],
 };
 
-let stroopRemoveKeyScrollBlocker: (() => void) | null = null;
+const stroopEnvironment = new TaskEnvironmentGuard();
 
 export const stroopAdapter = createTaskAdapter({
   manifest: stroopManifest,
   run: runStroopTask,
   terminate: async () => {
-    setCursorHidden(false);
-    if (stroopRemoveKeyScrollBlocker) {
-      stroopRemoveKeyScrollBlocker();
-      stroopRemoveKeyScrollBlocker = null;
-    }
+    stroopEnvironment.cleanup();
   },
 });
 
@@ -210,8 +203,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   root.style.fontFamily = "system-ui";
   ensureJsPsychCanvasCentered(root);
 
-  const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-  stroopRemoveKeyScrollBlocker = removeKeyScrollBlocker;
+  stroopEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
 
   let jsPsych: ReturnType<typeof initJsPsych> | null = null;
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
@@ -270,7 +262,6 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
       eventLogger.emit("block_end", { blockId: block.id, label: block.label, accuracy }, { blockIndex });
     },
     onTaskEnd: (payload) => {
-      console.log("Stroop task end triggered", payload.records.length);
       eventLogger.emit("task_end", {
         task: "stroop",
         mode: parsed.mode,
@@ -382,7 +373,7 @@ function appendStroopTrialTimeline(args: {
       word: trial.word,
     },
     on_finish: (data: Record<string, unknown>) => {
-      const response = extractTrialResponse(data);
+      const response = extractJsPsychTrialResponse(data);
       const responseCategory = parsed.responseSemantics.responseCategoryFromKey(response.key);
       const outcome = evaluateTrialOutcome({
         responseCategory,
@@ -572,14 +563,6 @@ function drawFeedback(
   if (!ctx) return;
   drawTrialFeedbackOnCanvas(ctx, layout, feedback, feedbackView);
   void parsed;
-}
-
-function extractTrialResponse(data: Record<string, unknown>): { key: string | null; rtMs: number | null } {
-  const rawKey = data.response;
-  const rawRt = data.rt;
-  const key = typeof rawKey === "string" ? normalizeKey(rawKey) : null;
-  const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
-  return { key, rtMs };
 }
 
 async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig> {

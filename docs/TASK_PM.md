@@ -9,18 +9,15 @@ Status note (2026-03-14):
 
 ## 1. Implementation Details
 
-The PM task is implemented using the standardized `TaskAdapter` interface.
+The PM task is fully integrated into the NBack adapter (`tasks/nback/src/index.ts`). There is no standalone PM adapter.
 
-### `PmTaskAdapter` (Class)
+PM experiments run through the `nback` task using `task.modules.pm` and/or `task.modules.injector` for PM trial injection. Legacy `pm` URLs are aliased to the NBack adapter by the web shell.
 
-- **`initialize(context)`**: Prepares the task runtime by parsing configuration and generating the block plan.
-- **`execute()`**: Launches the jsPsych timeline, handles trial execution, and emits events.
-- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+See `tasks/nback/src/index.ts` and `TASK_NBACK.md` for adapter implementation details.
 
 ## 2. Runners and selection
 
-PM supports the `jspsych` runner via the `LifecycleManager`. Selection is controlled by core `resolveSelection` and the unified web shell.
-Current task id is `nback_pm_old` (legacy `pm` URLs are aliased by the web shell).
+PM supports the `jspsych` runner via the `LifecycleManager`, inherited from the NBack adapter. Selection is controlled by core `resolveSelection` and the unified web shell.
 
 ## 2.1 Stimulus Export (No Full Run)
 
@@ -313,24 +310,9 @@ Failure after max attempts throws.
 
 ## 5. Final payload contract
 
-PM final payload submitted/saved by `finalizeTaskRun`:
+Session finalization is handled internally by `TaskOrchestrator` (via the core data sink and JATOS submission pipeline). Task adapters do not call `finalizeTaskRun` directly.
 
-```json
-{
-  "selection": {},
-  "mapping": {},
-  "timing": {},
-  "records": [],
-  "events": [],
-  "...extras": "runner + optional jsPsychData"
-}
-```
-
-`extras` currently:
-- Native: `{ "runner": "native" }`
-- jsPsych: `{ "runner": "jspsych", "jsPsychData": [...] }`
-
-`records` are trial-level response-window rows with:
-- participant/variant/block/trial metadata
-- stimulus/category fields
-- `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`
+The session payload includes:
+- `records`: trial-level response-window rows with participant/variant/block/trial metadata, stimulus/category fields, `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`.
+- `events`: lifecycle event log.
+- Runner metadata (`"runner": "jspsych"`) and optional jsPsych raw data.

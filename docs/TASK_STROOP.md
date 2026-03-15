@@ -4,13 +4,18 @@ This document describes the Stroop adapter at `tasks/stroop/src/index.ts`.
 
 ## 1. Implementation Details
 
-The Stroop task is implemented using the standardized `TaskAdapter` interface.
+The Stroop task is implemented using the `createTaskAdapter` factory:
 
-### `StroopTaskAdapter` (Class)
+```typescript
+export const stroopAdapter = createTaskAdapter({
+  manifest: { taskId: "stroop", ... },
+  run: runStroopTask,
+  terminate: async () => { stroopEnvironment.cleanup(); },
+});
+```
 
-- **`initialize(context)`**: Sets up the task context.
-- **`execute()`**: Runs the main Stroop task logic using the jsPsych timeline.
-- **`terminate()`**: Performs cleanup, including resetting the cursor and removing keyboard scroll blockers.
+- **`run(context)`**: Parses configuration, builds trial plan, and executes via jsPsych timeline using `TaskOrchestrator`.
+- **`terminate()`**: Calls `stroopEnvironment.cleanup()` (a `TaskEnvironmentGuard`) to reset the cursor and remove keyboard scroll blockers.
 
 ## 2. Runner behavior
 

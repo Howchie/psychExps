@@ -29,6 +29,8 @@ import {
   applyTaskInstructionConfig,
   maybeExportStimulusRows,
   createTaskAdapter,
+  createEventLogger,
+  setCursorHidden,
 } from "@experiments/core";
 import { buildTrialPlan, type TrialPlanItem } from "./planner";
 
@@ -38,8 +40,10 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
   const { container, taskConfig, selection } = context;
 
   const rng = new SeededRandom(
-    hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId),
+    hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId, "change_detection"),
   );
+
+  const eventLogger = createEventLogger(selection);
 
   const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
   const instructionsRaw = asObject(taskConfig.instructions) ?? {};
@@ -131,8 +135,26 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
 
       return result;
     },
+    onTaskStart: () => {
+      eventLogger.emit("task_start", { task: "change_detection", runner: "native_canvas" });
+    },
+    onBlockStart: ({ blockIndex }) => {
+      const block = asObject(blocks[blockIndex]);
+      eventLogger.emit("block_start", { label: asString(block?.label) || `Block ${blockIndex + 1}` }, { blockIndex });
+    },
+    onBlockEnd: ({ blockIndex, trialResults }) => {
+      const block = asObject(blocks[blockIndex]);
+      const correct = trialResults.reduce((acc: number, r: any) => acc + (r?.responseCorrect ?? 0), 0);
+      const accuracy = trialResults.length > 0 ? Math.round((correct / trialResults.length) * 1000) / 10 : 0;
+      eventLogger.emit("block_end", { label: asString(block?.label) || `Block ${blockIndex + 1}`, accuracy }, { blockIndex });
+    },
+    onTaskEnd: () => {
+      eventLogger.emit("task_end", { task: "change_detection" });
+    },
+    getEvents: () => eventLogger.events,
+    completeTitle: "Change Detection complete",
     csvOptions: {
-      suffix: "trials",
+      suffix: "change_detection_trials",
       getRecords: (sessionResult) =>
         sessionResult.blocks.flatMap((b: any) =>
           b.trialResults.map((r: any) => ({
@@ -286,4 +308,7 @@ export const changeDetectionAdapter = createTaskAdapter({
     variants: [{ id: "default", label: "Default Change Detection", configPath: "change_detection/default" }],
   },
   run: runChangeDetectionTask,
+  terminate: async () => {
+    setCursorHidden(false);
+  },
 });

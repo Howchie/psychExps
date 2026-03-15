@@ -192,6 +192,33 @@ Returns `.jspsych-content` host if present, else container.
 
 Pushes a jsPsych call-function timeline node that renders a continue screen through core `waitForContinue`.
 
+### `shouldHideCursorForPhase(phase: unknown): boolean`
+
+Returns `true` when the given phase label indicates a trial execution phase where the cursor should be hidden (matches `fixation`, `blank`, `stimulus`, `response`, or `feedback`). Safe to call inside jsPsych `on_trial_start` callbacks — never applies during instruction or continue screens.
+
+### `extractJsPsychTrialResponse(data: Record<string, unknown>): { key: string | null; rtMs: number | null }`
+
+Normalizes the `response` and `rt` fields from a jsPsych trial data object into canonical form. Returns `null` for each field when the raw value is absent or non-finite.
+
+### `TaskEnvironmentGuard` (Class)
+
+Encapsulates environment cleanup for tasks that install keyboard/scroll blockers or hide the cursor. Replaces the pattern of storing disposer references as module-level variables.
+
+- `installKeyScrollBlocker(allowedKeys: string[]): void` — installs a key scroll blocker and registers its disposer.
+- `installPageScrollLock(): void` — locks page scroll and registers its disposer.
+- `addDisposer(fn: () => void): void` — registers an arbitrary cleanup function.
+- `cleanup(): void` — shows the cursor (`setCursorHidden(false)`) and runs all registered disposers.
+
+Typical usage:
+
+```typescript
+const taskEnvironment = new TaskEnvironmentGuard();
+// in onTaskStart:
+taskEnvironment.installKeyScrollBlocker(allowedKeys);
+// in terminate:
+taskEnvironment.cleanup();
+```
+
 ### `resolvePageBackground({ coreConfig?, taskConfig? }): string | null`
 
 Resolves outer shell background with precedence:
@@ -410,6 +437,8 @@ Helpers:
 Converts flat object rows to CSV with escaping.
 
 ### `finalizeTaskRun(args): Promise<{ submittedToJatos: boolean; redirected: boolean }>`
+
+> **Note:** Task adapters do not call `finalizeTaskRun` directly. It is invoked internally by `TaskOrchestrator` as part of the session completion flow. This function is documented here for core reference only.
 
 Behavior:
 1. Local save when `coreConfig.data.localSave !== false`, using `coreConfig.data.localSaveFormat`:

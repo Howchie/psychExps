@@ -4,13 +4,18 @@ This document describes the current Bricks adapter at `tasks/bricks/src/index.ts
 
 ## 1. Implementation Details
 
-The Bricks task is implemented using the standardized `TaskAdapter` interface.
+The Bricks task is implemented using the `createTaskAdapter` factory:
 
-### `BricksTaskAdapter` (Class)
+```typescript
+export const bricksAdapter = createTaskAdapter({
+  manifest: { taskId: "bricks", ... },
+  run: runBricksTask,
+  terminate: async () => { /* module cleanup */ },
+});
+```
 
-- **`initialize(context)`**: Sets up the task context.
-- **`execute()`**: Runs Bricks through core `TaskOrchestrator`; instruction flow and module lifecycle are orchestrator-managed.
-- **`terminate()`**: Performs cleanup, including stopping all active task modules.
+- **`run(context)`**: Runs Bricks through core `TaskOrchestrator`; instruction flow and module lifecycle are orchestrator-managed.
+- **`terminate()`**: Stops all active task modules.
 
 ## 2. Runtime model
 
@@ -136,7 +141,9 @@ Spotlight rendering note:
 
 Per-trial conveyor output (`ConveyorTrialData`) is appended to `records`.
 
-Final payload submitted/saved by `finalizeTaskRun`:
+Session finalization is handled internally by `TaskOrchestrator` (via the core data sink and JATOS submission pipeline). Task adapters do not call `finalizeTaskRun` directly.
+
+Final payload shape:
 
 ```json
 {

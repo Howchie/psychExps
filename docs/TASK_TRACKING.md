@@ -4,13 +4,18 @@ This document describes the current tracking adapter at `tasks/tracking/src/inde
 
 ## 1. Implementation Details
 
-The Tracking task is implemented using the standardized `TaskAdapter` interface.
+The Tracking task is implemented using the `createTaskAdapter` factory:
 
-### `TrackingTaskAdapter` (Class)
+```typescript
+export const trackingAdapter = createTaskAdapter({
+  manifest: { taskId: "tracking", ... },
+  run: runTrackingTask,
+  terminate: async () => { /* module + cursor cleanup */ },
+});
+```
 
-- **`initialize(context)`**: Sets up the task context.
-- **`execute()`**: Runs the main Tracking task logic (pursuit or MOT) using a native animation loop and managing DRT scopes via `TaskModuleRunner`.
-- **`terminate()`**: Performs cleanup, including stopping all active task modules and resetting the cursor.
+- **`run(context)`**: Runs the main Tracking task logic (pursuit or MOT) using a native animation loop, managing DRT scopes via `TaskModuleRunner`.
+- **`terminate()`**: Stops all active task modules and resets the cursor.
 
 ## 2. Purpose
 

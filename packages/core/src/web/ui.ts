@@ -139,6 +139,41 @@ export interface CreateScaledCanvasHostArgs {
   viewportPaddingPx?: number;
 }
 
+/**
+ * Manages browser environment state (cursor visibility, scroll blocking, key blocking)
+ * during task execution. Provides a single cleanup() method for the terminate handler,
+ * eliminating the need for scattered module-level mutable disposer variables.
+ */
+export class TaskEnvironmentGuard {
+  private disposers: Array<() => void> = [];
+
+  /** Install a key scroll blocker for the given response keys. */
+  installKeyScrollBlocker(allowedKeys: string[]): void {
+    const remove = installKeyScrollBlocker(allowedKeys);
+    this.disposers.push(remove);
+  }
+
+  /** Lock page scrolling (overflow: hidden on html/body). */
+  installPageScrollLock(): void {
+    const remove = lockPageScroll();
+    this.disposers.push(remove);
+  }
+
+  /** Register an arbitrary cleanup function to run on cleanup(). */
+  addDisposer(fn: () => void): void {
+    this.disposers.push(fn);
+  }
+
+  /** Restore cursor, remove all scroll/key blockers, and run any registered disposers. */
+  cleanup(): void {
+    setCursorHidden(false);
+    for (const dispose of this.disposers) {
+      try { dispose(); } catch { /* ignore */ }
+    }
+    this.disposers = [];
+  }
+}
+
 export function resolvePageBackground(args: {
   coreConfig?: CoreConfig | null;
   taskConfig?: JSONObject | null;
@@ -168,6 +203,30 @@ function ensureCursorHiddenStyles(): void {
 export function setCursorHidden(hidden: boolean): void {
   ensureCursorHiddenStyles();
   document.documentElement.classList.toggle(CURSOR_HIDDEN_CLASS, hidden);
+}
+
+/**
+ * Determines whether the cursor should be hidden during a given jsPsych trial phase.
+ * Common phases like fixation, blank, stimulus, response, and feedback hide the cursor
+ * so participants aren't distracted. Instruction and continue screens should NOT hide
+ * the cursor (they need button clicks), and this function returns false for any phase
+ * not in the explicit list.
+ */
+export function shouldHideCursorForPhase(phase: unknown): boolean {
+  if (typeof phase !== "string") return false;
+  return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
+}
+
+/**
+ * Extract and normalize the response key and RT from a jsPsych trial data object.
+ * Used by jsPsych-based RT tasks (SFT, Stroop, NBack) to standardize response extraction.
+ */
+export function extractJsPsychTrialResponse(data: Record<string, unknown>): { key: string | null; rtMs: number | null } {
+  const rawKey = data.response;
+  const rawRt = data.rt;
+  const key = typeof rawKey === "string" ? normalizeKey(rawKey) : null;
+  const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
+  return { key, rtMs };
 }
 
 export function normalizeKey(key: string): string {
