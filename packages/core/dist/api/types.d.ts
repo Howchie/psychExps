@@ -58,6 +58,7 @@ export interface AutoResponderRangeConfig {
 }
 export interface AutoResponderConfig {
     enabled?: boolean;
+    jsPsychSimulationMode?: "data-only" | "visual";
     seed?: string | number;
     continueDelayMs?: AutoResponderRangeConfig;
     responseRtMs?: {

@@ -1,4 +1,4 @@
-import { readJatosSelectionInput, isJatosAvailable } from "../infrastructure/jatos";
+import { readJatosSelectionInput, readJatosUrlQueryParameters, isJatosAvailable } from "../infrastructure/jatos";
 import { resolveParticipantIds } from "../infrastructure/participant";
 import { parseOverridesFromUrl } from "../infrastructure/config";
 function detectPlatform(params) {
@@ -9,6 +9,15 @@ function detectPlatform(params) {
     if (params.get("SONA_ID"))
         return "sona";
     return "local";
+}
+function mergeQueryParams(primary, fallback) {
+    const merged = new URLSearchParams(primary.toString());
+    for (const [key, value] of fallback.entries()) {
+        if (merged.has(key))
+            continue;
+        merged.append(key, value);
+    }
+    return merged;
 }
 function asObject(value) {
     if (typeof value === "string") {
@@ -75,7 +84,10 @@ function pickFirstSelectionValue(source, keys) {
     return null;
 }
 export function resolveSelection(coreConfig) {
-    const params = new URLSearchParams(window.location.search);
+    const browserParams = new URLSearchParams(window.location.search);
+    const params = isJatosAvailable()
+        ? mergeQueryParams(browserParams, readJatosUrlQueryParameters())
+        : browserParams;
     const jatosInput = asObject(readJatosSelectionInput());
     const jatosSelection = asObject(jatosInput?.selection);
     const jatosExperiment = asObject(jatosInput?.experiment);
