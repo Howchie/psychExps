@@ -873,11 +873,11 @@ function buildBlockPlan(config, rng) {
                 ruleCueLabel: variant.ruleCueLabel,
             };
         });
-        const rules = Array.from(new Set(trials.map((t) => t.rule)));
+        const rule = trials.length > 0 && trials.every((t) => t.rule === trials[0].rule) ? trials[0].rule : "MIXED";
         return {
             id: block.id,
             label: block.label,
-            rule: rules.length === 1 ? rules[0] : "MIXED",
+            rule,
             trials,
             feedback: block.feedback,
             beforeBlockScreens: block.beforeBlockScreens,
