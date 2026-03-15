@@ -41,8 +41,9 @@ export function recordsToCsv<T extends object>(records: T[]): string {
   if (records.length === 0) return "";
 
   const columnSet = new Set<string>();
-  for (const record of records) {
-    for (const key of Object.keys(record as Record<string, unknown>)) {
+  const scanLimit = Math.min(records.length, 100);
+  for (let i = 0; i < scanLimit; i++) {
+    for (const key of Object.keys(records[i] as Record<string, unknown>)) {
       columnSet.add(key);
     }
   }

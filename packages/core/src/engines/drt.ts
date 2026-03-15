@@ -583,13 +583,12 @@ export class DrtPresenter {
   private showVisual(): void {
     const element = this.ensureVisualElement();
     if (!element) return;
+    const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
     if (typeof this.config.visual.leftPx === "number") {
-      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
       const leftPx = rect ? rect.left + this.config.visual.leftPx : this.config.visual.leftPx;
       element.style.left = `${Math.round(leftPx)}px`;
       element.style.transform = "";
     } else {
-      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
       if (rect && rect.width > 0) {
         element.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
       } else {
@@ -597,7 +596,6 @@ export class DrtPresenter {
       }
       element.style.transform = "translateX(-50%)";
     }
-    const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
     if (rect && rect.height > 0) {
       element.style.top = `${Math.round(rect.top + this.config.visual.topPx)}px`;
     } else {

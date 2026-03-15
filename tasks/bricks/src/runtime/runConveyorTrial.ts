@@ -481,8 +481,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       gameState.step(dt);
       if (autoEnabled && trialStarted) {
         if (gameState.elapsed >= nextAutoActionAt) {
-          const candidate = gameState.bricks.values().next().value;
-          if (candidate) {
+          const activeBricks = gameState.activeBricks;
+          if (activeBricks.length > 0) {
+            const candidate = activeBricks[Math.floor(Math.random() * activeBricks.length)] ?? activeBricks[0];
             const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
             const point = candidate?.sprite ?? { x: 0, y: 0 };
             gameState.handleBrickHold(String(candidate.id), holdDurationMs, gameState.elapsed, {
