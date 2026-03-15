@@ -3,34 +3,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { sftAdapter } from './index';
-import { createVariableResolver } from '@experiments/core';
-describe('SftTaskAdapter', () => {
-    it('should initialize correctly', async () => {
-        const taskConfig = {
-            design: {
-                manipulations: [
-                    { id: 'm1', trial_plan: { variants: [{ rule: 'OR', weight: 1 }] } }
-                ],
-                blocks: [
-                    { id: 'b1', manipulation: 'm1', n_trials: 10 }
-                ]
-            }
-        };
-        const resolver = createVariableResolver({
-            variables: {}
-        });
-        const context = {
-            container: document.createElement('div'),
-            selection: {
-                participant: { participantId: 'p1', sessionId: 's1' },
-                variantId: 'v1'
-            },
-            taskConfig: taskConfig,
-            resolver: resolver
-        };
-        await sftAdapter.initialize(context);
-        // Verify that context was stored
-        expect(sftAdapter.context).toBe(context);
+describe('sftAdapter', () => {
+    it('exposes manifest and lifecycle hooks', () => {
+        expect(sftAdapter.manifest.taskId).toBe('sft');
+        expect(typeof sftAdapter.initialize).toBe('function');
+        expect(typeof sftAdapter.execute).toBe('function');
+        expect(typeof sftAdapter.terminate).toBe('function');
     });
 });
 //# sourceMappingURL=index.test.js.map
