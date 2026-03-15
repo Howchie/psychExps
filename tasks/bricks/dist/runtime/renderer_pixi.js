@@ -443,8 +443,14 @@ export class ConveyorRenderer {
         this.furnaceFlickerTimeMs = 0;
         this.spotlightGraphics = null;
         this.spotlightRing = null;
+        this.spotlightRect = null;
         this.activeBrickId = null;
         this.brickHoldStart = new Map();
+        this.canvasView = null;
+        this.pointerInCanvas = false;
+        this.pointerCanvasPos = { x: null, y: null };
+        this._teardownCanvasPointerTracking = null;
+        this._brickHoveredId = null;
         this.pointerDebugEnabled = Boolean(config?.debug?.pointerOverlay || config?.debug?.pointerConsole);
         this.pointerDebugLines = [];
         this.pointerDebugText = null;
@@ -495,10 +501,12 @@ export class ConveyorRenderer {
         const view = this.app.view || this.app.canvas || null;
         if (view) {
             container.appendChild(view);
+            this.canvasView = view;
             const imageRendering = String(perfCfg.imageRendering ?? 'crisp-edges').trim();
             if (imageRendering) {
                 view.style.imageRendering = imageRendering;
             }
+            this._bindCanvasPointerTracking(view);
         }
         if (this.app?.renderer) {
             this.app.renderer.roundPixels = this.pixelSnapBricks;
@@ -1187,11 +1195,213 @@ export class ConveyorRenderer {
     _isSpotlightHitAreaEnabled() {
         return this._getInteractionTargetMode() === 'spotlight';
     }
+    _resolveSpotlightSnapMode() {
+        const spotlightCfg = this.config?.display?.spotlight || {};
+        const snapModeRaw = spotlightCfg.snapMode ?? spotlightCfg.geometrySnapMode ?? spotlightCfg.renderSnapMode;
+        const text = String(snapModeRaw ?? 'screen').trim().toLowerCase();
+        if (text === 'none' || text === 'off' || text === 'false') {
+            return 'none';
+        }
+        if (text === 'pixel' || text === 'legacy') {
+            return 'pixel';
+        }
+        return 'screen';
+    }
+    _snapSpotlightGeometry(value, mode) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        if (mode === 'none') {
+            return numeric;
+        }
+        if (mode === 'pixel') {
+            return Math.round(numeric);
+        }
+        const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+        return Math.round(numeric * resolution) / resolution;
+    }
+    _quantizeSpotlightSignature(value, step) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return '0';
+        }
+        const safeStep = Math.max(1e-4, Number(step) || 1);
+        return String(Math.round(numeric / safeStep));
+    }
     _extractPointerPosition(e) {
         return {
             x: (e && (e.globalX ?? (e.global && e.global.x))) ?? null,
             y: (e && (e.globalY ?? (e.global && e.global.y))) ?? null
         };
+    }
+    _bindCanvasPointerTracking(view) {
+        if (!view || typeof view.addEventListener !== 'function') {
+            return;
+        }
+        const updateFromEvent = (event) => {
+            const rect = view.getBoundingClientRect?.();
+            if (!rect || rect.width <= 0 || rect.height <= 0) {
+                return;
+            }
+            const nx = (event.clientX - rect.left) / rect.width;
+            const ny = (event.clientY - rect.top) / rect.height;
+            const x = nx * Number(this.config?.display?.canvasWidth ?? 0);
+            const y = ny * Number(this.config?.display?.canvasHeight ?? 0);
+            this.pointerCanvasPos = { x, y };
+        };
+        const onPointerEnter = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerMove = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerDown = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerLeave = () => {
+            this.pointerInCanvas = false;
+            this.pointerCanvasPos = { x: null, y: null };
+        };
+        view.addEventListener('pointerenter', onPointerEnter, { passive: true });
+        view.addEventListener('pointermove', onPointerMove, { passive: true });
+        view.addEventListener('pointerdown', onPointerDown, { passive: true });
+        view.addEventListener('pointerleave', onPointerLeave, { passive: true });
+        this._teardownCanvasPointerTracking = () => {
+            view.removeEventListener('pointerenter', onPointerEnter);
+            view.removeEventListener('pointermove', onPointerMove);
+            view.removeEventListener('pointerdown', onPointerDown);
+            view.removeEventListener('pointerleave', onPointerLeave);
+        };
+    }
+    _getTrackedPointerPosition() {
+        if (!this.pointerInCanvas) {
+            return null;
+        }
+        const x = Number(this.pointerCanvasPos?.x);
+        const y = Number(this.pointerCanvasPos?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return null;
+        }
+        return { x, y };
+    }
+    _setCanvasCursor(cursor) {
+        if (!this.canvasView || !this.pointerInCanvas) {
+            return;
+        }
+        this.canvasView.style.cursor = cursor;
+    }
+    _pickInteractiveBrickAtPoint(x, y) {
+        let chosen = null;
+        let chosenDepth = -Infinity;
+        this.brickSprites.forEach((sprite) => {
+            if (!sprite || sprite.eventMode === 'none' || sprite.visible === false) {
+                return;
+            }
+            let contains = false;
+            try {
+                const bounds = sprite.getBounds?.();
+                contains = Boolean(bounds?.contains?.(x, y));
+            }
+            catch (_) {
+                contains = false;
+            }
+            if (!contains) {
+                return;
+            }
+            const depth = Number(sprite.y ?? 0) * 10000 + Number(sprite.x ?? 0);
+            if (depth >= chosenDepth) {
+                chosen = sprite;
+                chosenDepth = depth;
+            }
+        });
+        return chosen;
+    }
+    _clearBrickHoverState(pos = null) {
+        if (!this._brickHoveredId) {
+            return;
+        }
+        if (this.config?.bricks?.completionMode === 'hover_to_clear') {
+            this.onBrickHover(this._brickHoveredId, false, pos?.x ?? null, pos?.y ?? null);
+        }
+        this._brickHoveredId = null;
+    }
+    _reconcileStationaryPointerInteractions(completionMode) {
+        const pos = this._getTrackedPointerPosition();
+        if (!pos) {
+            this._clearBrickHoverState();
+            return;
+        }
+        const interactionMode = this._getInteractionTargetMode();
+        let canInteract = false;
+        if (interactionMode === 'spotlight') {
+            const rect = this.spotlightRect;
+            const inside = Boolean(rect &&
+                pos.x >= rect.x &&
+                pos.x <= (rect.x + rect.w) &&
+                pos.y >= rect.y &&
+                pos.y <= (rect.y + rect.h));
+            this.spotlightPointerInside = inside;
+            this.spotlightPointerPos = { x: pos.x, y: pos.y };
+            canInteract = inside && Boolean(this.activeBrickId);
+            this._clearBrickHoverState(pos);
+        }
+        else if (interactionMode === 'conveyor') {
+            let hoveredConveyorId = null;
+            this.conveyorZones.forEach((zone, cid) => {
+                if (hoveredConveyorId) {
+                    return;
+                }
+                try {
+                    const bounds = zone?.getBounds?.();
+                    if (bounds?.contains?.(pos.x, pos.y)) {
+                        hoveredConveyorId = cid;
+                    }
+                }
+                catch (_) {
+                    // ignore
+                }
+            });
+            const previousHovered = new Set(this.conveyorHovered);
+            this.conveyorHovered.clear();
+            if (hoveredConveyorId) {
+                this.conveyorHovered.add(hoveredConveyorId);
+                this.conveyorPointerPos.set(hoveredConveyorId, { x: pos.x, y: pos.y });
+                canInteract = Boolean(this._getConveyorTargetBrickId(hoveredConveyorId));
+            }
+            previousHovered.forEach((cid) => {
+                if (this.conveyorHovered.has(cid)) {
+                    return;
+                }
+                const prev = this.conveyorHoverTarget.get(cid);
+                this.conveyorHoverTarget.delete(cid);
+                if (prev && completionMode === 'hover_to_clear') {
+                    this.onBrickHover(prev, false, pos.x, pos.y);
+                }
+            });
+            this._clearBrickHoverState(pos);
+        }
+        else {
+            const hoveredSprite = this._pickInteractiveBrickAtPoint(pos.x, pos.y);
+            const nextId = hoveredSprite?.id ?? null;
+            canInteract = Boolean(nextId);
+            if (completionMode === 'hover_to_clear') {
+                if (this._brickHoveredId && this._brickHoveredId !== nextId) {
+                    this.onBrickHover(this._brickHoveredId, false, pos.x, pos.y);
+                }
+                if (nextId && this._brickHoveredId !== nextId) {
+                    this.onBrickHover(nextId, true, pos.x, pos.y);
+                }
+                this._brickHoveredId = nextId;
+            }
+            else {
+                this._clearBrickHoverState(pos);
+            }
+        }
+        this._setCanvasCursor(canInteract ? 'pointer' : 'default');
     }
     _getConveyorTargetBrickId(conveyorId) {
         const entries = this.bricksByConveyor.get(String(conveyorId)) || [];
@@ -2338,7 +2548,10 @@ export class ConveyorRenderer {
             }
         });
         this.perfStats.peakBrickSprites = Math.max(this.perfStats.peakBrickSprites, this.brickSprites.size);
-        if (conveyorWideHitArea && completionMode === 'hover_to_clear') {
+        this._updateSpotlight(focusState);
+        this._reconcileStationaryPointerInteractions(completionMode);
+        const conveyorHoverReconciled = conveyorWideHitArea && completionMode === 'hover_to_clear' && this.pointerInCanvas;
+        if (conveyorWideHitArea && completionMode === 'hover_to_clear' && !conveyorHoverReconciled) {
             this.conveyorHovered.forEach((cid) => {
                 const next = this._getConveyorTargetBrickId(cid);
                 const prev = this.conveyorHoverTarget.get(cid) || null;
@@ -2356,7 +2569,6 @@ export class ConveyorRenderer {
             });
         }
         this._syncSpotlightHoverTarget(completionMode);
-        this._updateSpotlight(focusState);
     }
     _resetBrickVisualChildren(sprite) {
         if (!sprite) {
@@ -2993,6 +3205,7 @@ export class ConveyorRenderer {
             if (this._isSpotlightHitAreaEnabled()) {
                 this._teardownSpotlightZone();
             }
+            this.spotlightRect = null;
             this._lastSpotlightSignature = '';
             return;
         }
@@ -3008,23 +3221,44 @@ export class ConveyorRenderer {
         if (!sprite) {
             this.spotlightGraphics.clear();
             this.spotlightRing.clear();
+            this.spotlightRect = null;
             return;
         }
-        const pad = Math.max(0, Number(focusState.spotlightPadding ?? 18));
-        const dimAlpha = Math.max(0, Math.min(0.95, Number(focusState.dimAlpha ?? 0.45)));
-        const cornerRadius = 10;
-        const holeX = sprite.x - pad;
-        const holeY = sprite.y - pad;
-        const holeW = sprite.brickWidth + pad * 2;
-        const holeH = sprite.brickHeight + pad * 2;
+        const spotlightCfg = this.config?.display?.spotlight || {};
+        const pad = Math.max(0, Number(focusState.spotlightPadding ?? spotlightCfg.paddingPx ?? 18));
+        const dimAlpha = Math.max(0, Math.min(0.95, Number(focusState.dimAlpha ?? spotlightCfg.dimAlpha ?? 0.45)));
+        const baseCornerRadius = Math.max(0, Number(spotlightCfg.cornerRadiusPx ?? 10));
+        const ringWidth = Math.max(1, Number(spotlightCfg.ringWidthPx ?? 3));
+        const ringAlpha = Math.max(0, Math.min(1, Number(spotlightCfg.ringAlpha ?? 0.95)));
+        const ringColor = toPixiColor(spotlightCfg.ringColor ?? '#f8fafc');
+        const snapMode = this._resolveSpotlightSnapMode();
+        const rawHoleX = sprite.x - pad;
+        const rawHoleY = sprite.y - pad;
+        const rawHoleW = sprite.brickWidth + pad * 2;
+        const rawHoleH = sprite.brickHeight + pad * 2;
+        const cornerRadiusRaw = Math.min(baseCornerRadius, rawHoleW / 2, rawHoleH / 2);
+        const holeX = this._snapSpotlightGeometry(rawHoleX, snapMode);
+        const holeY = this._snapSpotlightGeometry(rawHoleY, snapMode);
+        const holeW = Math.max(1, this._snapSpotlightGeometry(rawHoleW, snapMode));
+        const holeH = Math.max(1, this._snapSpotlightGeometry(rawHoleH, snapMode));
+        const cornerRadius = Math.max(0, this._snapSpotlightGeometry(cornerRadiusRaw, snapMode));
+        this.spotlightRect = { x: holeX, y: holeY, w: holeW, h: holeH };
         const canvasW = this.config.display.canvasWidth;
         const canvasH = this.config.display.canvasHeight;
+        const signatureStepRaw = Number(spotlightCfg.signatureQuantizePx);
+        const signatureStep = Number.isFinite(signatureStepRaw)
+            ? Math.max(0.001, signatureStepRaw)
+            : (snapMode === 'none' ? 0.25 : 1);
         const signature = [
-            Math.round(holeX),
-            Math.round(holeY),
-            Math.round(holeW),
-            Math.round(holeH),
+            this._quantizeSpotlightSignature(holeX, signatureStep),
+            this._quantizeSpotlightSignature(holeY, signatureStep),
+            this._quantizeSpotlightSignature(holeW, signatureStep),
+            this._quantizeSpotlightSignature(holeH, signatureStep),
+            this._quantizeSpotlightSignature(cornerRadius, signatureStep),
             Math.round(dimAlpha * 1000),
+            Math.round(ringWidth * 1000),
+            Math.round(ringAlpha * 1000),
+            ringColor,
             canvasW,
             canvasH
         ].join('|');
@@ -3048,7 +3282,7 @@ export class ConveyorRenderer {
         }
         this.spotlightGraphics.endFill();
         this.spotlightRing.clear();
-        this.spotlightRing.lineStyle(3, 0xf8fafc, 0.95);
+        this.spotlightRing.lineStyle(ringWidth, ringColor, ringAlpha);
         this.spotlightRing.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
         this._ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius);
     }
@@ -3280,6 +3514,7 @@ export class ConveyorRenderer {
         this._teardownSpotlightZone();
         this.bricksByConveyor.clear();
         this.conveyorZones.clear();
+        this._clearBrickHoverState();
         this.brickHoldStart.clear();
         this.brickSprites.forEach((sprite) => sprite.destroy());
         this.brickSprites.clear();
@@ -3297,6 +3532,10 @@ export class ConveyorRenderer {
                 this.root.removeChild(view);
             }
         }
+        if (this._teardownCanvasPointerTracking) {
+            this._teardownCanvasPointerTracking();
+            this._teardownCanvasPointerTracking = null;
+        }
         if (this.backgroundTextureOwned && this.backgroundTexture?.destroy) {
             this.backgroundTexture.destroy(true);
         }
@@ -3311,6 +3550,10 @@ export class ConveyorRenderer {
         this.beltTextureOwned = false;
         this.hudPointsAdornment = null;
         this._lastHudPointsAdornmentSignature = '';
+        this.canvasView = null;
+        this.pointerInCanvas = false;
+        this.pointerCanvasPos = { x: null, y: null };
+        this.spotlightRect = null;
     }
     getPerformanceSnapshot() {
         return {
