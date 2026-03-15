@@ -28,8 +28,30 @@ export class SceneRenderer {
   private renderItem(item: SceneItem, pos: Point): void {
     if (item.category === "shape") {
       this.renderShape(item, pos);
+    } else if (item.category === "image") {
+      this.renderImage(item, pos);
     }
-    // TODO: Support image rendering if item has image features
+  }
+
+  private renderImage(item: SceneItem, pos: Point): void {
+    const { image, width, height, size } = item.features as {
+      image: CanvasImageSource;
+      width?: number;
+      height?: number;
+      size?: number;
+    };
+
+    if (!image) return;
+
+    // Use explicit width/height, falling back to size, or intrinsic image dimensions.
+    const w = width ?? size ?? (image as any).width;
+    const h = height ?? size ?? (image as any).height;
+
+    if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+      this.ctx.drawImage(image, pos.x - w / 2, pos.y - h / 2, w, h);
+    } else {
+      this.ctx.drawImage(image, pos.x, pos.y);
+    }
   }
 
   private renderShape(item: SceneItem, pos: Point): void {

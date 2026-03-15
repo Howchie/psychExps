@@ -1,5 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ConfigurationManager } from './config';
+import { ConfigurationManager, parseOverridesFromUrl } from './config';
+
+describe('parseOverridesFromUrl', () => {
+  it('should return null if overrides parameter is missing', () => {
+    const params = new URLSearchParams('');
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+
+  it('should parse a valid JSON object', () => {
+    const validJson = JSON.stringify({ a: 1, b: 'test' });
+    const params = new URLSearchParams(`overrides=${encodeURIComponent(validJson)}`);
+    expect(parseOverridesFromUrl(params)).toEqual({ a: 1, b: 'test' });
+  });
+
+  it('should return null for malformed URL encoding', () => {
+    // %E0%A4%A is malformed URI
+    const params = new URLSearchParams('overrides=%E0%A4%A');
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+
+  it('should return null for malformed JSON', () => {
+    const invalidJson = '{a:1';
+    const params = new URLSearchParams(`overrides=${encodeURIComponent(invalidJson)}`);
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+
+  it('should return null if parsed JSON is an array', () => {
+    const arrayJson = JSON.stringify([1, 2, 3]);
+    const params = new URLSearchParams(`overrides=${encodeURIComponent(arrayJson)}`);
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+
+  it('should return null if parsed JSON is a primitive', () => {
+    const primitiveJson = JSON.stringify('test');
+    const params = new URLSearchParams(`overrides=${encodeURIComponent(primitiveJson)}`);
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+
+  it('should return null if parsed JSON is null', () => {
+    const nullJson = JSON.stringify(null);
+    const params = new URLSearchParams(`overrides=${encodeURIComponent(nullJson)}`);
+    expect(parseOverridesFromUrl(params)).toBeNull();
+  });
+});
 
 describe('ConfigurationManager', () => {
   const base = { a: 1, b: { c: 2 } };
