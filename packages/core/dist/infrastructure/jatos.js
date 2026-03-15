@@ -40,6 +40,34 @@ export function readJatosSelectionInput() {
         return fromComponent;
     return toObject(api.studySessionData);
 }
+function appendObjectEntriesToParams(params, source) {
+    for (const [key, value] of Object.entries(source)) {
+        if (value == null)
+            continue;
+        if (Array.isArray(value)) {
+            for (const entry of value) {
+                if (entry == null)
+                    continue;
+                params.append(key, String(entry));
+            }
+            continue;
+        }
+        params.append(key, String(value));
+    }
+}
+/**
+ * Returns launch query parameters preserved by JATOS across Publix redirects.
+ * Falls back to an empty URLSearchParams if not available.
+ */
+export function readJatosUrlQueryParameters() {
+    const api = getJatosApi();
+    if (!api || !api.urlQueryParameters || typeof api.urlQueryParameters !== "object") {
+        return new URLSearchParams();
+    }
+    const params = new URLSearchParams();
+    appendObjectEntriesToParams(params, api.urlQueryParameters);
+    return params;
+}
 export async function submitToJatos(payload) {
     const api = getJatosApi();
     if (!api)

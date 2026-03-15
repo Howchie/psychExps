@@ -95,9 +95,15 @@ export function resolveBricksStatsPresentation(config: unknown): BricksStatsPres
     dropped: normalizeScope(scopeByMetricRaw?.dropped, defaultScope),
     points: normalizeScope(scopeByMetricRaw?.points, defaultScope),
   };
-  const resetRules = Array.isArray(raw?.reset)
-    ? raw.reset.map(normalizeResetRule).filter((rule): rule is BricksStatsPresentationRule => Boolean(rule))
-    : [];
+  const resetRules: BricksStatsPresentationRule[] = [];
+  if (Array.isArray(raw?.reset)) {
+    for (let i = 0; i < raw.reset.length; i++) {
+      const rule = normalizeResetRule(raw.reset[i]);
+      if (rule) {
+        resetRules.push(rule);
+      }
+    }
+  }
 
   return { defaultScope, scopeByMetric, resetRules };
 }
