@@ -39,10 +39,22 @@ export declare class ConveyorRenderer {
     _getInteractionTargetMode(): "spotlight" | "conveyor" | "brick";
     _isConveyorHitAreaEnabled(): boolean;
     _isSpotlightHitAreaEnabled(): boolean;
+    _resolveSpotlightSnapMode(): "none" | "pixel" | "screen";
+    _snapSpotlightGeometry(value: any, mode: any): number;
+    _quantizeSpotlightSignature(value: any, step: any): string;
     _extractPointerPosition(e: any): {
         x: any;
         y: any;
     };
+    _bindCanvasPointerTracking(view: any): void;
+    _getTrackedPointerPosition(): {
+        x: number;
+        y: number;
+    } | null;
+    _setCanvasCursor(cursor: any): void;
+    _pickInteractiveBrickAtPoint(x: any, y: any): null;
+    _clearBrickHoverState(pos?: null): void;
+    _reconcileStationaryPointerInteractions(completionMode: any): void;
     _getConveyorTargetBrickId(conveyorId: any): any;
     _syncSpotlightHoverTarget(completionMode: any): void;
     _clearSpotlightZoneInteraction(): void;
@@ -118,6 +130,13 @@ export declare class ConveyorRenderer {
     _drawBrickGraphics(sprite: any, brick: any, completionMode: any): void;
     _updateBrickProgressVisual(sprite: any, brick: any, completionMode: any): void;
     _resolveBrickTextureOverlayConfig(brick: any): any;
+    _drawTextureLabelPatch(target: any, w: any, h: any, inset: any, alphaBase: any, cfg: any): void;
+    _drawTextureBandAndPlate(target: any, w: any, h: any, inset: any, alphaBase: any, cfg: any): void;
+    _drawTexturePizza(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, idNum: any, cfg: any): void;
+    _drawTextureGiftWrap(target: any, w: any, h: any, inset: any, alphaBase: any, seamColor: any, seamWidth: any, cfg: any): void;
+    _drawTextureCheckerboard(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, topSheenAlpha: any, highlightColor: any, radius: any, cfg: any): void;
+    _drawTextureCardboardBlock(target: any, w: any, h: any, inset: any, alphaBase: any, idNum: any, cfg: any): void;
+    _drawTextureWoodPlanks(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, topSheenAlpha: any, highlightColor: any, radius: any, seamColor: any, seamWidth: any, plankCount: any, grainCount: any, nailRadius: any, cfg: any): void;
     _drawBrickTextureOverlay(target: any, brick: any, shape: any, width: any, height: any, cornerRadius: any, fillAlpha?: number): void;
     _drawBrickPrimitive(sprite: any, shape: any, width: any, height: any, cornerRadius: any): void;
     _buildBrickHitArea(shape: any, width: any, height: any): PIXI.Rectangle | PIXI.Ellipse | PIXI.Polygon;

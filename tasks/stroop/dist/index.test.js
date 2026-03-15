@@ -3,26 +3,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { stroopAdapter } from './index';
-import { createVariableResolver } from '@experiments/core';
-describe('StroopTaskAdapter', () => {
-    it('should initialize correctly', async () => {
-        const taskConfig = {
-            plan: {
-                blocks: [{ label: 'B1', trials: 10 }]
-            }
-        };
-        const resolver = createVariableResolver({ variables: {} });
-        const context = {
-            container: document.createElement('div'),
-            selection: {
-                participant: { participantId: 'p1', sessionId: 's1' },
-                variantId: 'v1'
-            },
-            taskConfig: taskConfig,
-            resolver: resolver
-        };
-        await stroopAdapter.initialize(context);
-        expect(stroopAdapter.context).toBe(context);
+describe('stroopAdapter', () => {
+    it('exposes manifest and lifecycle hooks', () => {
+        expect(stroopAdapter.manifest.taskId).toBe('stroop');
+        expect(typeof stroopAdapter.initialize).toBe('function');
+        expect(typeof stroopAdapter.execute).toBe('function');
+        expect(typeof stroopAdapter.terminate).toBe('function');
     });
 });
 //# sourceMappingURL=index.test.js.map

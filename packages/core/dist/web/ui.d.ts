@@ -117,11 +117,45 @@ export interface CreateScaledCanvasHostArgs {
     canvasHeight: number;
     viewportPaddingPx?: number;
 }
+/**
+ * Manages browser environment state (cursor visibility, scroll blocking, key blocking)
+ * during task execution. Provides a single cleanup() method for the terminate handler,
+ * eliminating the need for scattered module-level mutable disposer variables.
+ */
+export declare class TaskEnvironmentGuard {
+    private disposers;
+    /** Install a key scroll blocker for the given response keys. */
+    installKeyScrollBlocker(allowedKeys: string[]): void;
+    /** Lock page scrolling (overflow: hidden on html/body). */
+    installPageScrollLock(): void;
+    /** Register an arbitrary cleanup function to run on cleanup(). */
+    addDisposer(fn: () => void): void;
+    /** Restore cursor, remove all scroll/key blockers, and run any registered disposers. */
+    cleanup(): void;
+}
 export declare function resolvePageBackground(args: {
     coreConfig?: CoreConfig | null;
     taskConfig?: JSONObject | null;
 }): string | null;
 export declare function setCursorHidden(hidden: boolean): void;
+/**
+ * Determines whether the cursor should be hidden during a given jsPsych trial phase.
+ * Common phases like fixation, blank, stimulus, response, and feedback hide the cursor
+ * so participants aren't distracted. Instruction and continue screens should NOT hide
+ * the cursor (they need button clicks), and this function returns false for any phase
+ * not in the explicit list.
+ */
+export declare function shouldHideCursorForPhase(phase: unknown): boolean;
+/** Computes percentage accuracy (0-100) with one decimal place. */
+export declare function computeAccuracy(correct: number, total: number): number;
+/**
+ * Extract and normalize the response key and RT from a jsPsych trial data object.
+ * Used by jsPsych-based RT tasks (SFT, Stroop, NBack) to standardize response extraction.
+ */
+export declare function extractJsPsychTrialResponse(data: Record<string, unknown>): {
+    key: string | null;
+    rtMs: number | null;
+};
 export declare function normalizeKey(key: string): string;
 export declare function toJsPsychKey(key: string): string;
 export declare function toJsPsychChoices(keys: string[]): string[];
