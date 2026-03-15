@@ -503,7 +503,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       renderer.updateEffects(dt);
 
       const focusState = gameState.getFocusState();
-      renderer.syncBricks(Array.from(gameState.bricks.values()), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
+      renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
       const remainingMs = maxDuration !== null ? Math.max(0, maxDuration - gameState.elapsed) : null;
       const hudStats = gameState.getHUDStats();
       const hudDisplayStats = {

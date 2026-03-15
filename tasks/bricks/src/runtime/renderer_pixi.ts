@@ -2641,7 +2641,7 @@ export class ConveyorRenderer {
   }
 
   /**
-   * Synchronises PIXI sprites with the logical bricks array.
+   * Synchronises PIXI sprites with the logical bricks iterable.
    */
   syncBricks(bricks, completionMode, completionParams, focusState = null) {
     this._spriteSyncEpoch += 1;
@@ -2650,16 +2650,15 @@ export class ConveyorRenderer {
     const conveyorWideHitArea = interactionMode === 'conveyor';
     const spotlightWideHitArea = interactionMode === 'spotlight';
     this.bricksByConveyor.clear();
-    bricks.forEach((brick) => {
+    const focusEnabled = Boolean(focusState?.enabled);
+    this.activeBrickId = focusEnabled ? focusState?.activeBrickId ?? null : null;
+    for (const brick of bricks) {
       const cid = String(brick.conveyorId ?? '');
       if (!this.bricksByConveyor.has(cid)) {
         this.bricksByConveyor.set(cid, []);
       }
       this.bricksByConveyor.get(cid).push(brick);
-    });
-    const focusEnabled = Boolean(focusState?.enabled);
-    this.activeBrickId = focusEnabled ? focusState?.activeBrickId ?? null : null;
-    bricks.forEach((brick) => {
+
       let sprite = this.brickSprites.get(brick.id);
       if (!sprite) {
         sprite = this._createBrickSprite(brick);
@@ -2709,7 +2708,7 @@ export class ConveyorRenderer {
         sprite.tint = 0xffffff;
       }
       sprite._syncEpoch = syncEpoch;
-    });
+    }
     // Remove stale sprites.
     this.brickSprites.forEach((sprite, id) => {
       if (sprite?._syncEpoch !== syncEpoch) {
