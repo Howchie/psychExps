@@ -105,7 +105,10 @@
         "pages": [
           {
             "title": "Debrief",
-            "html": "<iframe src=\"assets/pm-words/debrief.html\" title=\"Debrief form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>"
+            "html": "<iframe src=\"assets/pm-words/debrief.html\" title=\"Debrief form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
+            "actions": [
+              { "id": "debrief_continue", "label": "Continue", "action": "continue" }
+            ]
           }
         ]
       }
@@ -328,7 +331,7 @@
         "repeatAfterBlockScreens": ["Remember:\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.\n\nPress continue when you are ready for the next set of trials."],
         "repeatUntil": {
           "enabled": true,
-          "maxAttempts": 1,
+          "maxAttempts": 3,
           "minCorrect": 2,
           "where": { "trialType": ["N"] },
           "metrics": { "correctField": "responseCorrect" }}

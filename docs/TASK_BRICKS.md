@@ -126,6 +126,11 @@ Interaction targeting note:
 - Legacy aliases remain supported:
   - `bricks.interaction.conveyorWideHitArea: true` -> `"conveyor"`
   - `bricks.interaction.spotlightWideHitArea: true` -> `"spotlight"`
+- Cursor/hover reconciliation runs each frame using tracked pointer position, so cursor/hover state updates when moving bricks/spotlight enter a stationary pointer.
+
+Spotlight rendering note:
+- `display.spotlight.snapMode` controls spotlight geometry snapping (`"screen"` default, `"pixel"`, `"none"`).
+- Use `"screen"` to reduce visible spotlight judder while keeping crisp edges; use `"none"` for fully subpixel motion.
 
 ## 4. Event/data outputs
 

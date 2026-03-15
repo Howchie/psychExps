@@ -52,6 +52,12 @@
         "scrollSnapMode": "screen",
         "scrollRenderMode": "auto"
     },
+    "spotlight": {
+      "snapMode": "screen",
+      "cornerRadiusPx": 10,
+      "ringWidthPx": 3,
+      "ringAlpha": 0.95
+    },
     "brickTextureOverlay": {
       "enable": true,
       "alpha": 1,
@@ -62,22 +68,22 @@
       "nailRadiusPx": 1,
       "insetPx": 2,
       "styles": {
-        "present_red_gold": {
+        "present_orange_purple": {
           "pattern": "gift_wrap",
-          "baseFillColor": "#ff2d2d",
+          "baseFillColor": "#FFA500",
           "baseFillAlpha": 1,
           "alpha": 1,
-          "ribbonColor": "#ffe14d",
+          "ribbonColor": "#8c198c",
           "ribbonAlpha": 1,
           "ribbonWidthRatio": 0.2,
           "ribbonInsetPx": 2
         },
-        "present_green_red": {
+        "present_green_blue": {
           "pattern": "gift_wrap",
-          "baseFillColor": "#00a34a",
+          "baseFillColor": "#149214 ",
           "baseFillAlpha": 1,
           "alpha": 1,
-          "ribbonColor": "#ff3b30",
+          "ribbonColor": "#15f4ee",
           "ribbonAlpha": 1,
           "ribbonWidthRatio": 0.2,
           "ribbonInsetPx": 2
@@ -285,8 +291,8 @@
         "textureStyle": {
           "type": "list",
           "values": [
-            "present_red_gold",
-            "present_green_red",
+            "present_orange_purple",
+            "present_green_blue",
             "present_blue_silver",
             "present_purple_gold"
           ]
@@ -656,4 +662,4 @@
    },
    "endPages": "That concludes the experiment.\nThank you very much for participating."
   }
-  }
+}

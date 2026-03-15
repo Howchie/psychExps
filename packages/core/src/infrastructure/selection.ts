@@ -1,4 +1,4 @@
-import { readJatosSelectionInput, isJatosAvailable } from "../infrastructure/jatos";
+import { readJatosSelectionInput, readJatosUrlQueryParameters, isJatosAvailable } from "../infrastructure/jatos";
 import { resolveParticipantIds } from "../infrastructure/participant";
 import { parseOverridesFromUrl } from "../infrastructure/config";
 import type { CoreConfig, Platform, SelectionContext, JSONObject } from "../api/types";
@@ -8,6 +8,15 @@ function detectPlatform(params: URLSearchParams): Platform {
   if (params.get("PROLIFIC_PID") || params.get("STUDY_ID") || params.get("SESSION_ID")) return "prolific";
   if (params.get("SONA_ID")) return "sona";
   return "local";
+}
+
+function mergeQueryParams(primary: URLSearchParams, fallback: URLSearchParams): URLSearchParams {
+  const merged = new URLSearchParams(primary.toString());
+  for (const [key, value] of fallback.entries()) {
+    if (merged.has(key)) continue;
+    merged.append(key, value);
+  }
+  return merged;
 }
 
 function asObject(value: unknown): JSONObject | null {
@@ -70,7 +79,10 @@ function pickFirstSelectionValue(source: JSONObject | null, keys: string[]): str
 }
 
 export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
-  const params = new URLSearchParams(window.location.search);
+  const browserParams = new URLSearchParams(window.location.search);
+  const params = isJatosAvailable()
+    ? mergeQueryParams(browserParams, readJatosUrlQueryParameters())
+    : browserParams;
   const jatosInput = asObject(readJatosSelectionInput());
   const jatosSelection = asObject(jatosInput?.selection);
   const jatosExperiment = asObject(jatosInput?.experiment);

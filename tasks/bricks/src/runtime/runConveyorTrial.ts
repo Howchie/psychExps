@@ -513,9 +513,12 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
         points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
       };
+      const hudUiCfg = (resolvedCfg?.display?.ui || {}) as Record<string, unknown>;
+      const hudShowTimer = hudUiCfg.showTimer !== false;
+      const hudShowDrt = drtEnabled && hudUiCfg.showDRT !== false;
       const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));
       const hudSignature = [
-        String(hudStats.timeElapsedMs),
+        hudShowTimer ? String(hudStats.timeElapsedMs) : 'timer_hidden',
         String(hudStats.bricksActive),
         String(hudDisplayStats.spawned),
         String(hudDisplayStats.cleared),
@@ -524,11 +527,11 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         String(hudStats.focusBrickId ?? ''),
         String(hudStats.focusBrickValue ?? ''),
         String(focusState?.activeBrickId ?? ''),
-        remainingBucket,
-        String(drtStatsSnapshot.presented),
-        String(drtStatsSnapshot.hits),
-        String(drtStatsSnapshot.misses),
-        String(drtStatsSnapshot.falseAlarms),
+        hudShowTimer ? remainingBucket : 'timer_hidden',
+        hudShowDrt ? String(drtStatsSnapshot.presented) : 'drt_hidden',
+        hudShowDrt ? String(drtStatsSnapshot.hits) : 'drt_hidden',
+        hudShowDrt ? String(drtStatsSnapshot.misses) : 'drt_hidden',
+        hudShowDrt ? String(drtStatsSnapshot.falseAlarms) : 'drt_hidden',
       ].join('|');
       if (hudSignature !== lastHudSignature) {
         lastHudSignature = hudSignature;

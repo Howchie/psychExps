@@ -9,6 +9,7 @@ declare global {
       onLoad?: (cb: () => void) => void;
       componentJsonInput?: JSONObject | string;
       studySessionData?: JSONObject | string;
+      urlQueryParameters?: Record<string, unknown>;
     };
   }
 }
@@ -50,6 +51,34 @@ export function readJatosSelectionInput(): JSONObject | null {
   const fromComponent = toObject(api.componentJsonInput);
   if (fromComponent) return fromComponent;
   return toObject(api.studySessionData);
+}
+
+function appendObjectEntriesToParams(params: URLSearchParams, source: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(source)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry == null) continue;
+        params.append(key, String(entry));
+      }
+      continue;
+    }
+    params.append(key, String(value));
+  }
+}
+
+/**
+ * Returns launch query parameters preserved by JATOS across Publix redirects.
+ * Falls back to an empty URLSearchParams if not available.
+ */
+export function readJatosUrlQueryParameters(): URLSearchParams {
+  const api = getJatosApi();
+  if (!api || !api.urlQueryParameters || typeof api.urlQueryParameters !== "object") {
+    return new URLSearchParams();
+  }
+  const params = new URLSearchParams();
+  appendObjectEntriesToParams(params, api.urlQueryParameters);
+  return params;
 }
 
 export async function submitToJatos(payload: string | JSONObject): Promise<boolean> {

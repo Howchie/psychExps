@@ -422,7 +422,6 @@ interface TrialRecord {
   trial_code: string;
   item: string;
   stimulusPath: string;
-  stimulusVariant: number;
   sourceCategory: string;
   itemCategory: string;
   correctResponse: string;
@@ -573,7 +572,6 @@ function appendJsPsychNbackTrial(args: {
     trialType: trial.trialType,
     item: trial.item,
     stimulusPath: resolvedStimulus,
-    stimulusVariant: block.stimulusVariant ?? -1,
     sourceCategory: trial.sourceCategory,
     itemCategory: trial.itemCategory,
     correctResponse: trial.correctResponse,
@@ -884,7 +882,6 @@ function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId
       trial_code: asString(row.trialType) || "",
       item: asString(row.item) || "",
       stimulusPath: asString(row.stimulusPath) || "",
-      stimulusVariant: Number(row.stimulusVariant ?? -1),
       sourceCategory: asString(row.sourceCategory) || "",
       itemCategory: asString(row.itemCategory) || "",
       correctResponse: asString(row.correctResponse) || "",
@@ -1510,7 +1507,6 @@ function resolveStimulusPath(
   resolver: VariableResolver,
 ): string {
   if (!parsed.imageAssets.enabled) return itemId;
-  const variant = Math.max(1, block.stimulusVariant ?? parsed.imageAssets.practiceVariant);
   return resolveAssetPath({
     basePath: parsed.imageAssets.basePath,
     template: parsed.imageAssets.filenameTemplate,
@@ -1520,7 +1516,6 @@ function resolveStimulusPath(
       trialIndex,
       locals: {
         itemId,
-        stimulusVariant: variant,
         blockIndex: block.blockIndex,
         blockLabel: block.label,
         nLevel: block.nLevel,

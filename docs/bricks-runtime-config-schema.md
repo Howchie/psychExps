@@ -158,6 +158,23 @@ Shape aliases accepted:
 }
 ```
 
+### `display.spotlight`
+
+```ts
+{
+  snapMode?: "screen" | "pixel" | "none"; // default "screen"
+  cornerRadiusPx?: number;                 // default 10
+  ringWidthPx?: number;                    // default 3
+  ringColor?: string | number;             // default "#f8fafc"
+  ringAlpha?: number;                      // 0..1, default 0.95
+  signatureQuantizePx?: number;            // redraw threshold in px; default 1 for snapped, 0.25 for none
+}
+```
+
+Notes:
+- `snapMode: "screen"` mirrors conveyor screen-space snapping and uses renderer resolution, reducing visible spotlight stepping/judder.
+- `snapMode: "none"` keeps fully subpixel spotlight motion (smoothest motion; potentially softer edges on low-DPR displays).
+
 ### `display.dueDateMarker`
 
 ```ts

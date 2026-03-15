@@ -126,7 +126,6 @@ Each block supports:
 - `lureCount`
 - `minPmSeparation`
 - `maxPmSeparation`
-- `stimulusVariant` (optional explicit image variant for that block)
 - `feedback` (optional per-block override; inherits global `feedback`)
 - `beforeBlockScreens` (optional string or string[]; each item renders as an extra continue screen before trials)
 - `afterBlockScreens` (optional string or string[]; each item renders as an extra continue screen after block-end summary)
@@ -141,7 +140,6 @@ Block structural fields can be token-resolved from core variables at parse time,
 - `trials`
 - `pmCount`, `targetCount`, `lureCount`
 - `minPmSeparation`, `maxPmSeparation`
-- `stimulusVariant`
 
 This enables concise factor sampling without explicit factorial matrices, e.g.:
 - manipulation override: `{ "blockType": "$var.mainBlockType", "nLevel": "$var.mainNLevel" }`
@@ -182,12 +180,13 @@ Rows are loaded at runtime and used as category pools.
 Optional image stimulus templating:
 - `enabled`
 - `basePath`
-- `filenameTemplate` (supports `{id}`, `{variant}`)
+- `filenameTemplate` (supports explicit placeholders from resolver context/variables; commonly `{itemId}`)
 - `practiceVariant`
 - `mainVariants`
 - `mainMode` (`with_replacement` or `cycle`)
 
 When enabled, trial item IDs are resolved to image paths using this template.
+No implicit `stimulusVariant` placeholder is injected; provide any filename suffix/prefix through explicit variables (for example `{imageVariant}` via block/participant variables).
 
 ### 2.8 `stimulusPools`
 

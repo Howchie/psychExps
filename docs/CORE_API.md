@@ -75,6 +75,10 @@ Manages the loading, merging, and validation of experiment configurations.
 
 Resolves task/variant/configPath/overrides/participant metadata from URL + JATOS.
 
+When running under JATOS, URL-style parameters are resolved from:
+1. `window.location.search` (if present)
+2. `jatos.urlQueryParameters` (fallback, preserves launch params across Publix redirects)
+
 Task/variant precedence:
 1. JATOS (`taskId`, `variantId`)
 2. URL (`task`, `variant`)
@@ -87,6 +91,8 @@ Overrides precedence:
 Accepted URL keys:
 - `task`, `variant`, `config`, `overrides`, `cc`
 - participant keys: `PROLIFIC_PID`, `STUDY_ID`, `SESSION_ID`, `SONA_ID`, `participant`, `survey_code`
+- auto-responder toggle: `auto`
+- auto-responder jsPsych mode: `auto_mode` (`visual` or `data-only`)
 
 ### `resolveSelectionWithJatosRetry(coreConfig, maxWaitMs?): Promise<SelectionContext>`
 

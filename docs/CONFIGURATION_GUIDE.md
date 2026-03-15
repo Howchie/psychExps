@@ -75,6 +75,7 @@ Global defaults belong in core config (`configs/core/default.json`), and task co
 {
   "autoresponder": {
     "enabled": false,
+    "jsPsychSimulationMode": "visual",
     "continueDelayMs": { "minMs": 800, "maxMs": 2600 },
     "responseRtMs": { "meanMs": 720, "sdMs": 210, "minMs": 180, "maxMs": 3200 },
     "timeoutRate": 0.08,
@@ -90,9 +91,12 @@ Resolution order:
 1. `coreConfig.autoresponder`
 2. `taskConfig.autoresponder`
 3. URL `auto=...` (final override for enabled/disabled)
+4. URL `auto_mode=visual|data-only` (final override for jsPsych simulation mode)
+
+In JATOS deployments, if the browser URL no longer contains query params after Publix redirects, core also reads launch params from `jatos.urlQueryParameters` (via `jatos.onLoad` readiness path). This preserves toggles like `auto=true` and participant IDs such as `SONA_ID`.
 
 Behavior:
-- jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode.
+- jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode (`visual` by default).
 - Continue screens auto-advance with sampled delays.
 - Native tasks (`bricks`, `tracking`, `change_detection`) auto-start and apply task-specific synthetic timing guards.
 

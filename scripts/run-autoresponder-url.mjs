@@ -122,6 +122,14 @@ function withAutoParam(rawUrl, forceAuto) {
   return parsed.toString();
 }
 
+function isPublixUrl(url) {
+  return /\/publix\//i.test(String(url || ""));
+}
+
+function isPublixFinalUrl(url) {
+  return /\/publix\/[^/]+\/final\//i.test(String(url || ""));
+}
+
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
@@ -153,6 +161,39 @@ async function pageHasDoneSignal(page, doneSelector, doneText) {
   return false;
 }
 
+async function hasVisibleAdvanceControl(page) {
+  const selectors = [
+    '.exp-continue-btn[data-action="continue"]',
+    'button[data-action="continue"]',
+    'button:has-text("Continue")',
+    'button:has-text("Next")',
+    'button:has-text("Done")',
+    'button:has-text("Submit")',
+    'button:has-text("Finish")',
+    'a:has-text("Continue")',
+    'a:has-text("Next")',
+    'a:has-text("Done")',
+    'input[type="submit"]'
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (count === 0) continue;
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    const enabled = await locator.isEnabled().catch(() => false);
+    if (!enabled) continue;
+    const text = (await locator.innerText().catch(() => "")).trim().toLowerCase();
+    const action = (await locator.getAttribute("data-action").catch(() => "")) || "";
+    if (action === "exit") continue;
+    if (text.includes("disagree")) continue;
+    if (text.includes("exit")) continue;
+    return true;
+  }
+  return false;
+}
+
 async function clickLaunchIfNeeded(page, startSelector) {
   const currentUrl = page.url();
   const isJatosStart = /\/publix\/.+\/start(\?|$)/i.test(currentUrl);
@@ -164,9 +205,12 @@ async function clickLaunchIfNeeded(page, startSelector) {
     'button:has-text("Start")',
     'button:has-text("Begin")',
     'button:has-text("Continue")',
+    'button:has-text("Done")',
+    'button:has-text("Finish")',
     'a:has-text("Start")',
     'a:has-text("Begin")',
     'a:has-text("Continue")',
+    'a:has-text("Done")',
     'input[type="submit"]'
   );
 
@@ -230,9 +274,13 @@ async function clickInTaskContinueIfNeeded(page) {
     'button:has-text("I Consent")',
     'button:has-text("Continue")',
     'button:has-text("Next")',
+    'button:has-text("Done")',
+    'button:has-text("Submit")',
+    'button:has-text("Finish")',
     'button:has-text("Start")',
     'a:has-text("Continue")',
     'a:has-text("Next")',
+    'a:has-text("Done")',
     'input[type="submit"]'
   ];
 
@@ -266,6 +314,7 @@ async function main() {
   }
 
   const runUrl = withAutoParam(args.url, args.forceAuto);
+  const launchPublix = isPublixUrl(runUrl);
   const startedAt = Date.now();
   const maxMs = Math.max(60_000, Math.round(args.maxMinutes * 60_000));
   const artifactDir =
@@ -311,6 +360,24 @@ async function main() {
   await page.goto(runUrl, { waitUntil: "domcontentloaded", timeout: args.gotoTimeoutMs });
 
   let lastHeartbeatMs = 0;
+  let sawPublix = launchPublix || isPublixUrl(page.url());
+
+  async function completeRun(status, elapsed, reason) {
+    await saveArtifacts(page, artifactDir, "complete");
+    const summary = {
+      status,
+      elapsedMs: elapsed,
+      finalUrl: page.url(),
+      reason,
+      finishedAt: Date.now(),
+    };
+    await fs.writeFile(path.join(artifactDir, "result.json"), JSON.stringify(summary, null, 2), "utf8");
+    console.log(`Completed in ${(elapsed / 1000).toFixed(1)}s (${reason})`);
+    console.log(`Artifacts: ${artifactDir}`);
+    await browser.close();
+    process.exit(0);
+  }
+
   try {
     while (true) {
       const elapsed = Date.now() - startedAt;
@@ -319,19 +386,21 @@ async function main() {
         throw new Error(`Timed out after ${(elapsed / 1000).toFixed(1)}s`);
       }
 
-      if (await pageHasDoneSignal(page, args.doneSelector, args.doneText)) {
-        await saveArtifacts(page, artifactDir, "complete");
-        const summary = {
-          status: "completed",
-          elapsedMs: elapsed,
-          finalUrl: page.url(),
-          finishedAt: Date.now(),
-        };
-        await fs.writeFile(path.join(artifactDir, "result.json"), JSON.stringify(summary, null, 2), "utf8");
-        console.log(`Completed in ${(elapsed / 1000).toFixed(1)}s`);
-        console.log(`Artifacts: ${artifactDir}`);
-        await browser.close();
-        process.exit(0);
+      const currentUrl = page.url();
+      if (isPublixUrl(currentUrl)) {
+        sawPublix = true;
+        if (isPublixFinalUrl(currentUrl)) {
+          await completeRun("completed", elapsed, "reached_publix_final_page");
+        }
+      } else if (sawPublix) {
+        // We were in a Publix run and then navigated away (e.g., final credit redirect).
+        await completeRun("completed", elapsed, "redirected_away_from_publix");
+      }
+
+      const doneSignal = await pageHasDoneSignal(page, args.doneSelector, args.doneText);
+      const advanceControlsVisible = await hasVisibleAdvanceControl(page);
+      if (doneSignal && !advanceControlsVisible) {
+        await completeRun("completed", elapsed, "done_signal_without_advance_controls");
       }
 
       await clickLaunchIfNeeded(page, args.startSelector);

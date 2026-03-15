@@ -15,6 +15,14 @@ For JATOS deployment, make a single component, add the repo directory with the a
 ```
 Replacing the values as required. Disabling local save ensures no csv is downloaded on the participant side.
 
+# JATOS test auto
+pm2 start node --name autoresponder-jatos-once --no-autorestart -- \
+    scripts/run-autoresponder-url.mjs \
+    --url "http://127.0.0.1:9000/publix/jcyRMNUWs2u?auto=true" \
+    --max-minutes 130 \
+    --done-text "Thank you very much for participating"
+pm2 status autoresponder-jatos-once
+pm2 logs autoresponder-jatos-once --lines 200 --nostream
 # Code to run bricks difficulty estimate (from root):
 npm run difficulty -w @experiments/task-bricks --config evanderHons --trials 10000 --seed 123456 --no-by-trial-type --no-by-block-trial-type
 
