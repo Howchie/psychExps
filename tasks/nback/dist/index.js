@@ -1,10 +1,9 @@
-import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, evaluateTrialOutcome, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, installKeyScrollBlocker, lockPageScroll, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, toJsPsychChoices, createResponseSemantics, computeRtPhaseDurations, resolveRtTaskConfig, mergeRtTaskConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, coerceScopedDrtConfig, createInstructionRenderer, buildTaskInstructionConfig, applyTaskInstructionConfig, maybeExportStimulusRows, resolveScopedModuleConfig, asObject, asArray, asString, asStringArray, asPositiveNumberArray, toStringScreens, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, TaskOrchestrator, createTaskAdapter, } from "@experiments/core";
+import { SeededRandom, createEventLogger, drawTrialFeedbackOnCanvas, evaluateTrialOutcome, hashSeed, normalizeKey, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, TaskEnvironmentGuard, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, computeAccuracy, shouldHideCursorForPhase, toJsPsychChoices, createResponseSemantics, computeRtPhaseDurations, resolveRtTaskConfig, mergeRtTaskConfig, coerceCsvStimulusConfig, coercePoolDrawConfig, collectPoolCandidates, createPoolDrawer, loadCategorizedStimulusPools, loadImageIfLikelyVisualStimulus, resolveAssetPath, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, coerceScopedDrtConfig, createInstructionRenderer, buildTaskInstructionConfig, applyTaskInstructionConfig, maybeExportStimulusRows, resolveScopedModuleConfig, asObject, asArray, asString, asStringArray, asPositiveNumberArray, toStringScreens, toPositiveNumber, toNonNegativeNumber, parseTrialFeedbackConfig, TaskOrchestrator, createTaskAdapter, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 let nbackContext = null;
 let nbackRuntime = null;
-let nbackRemoveKeyScrollBlocker = null;
-let nbackRemovePageScrollLock = null;
+const nbackEnvironment = new TaskEnvironmentGuard();
 let nbackRootPresentationState = null;
 async function runNbackTask(context) {
     const runtime = nbackRuntime;
@@ -36,7 +35,7 @@ async function runNbackTask(context) {
         })),
         getTrials: ({ block }) => block.trials,
         csvOptions: {
-            suffix: "nback",
+            suffix: "nback_trials",
         },
         renderInstruction: createInstructionRenderer({
             showBlockLabel: true,
@@ -47,9 +46,8 @@ async function runNbackTask(context) {
         }),
         getEvents: () => eventLogger.events,
         onTaskStart: () => {
-            const removeKeyScrollBlocker = installKeyScrollBlocker(parsed.allowedKeys);
-            nbackRemoveKeyScrollBlocker = removeKeyScrollBlocker;
-            nbackRemovePageScrollLock = lockPageScroll();
+            nbackEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
+            nbackEnvironment.installPageScrollLock();
             nbackRootPresentationState = applyNbackRootPresentation(root);
             jsPsych = initJsPsych({
                 display_element: root,
@@ -95,11 +93,8 @@ async function runNbackTask(context) {
         onBlockEnd: (ctx) => {
             const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
             const blockResponded = ctx.trialResults.reduce((acc, row) => acc + (row?.responseKey ? 1 : 0), 0);
-            const accuracy = ctx.trialResults.length > 0 ? Math.round((blockCorrect / ctx.trialResults.length) * 1000) / 10 : 0;
+            const accuracy = computeAccuracy(blockCorrect, ctx.trialResults.length);
             eventLogger.emit("block_end", { label: ctx.block.label, nLevel: ctx.block.nLevel, accuracy, responded: blockResponded }, { blockIndex: ctx.blockIndex });
-            // We can optionally override the block end screen here if we want the accuracy info
-            // But orchestrator handles standard screens. 
-            // If we want the custom accuracy info, we might need a custom hook in orchestrator.
         }
     });
 }
@@ -123,19 +118,11 @@ export const nbackAdapter = createTaskAdapter({
     },
     run: runNbackTask,
     terminate: async () => {
-        setCursorHidden(false);
         if (nbackContext?.container) {
             restoreNbackRootPresentation(nbackContext.container, nbackRootPresentationState);
             nbackRootPresentationState = null;
         }
-        if (nbackRemovePageScrollLock) {
-            nbackRemovePageScrollLock();
-            nbackRemovePageScrollLock = null;
-        }
-        if (nbackRemoveKeyScrollBlocker) {
-            nbackRemoveKeyScrollBlocker();
-            nbackRemoveKeyScrollBlocker = null;
-        }
+        nbackEnvironment.cleanup();
         nbackRuntime = null;
         nbackContext = null;
     },
@@ -165,11 +152,6 @@ async function exportNbackStimulusList(context, runtime) {
         rows,
         suffix: "nback_stimulus_list",
     });
-}
-function shouldHideCursorForPhase(phase) {
-    if (typeof phase !== "string")
-        return false;
-    return /(fixation|blank|stimulus|response|feedback)/.test(phase.toLowerCase());
 }
 function parseOptionalResponseKey(value) {
     const parsed = asString(value);
@@ -270,7 +252,6 @@ function appendJsPsychNbackTrial(args) {
         trialType: trial.trialType,
         item: trial.item,
         stimulusPath: resolvedStimulus,
-        stimulusVariant: block.stimulusVariant ?? -1,
         sourceCategory: trial.sourceCategory,
         itemCategory: trial.itemCategory,
         correctResponse: trial.correctResponse,
@@ -512,11 +493,14 @@ function evaluateNbackOutcome(parsed, _block, trial, responseKey, rtMs) {
     };
 }
 function resolveAllowedKeysForNback(semantics, block) {
-    const base = semantics.allowedKeys(["target", "non_target"]);
-    const injectedKeys = block.trials
-        .map((trial) => normalizeKey(trial.correctResponse))
-        .filter((key) => key.length > 0 && key !== "timeout");
-    return Array.from(new Set([...base, ...injectedKeys]));
+    const allowedKeys = new Set(semantics.allowedKeys(["target", "non_target"]));
+    for (const trial of block.trials) {
+        const key = normalizeKey(trial.correctResponse);
+        if (key.length > 0 && key !== "timeout") {
+            allowedKeys.add(key);
+        }
+    }
+    return Array.from(allowedKeys);
 }
 function collectNbackRecords(rows, participantId, variantId) {
     const output = [];
@@ -535,7 +519,6 @@ function collectNbackRecords(rows, participantId, variantId) {
             trial_code: asString(row.trialType) || "",
             item: asString(row.item) || "",
             stimulusPath: asString(row.stimulusPath) || "",
-            stimulusVariant: Number(row.stimulusVariant ?? -1),
             sourceCategory: asString(row.sourceCategory) || "",
             itemCategory: asString(row.itemCategory) || "",
             correctResponse: asString(row.correctResponse) || "",
@@ -1057,7 +1040,6 @@ function injectNBackLures(rng, trials, nLevel, nLures, lureLags) {
 function resolveStimulusPath(parsed, block, itemId, trialIndex, resolver) {
     if (!parsed.imageAssets.enabled)
         return itemId;
-    const variant = Math.max(1, block.stimulusVariant ?? parsed.imageAssets.practiceVariant);
     return resolveAssetPath({
         basePath: parsed.imageAssets.basePath,
         template: parsed.imageAssets.filenameTemplate,
@@ -1067,7 +1049,6 @@ function resolveStimulusPath(parsed, block, itemId, trialIndex, resolver) {
             trialIndex,
             locals: {
                 itemId,
-                stimulusVariant: variant,
                 blockIndex: block.blockIndex,
                 blockLabel: block.label,
                 nLevel: block.nLevel,
