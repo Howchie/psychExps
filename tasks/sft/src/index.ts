@@ -1171,12 +1171,16 @@ function buildBlockPlan(config: SftParsedConfig, rng: () => number): PlannedBloc
       },
     }) as Variant[];
 
-    const uniqueVariants = Array.from(new Set(variantSchedule));
+    const variantCounts = new Map<Variant, number>();
+    for (let i = 0; i < variantSchedule.length; i++) {
+      const variant = variantSchedule[i];
+      variantCounts.set(variant, (variantCounts.get(variant) ?? 0) + 1);
+    }
+
     const plannedStimuli = new Map<Variant, string[]>();
     const plannedStimulusIndex = new Map<Variant, number>();
-    for (const variant of uniqueVariants) {
+    for (const [variant, countForVariant] of variantCounts) {
       const pool = variant.trialPool.length > 0 ? variant.trialPool : config.conditionCodes;
-      const countForVariant = variantSchedule.filter((entry) => entry === variant).length;
       const schedule = buildScheduledItems({
         items: pool,
         count: countForVariant,
