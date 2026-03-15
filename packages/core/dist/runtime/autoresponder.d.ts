@@ -1,6 +1,7 @@
 import type { CoreConfig, JSONObject, SelectionContext } from "../api/types";
 export interface ResolvedAutoResponderProfile {
     enabled: boolean;
+    jsPsychSimulationMode: "data-only" | "visual";
     seed: string | number;
     continueDelayMs: {
         minMs: number;

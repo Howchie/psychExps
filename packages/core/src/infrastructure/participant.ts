@@ -1,7 +1,9 @@
 import type { CoreParticipantConfig, ParticipantIds } from "../api/types";
 
 const fallbackId = (prefix: string): string => {
-  const rand = Math.floor(Math.random() * 1e10).toString(36);
+  const array = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(array);
+  const rand = array[0].toString(36);
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
 };
 

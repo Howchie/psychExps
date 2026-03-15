@@ -876,13 +876,7 @@ function buildBlockPlan(config, rng) {
                 ruleCueLabel: variant.ruleCueLabel,
             };
         });
-        let rule = trials.length > 0 ? trials[0].rule : "MIXED";
-        for (let i = 1; i < trials.length; i++) {
-            if (trials[i].rule !== rule) {
-                rule = "MIXED";
-                break;
-            }
-        }
+        const rule = trials.length > 0 && trials.every((t) => t.rule === trials[0].rule) ? trials[0].rule : "MIXED";
         return {
             id: block.id,
             label: block.label,
