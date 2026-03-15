@@ -39,10 +39,22 @@ export declare class ConveyorRenderer {
     _getInteractionTargetMode(): "spotlight" | "conveyor" | "brick";
     _isConveyorHitAreaEnabled(): boolean;
     _isSpotlightHitAreaEnabled(): boolean;
+    _resolveSpotlightSnapMode(): "none" | "pixel" | "screen";
+    _snapSpotlightGeometry(value: any, mode: any): number;
+    _quantizeSpotlightSignature(value: any, step: any): string;
     _extractPointerPosition(e: any): {
         x: any;
         y: any;
     };
+    _bindCanvasPointerTracking(view: any): void;
+    _getTrackedPointerPosition(): {
+        x: number;
+        y: number;
+    } | null;
+    _setCanvasCursor(cursor: any): void;
+    _pickInteractiveBrickAtPoint(x: any, y: any): null;
+    _clearBrickHoverState(pos?: null): void;
+    _reconcileStationaryPointerInteractions(completionMode: any): void;
     _getConveyorTargetBrickId(conveyorId: any): any;
     _syncSpotlightHoverTarget(completionMode: any): void;
     _clearSpotlightZoneInteraction(): void;

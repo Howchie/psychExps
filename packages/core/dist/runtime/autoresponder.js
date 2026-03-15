@@ -1,6 +1,8 @@
 import { createMulberry32, hashSeed } from "../infrastructure/random";
+import { isJatosAvailable, readJatosUrlQueryParameters } from "../infrastructure/jatos";
 const DEFAULT_PROFILE = {
     enabled: false,
+    jsPsychSimulationMode: "visual",
     seed: "auto",
     continueDelayMs: { minMs: 800, maxMs: 2600 },
     responseRtMs: { meanMs: 720, sdMs: 210, minMs: 180, maxMs: 3200 },
@@ -80,7 +82,32 @@ function sampleUniformMs(range, random) {
 }
 function parseUrlAutoOverride() {
     const params = new URLSearchParams(window.location.search);
-    return parseBoolean(params.get("auto"));
+    const fromUrl = parseBoolean(params.get("auto"));
+    if (fromUrl != null)
+        return fromUrl;
+    if (!isJatosAvailable())
+        return null;
+    const jatosParams = readJatosUrlQueryParameters();
+    return parseBoolean(jatosParams.get("auto"));
+}
+function parseSimulationMode(value) {
+    if (typeof value !== "string")
+        return null;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "data-only" || normalized === "visual") {
+        return normalized;
+    }
+    return null;
+}
+function parseUrlSimulationModeOverride() {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = parseSimulationMode(params.get("auto_mode"));
+    if (fromUrl)
+        return fromUrl;
+    if (!isJatosAvailable())
+        return null;
+    const jatosParams = readJatosUrlQueryParameters();
+    return parseSimulationMode(jatosParams.get("auto_mode"));
 }
 export function resolveAutoResponderProfile(args) {
     const taskAuto = asObject(args.taskConfig?.autoresponder);
@@ -90,9 +117,14 @@ export function resolveAutoResponderProfile(args) {
         ...(taskAuto ?? {}),
     };
     const enabledByUrl = parseUrlAutoOverride();
+    const simulationModeByUrl = parseUrlSimulationModeOverride();
     const enabled = enabledByUrl ?? args.selection.auto ?? parseBoolean(source.enabled) ?? false;
+    const jsPsychSimulationMode = simulationModeByUrl
+        ?? parseSimulationMode(source.jsPsychSimulationMode)
+        ?? DEFAULT_PROFILE.jsPsychSimulationMode;
     return {
         enabled,
+        jsPsychSimulationMode,
         seed: source.seed ?? `${args.selection.participant.participantId}:${args.selection.participant.sessionId}:${args.selection.taskId}:${args.selection.variantId}:auto`,
         continueDelayMs: resolveRange(source.continueDelayMs, DEFAULT_PROFILE.continueDelayMs),
         responseRtMs: resolveResponseRt(source.responseRtMs, DEFAULT_PROFILE.responseRtMs),
@@ -169,6 +201,7 @@ export function sampleAutoHoldDurationMs() {
 }
 export async function runJsPsychTimeline(jsPsych, timeline) {
     if (activeProfile && typeof jsPsych?.simulate === "function") {
+        const simulationMode = activeProfile.jsPsychSimulationMode ?? DEFAULT_PROFILE.jsPsychSimulationMode;
         // We wrap in a promise to ensure we can definitely wait for completion
         // regardless of whether simulate() returns a promise or relies on on_finish.
         await new Promise((resolve, reject) => {
@@ -179,7 +212,7 @@ export async function runJsPsychTimeline(jsPsych, timeline) {
                 finished = true;
                 resolve();
             };
-            const result = jsPsych.simulate(timeline, "data-only", {
+            const result = jsPsych.simulate(timeline, simulationMode, {
                 on_finish: () => safeResolve(),
             });
             if (result && typeof result.then === "function") {
