@@ -369,11 +369,12 @@ export function createSampler(
           const remainingItems = items.slice();
           const remainingWeights = weights.slice();
           pool = [];
+          let totalWeight = remainingWeights.reduce((acc, value) => acc + value, 0);
+
           while (remainingItems.length > 0) {
-            const total = remainingWeights.reduce((acc, value) => acc + value, 0);
             let pickIndex = 0;
-            if (total > 0) {
-              let threshold = nextRange(rng, 0, total);
+            if (totalWeight > 0) {
+              let threshold = nextRange(rng, 0, totalWeight);
               for (let i = 0; i < remainingWeights.length; i += 1) {
                 threshold -= remainingWeights[i];
                 if (threshold <= 0 || i === remainingWeights.length - 1) {
@@ -385,8 +386,16 @@ export function createSampler(
               pickIndex = Math.floor(nextRange(rng, 0, remainingItems.length));
             }
             pool.push(remainingItems[pickIndex]);
-            remainingItems.splice(pickIndex, 1);
-            remainingWeights.splice(pickIndex, 1);
+
+            const lastIndex = remainingItems.length - 1;
+            totalWeight -= remainingWeights[pickIndex];
+
+            if (pickIndex !== lastIndex) {
+              remainingItems[pickIndex] = remainingItems[lastIndex];
+              remainingWeights[pickIndex] = remainingWeights[lastIndex];
+            }
+            remainingItems.pop();
+            remainingWeights.pop();
           }
         } else {
           pool = items.slice();

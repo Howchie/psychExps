@@ -542,14 +542,15 @@ export class GameState {
       if (!catTraits || typeof catTraits !== 'object') {
         return;
       }
-      Object.entries(catTraits).forEach(([key, value]) => {
+      for (const key in catTraits) {
+        const value = catTraits[key];
         if (value === null || value === undefined) {
-          return;
+          continue;
         }
         if (categoryTraits[key] === undefined) {
           categoryTraits[key] = value;
         }
-      });
+      }
     });
     return {
       categories: resolvedCategories,
