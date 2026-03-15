@@ -9,6 +9,7 @@ declare const BRICK_STATUS: {
  * via the public methods exposed here.
  */
 export declare class GameState {
+    activeBricks: any[];
     constructor(config: any, { onEvent, seed }?: {});
     _log(type: any, payload?: {}): void;
     _initConveyors(): void;
