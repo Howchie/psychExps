@@ -443,8 +443,14 @@ export class ConveyorRenderer {
         this.furnaceFlickerTimeMs = 0;
         this.spotlightGraphics = null;
         this.spotlightRing = null;
+        this.spotlightRect = null;
         this.activeBrickId = null;
         this.brickHoldStart = new Map();
+        this.canvasView = null;
+        this.pointerInCanvas = false;
+        this.pointerCanvasPos = { x: null, y: null };
+        this._teardownCanvasPointerTracking = null;
+        this._brickHoveredId = null;
         this.pointerDebugEnabled = Boolean(config?.debug?.pointerOverlay || config?.debug?.pointerConsole);
         this.pointerDebugLines = [];
         this.pointerDebugText = null;
@@ -495,10 +501,12 @@ export class ConveyorRenderer {
         const view = this.app.view || this.app.canvas || null;
         if (view) {
             container.appendChild(view);
+            this.canvasView = view;
             const imageRendering = String(perfCfg.imageRendering ?? 'crisp-edges').trim();
             if (imageRendering) {
                 view.style.imageRendering = imageRendering;
             }
+            this._bindCanvasPointerTracking(view);
         }
         if (this.app?.renderer) {
             this.app.renderer.roundPixels = this.pixelSnapBricks;
@@ -1187,11 +1195,213 @@ export class ConveyorRenderer {
     _isSpotlightHitAreaEnabled() {
         return this._getInteractionTargetMode() === 'spotlight';
     }
+    _resolveSpotlightSnapMode() {
+        const spotlightCfg = this.config?.display?.spotlight || {};
+        const snapModeRaw = spotlightCfg.snapMode ?? spotlightCfg.geometrySnapMode ?? spotlightCfg.renderSnapMode;
+        const text = String(snapModeRaw ?? 'screen').trim().toLowerCase();
+        if (text === 'none' || text === 'off' || text === 'false') {
+            return 'none';
+        }
+        if (text === 'pixel' || text === 'legacy') {
+            return 'pixel';
+        }
+        return 'screen';
+    }
+    _snapSpotlightGeometry(value, mode) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        if (mode === 'none') {
+            return numeric;
+        }
+        if (mode === 'pixel') {
+            return Math.round(numeric);
+        }
+        const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+        return Math.round(numeric * resolution) / resolution;
+    }
+    _quantizeSpotlightSignature(value, step) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return '0';
+        }
+        const safeStep = Math.max(1e-4, Number(step) || 1);
+        return String(Math.round(numeric / safeStep));
+    }
     _extractPointerPosition(e) {
         return {
             x: (e && (e.globalX ?? (e.global && e.global.x))) ?? null,
             y: (e && (e.globalY ?? (e.global && e.global.y))) ?? null
         };
+    }
+    _bindCanvasPointerTracking(view) {
+        if (!view || typeof view.addEventListener !== 'function') {
+            return;
+        }
+        const updateFromEvent = (event) => {
+            const rect = view.getBoundingClientRect?.();
+            if (!rect || rect.width <= 0 || rect.height <= 0) {
+                return;
+            }
+            const nx = (event.clientX - rect.left) / rect.width;
+            const ny = (event.clientY - rect.top) / rect.height;
+            const x = nx * Number(this.config?.display?.canvasWidth ?? 0);
+            const y = ny * Number(this.config?.display?.canvasHeight ?? 0);
+            this.pointerCanvasPos = { x, y };
+        };
+        const onPointerEnter = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerMove = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerDown = (event) => {
+            this.pointerInCanvas = true;
+            updateFromEvent(event);
+        };
+        const onPointerLeave = () => {
+            this.pointerInCanvas = false;
+            this.pointerCanvasPos = { x: null, y: null };
+        };
+        view.addEventListener('pointerenter', onPointerEnter, { passive: true });
+        view.addEventListener('pointermove', onPointerMove, { passive: true });
+        view.addEventListener('pointerdown', onPointerDown, { passive: true });
+        view.addEventListener('pointerleave', onPointerLeave, { passive: true });
+        this._teardownCanvasPointerTracking = () => {
+            view.removeEventListener('pointerenter', onPointerEnter);
+            view.removeEventListener('pointermove', onPointerMove);
+            view.removeEventListener('pointerdown', onPointerDown);
+            view.removeEventListener('pointerleave', onPointerLeave);
+        };
+    }
+    _getTrackedPointerPosition() {
+        if (!this.pointerInCanvas) {
+            return null;
+        }
+        const x = Number(this.pointerCanvasPos?.x);
+        const y = Number(this.pointerCanvasPos?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return null;
+        }
+        return { x, y };
+    }
+    _setCanvasCursor(cursor) {
+        if (!this.canvasView || !this.pointerInCanvas) {
+            return;
+        }
+        this.canvasView.style.cursor = cursor;
+    }
+    _pickInteractiveBrickAtPoint(x, y) {
+        let chosen = null;
+        let chosenDepth = -Infinity;
+        this.brickSprites.forEach((sprite) => {
+            if (!sprite || sprite.eventMode === 'none' || sprite.visible === false) {
+                return;
+            }
+            let contains = false;
+            try {
+                const bounds = sprite.getBounds?.();
+                contains = Boolean(bounds?.contains?.(x, y));
+            }
+            catch (_) {
+                contains = false;
+            }
+            if (!contains) {
+                return;
+            }
+            const depth = Number(sprite.y ?? 0) * 10000 + Number(sprite.x ?? 0);
+            if (depth >= chosenDepth) {
+                chosen = sprite;
+                chosenDepth = depth;
+            }
+        });
+        return chosen;
+    }
+    _clearBrickHoverState(pos = null) {
+        if (!this._brickHoveredId) {
+            return;
+        }
+        if (this.config?.bricks?.completionMode === 'hover_to_clear') {
+            this.onBrickHover(this._brickHoveredId, false, pos?.x ?? null, pos?.y ?? null);
+        }
+        this._brickHoveredId = null;
+    }
+    _reconcileStationaryPointerInteractions(completionMode) {
+        const pos = this._getTrackedPointerPosition();
+        if (!pos) {
+            this._clearBrickHoverState();
+            return;
+        }
+        const interactionMode = this._getInteractionTargetMode();
+        let canInteract = false;
+        if (interactionMode === 'spotlight') {
+            const rect = this.spotlightRect;
+            const inside = Boolean(rect &&
+                pos.x >= rect.x &&
+                pos.x <= (rect.x + rect.w) &&
+                pos.y >= rect.y &&
+                pos.y <= (rect.y + rect.h));
+            this.spotlightPointerInside = inside;
+            this.spotlightPointerPos = { x: pos.x, y: pos.y };
+            canInteract = inside && Boolean(this.activeBrickId);
+            this._clearBrickHoverState(pos);
+        }
+        else if (interactionMode === 'conveyor') {
+            let hoveredConveyorId = null;
+            this.conveyorZones.forEach((zone, cid) => {
+                if (hoveredConveyorId) {
+                    return;
+                }
+                try {
+                    const bounds = zone?.getBounds?.();
+                    if (bounds?.contains?.(pos.x, pos.y)) {
+                        hoveredConveyorId = cid;
+                    }
+                }
+                catch (_) {
+                    // ignore
+                }
+            });
+            const previousHovered = new Set(this.conveyorHovered);
+            this.conveyorHovered.clear();
+            if (hoveredConveyorId) {
+                this.conveyorHovered.add(hoveredConveyorId);
+                this.conveyorPointerPos.set(hoveredConveyorId, { x: pos.x, y: pos.y });
+                canInteract = Boolean(this._getConveyorTargetBrickId(hoveredConveyorId));
+            }
+            previousHovered.forEach((cid) => {
+                if (this.conveyorHovered.has(cid)) {
+                    return;
+                }
+                const prev = this.conveyorHoverTarget.get(cid);
+                this.conveyorHoverTarget.delete(cid);
+                if (prev && completionMode === 'hover_to_clear') {
+                    this.onBrickHover(prev, false, pos.x, pos.y);
+                }
+            });
+            this._clearBrickHoverState(pos);
+        }
+        else {
+            const hoveredSprite = this._pickInteractiveBrickAtPoint(pos.x, pos.y);
+            const nextId = hoveredSprite?.id ?? null;
+            canInteract = Boolean(nextId);
+            if (completionMode === 'hover_to_clear') {
+                if (this._brickHoveredId && this._brickHoveredId !== nextId) {
+                    this.onBrickHover(this._brickHoveredId, false, pos.x, pos.y);
+                }
+                if (nextId && this._brickHoveredId !== nextId) {
+                    this.onBrickHover(nextId, true, pos.x, pos.y);
+                }
+                this._brickHoveredId = nextId;
+            }
+            else {
+                this._clearBrickHoverState(pos);
+            }
+        }
+        this._setCanvasCursor(canInteract ? 'pointer' : 'default');
     }
     _getConveyorTargetBrickId(conveyorId) {
         const entries = this.bricksByConveyor.get(String(conveyorId)) || [];
@@ -2338,7 +2548,10 @@ export class ConveyorRenderer {
             }
         });
         this.perfStats.peakBrickSprites = Math.max(this.perfStats.peakBrickSprites, this.brickSprites.size);
-        if (conveyorWideHitArea && completionMode === 'hover_to_clear') {
+        this._updateSpotlight(focusState);
+        this._reconcileStationaryPointerInteractions(completionMode);
+        const conveyorHoverReconciled = conveyorWideHitArea && completionMode === 'hover_to_clear' && this.pointerInCanvas;
+        if (conveyorWideHitArea && completionMode === 'hover_to_clear' && !conveyorHoverReconciled) {
             this.conveyorHovered.forEach((cid) => {
                 const next = this._getConveyorTargetBrickId(cid);
                 const prev = this.conveyorHoverTarget.get(cid) || null;
@@ -2356,7 +2569,6 @@ export class ConveyorRenderer {
             });
         }
         this._syncSpotlightHoverTarget(completionMode);
-        this._updateSpotlight(focusState);
     }
     _resetBrickVisualChildren(sprite) {
         if (!sprite) {
@@ -2624,6 +2836,271 @@ export class ConveyorRenderer {
         }
         return { ...base, ...override };
     }
+    _drawTextureLabelPatch(target, w, h, inset, alphaBase, cfg) {
+        if (cfg.labelPatch !== true) {
+            return;
+        }
+        const patchW = Math.max(8, Math.round(w * 0.26));
+        const patchH = Math.max(5, Math.round(h * 0.2));
+        const px = Math.round(w - patchW - inset - 1);
+        const py = Math.round(inset + 1);
+        const patchColor = toPixiColor(cfg.labelPatchColor ?? '#f8fafc');
+        const patchAlpha = Math.max(0, Math.min(1, Number(cfg.labelPatchAlpha ?? 0.8)));
+        const patchBorder = toPixiColor(cfg.labelPatchBorderColor ?? '#334155');
+        const barcodeColor = toPixiColor(cfg.labelBarcodeColor ?? '#111827');
+        target.beginFill(patchColor, alphaBase * patchAlpha);
+        target.drawRoundedRect(px, py, patchW, patchH, 1);
+        target.endFill();
+        target.beginFill(patchBorder, alphaBase * 0.35);
+        target.drawRect(px, py + patchH - 1, patchW, 1);
+        target.endFill();
+        for (let i = 0; i < 4; i += 1) {
+            const bx = px + 2 + i * Math.max(1, Math.floor((patchW - 4) / 4));
+            const bw = Math.max(1, (i % 2 === 0 ? 1 : 2));
+            target.beginFill(barcodeColor, alphaBase * 0.55);
+            target.drawRect(bx, py + Math.max(1, Math.floor(patchH * 0.34)), bw, Math.max(1, patchH - 3));
+            target.endFill();
+        }
+    }
+    _drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg) {
+        if (cfg.bandColor == null) {
+            return;
+        }
+        const bandColor = toPixiColor(cfg.bandColor);
+        const bandAlpha = Math.max(0, Math.min(1, Number(cfg.bandAlpha ?? 0.28)));
+        const bandW = Math.max(2, Math.round(w * 0.12));
+        target.beginFill(bandColor, alphaBase * bandAlpha);
+        target.drawRect(inset, inset, bandW, Math.max(1, h - inset * 2));
+        target.drawRect(Math.max(inset, w - inset - bandW), inset, bandW, Math.max(1, h - inset * 2));
+        target.endFill();
+        const plateColor = toPixiColor(cfg.lockPlateColor ?? '#fef3c7');
+        const plateAlpha = Math.max(0, Math.min(1, Number(cfg.lockPlateAlpha ?? 0.68)));
+        const plateW = Math.max(3, Math.round(w * 0.14));
+        const plateH = Math.max(3, Math.round(h * 0.22));
+        target.beginFill(plateColor, alphaBase * plateAlpha);
+        target.drawRoundedRect(Math.round((w - plateW) * 0.5), Math.round((h - plateH) * 0.5), plateW, plateH, 1);
+        target.endFill();
+    }
+    _drawTexturePizza(target, w, h, inset, alphaBase, phase, idNum, cfg) {
+        const crustColor = toPixiColor(cfg.crustColor ?? '#a16207');
+        const sauceColor = toPixiColor(cfg.sauceColor ?? '#b91c1c');
+        const cheeseColor = toPixiColor(cfg.cheeseColor ?? '#facc15');
+        const toppingColor = toPixiColor(cfg.toppingColor ?? '#7f1d1d');
+        const sliceLineColor = toPixiColor(cfg.sliceLineColor ?? '#7c2d12');
+        const sliceCount = Math.max(4, Math.min(12, Math.floor(Number(cfg.sliceCount ?? 6))));
+        const toppingCount = Math.max(0, Math.min(24, Math.floor(Number(cfg.toppingCount ?? 7))));
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        const rx = Math.max(2, w * 0.5 - inset);
+        const ry = Math.max(2, h * 0.5 - inset);
+        const crustThickness = Math.max(2, Math.round(Math.min(rx, ry) * 0.13));
+        const sauceInset = crustThickness + 1;
+        const cheeseInset = crustThickness + Math.max(2, Math.round(crustThickness * 0.7));
+        target.beginFill(crustColor, alphaBase * 0.98);
+        target.drawEllipse(cx, cy, rx, ry);
+        target.endFill();
+        target.beginFill(sauceColor, alphaBase * 0.78);
+        target.drawEllipse(cx, cy, Math.max(1, rx - sauceInset), Math.max(1, ry - sauceInset));
+        target.endFill();
+        target.beginFill(cheeseColor, alphaBase * 0.72);
+        target.drawEllipse(cx, cy, Math.max(1, rx - cheeseInset), Math.max(1, ry - cheeseInset));
+        target.endFill();
+        const seamWidth = Math.max(1, Number(cfg.seamWidthPx ?? 1));
+        target.lineStyle(Math.max(1, seamWidth), sliceLineColor, alphaBase * 0.5);
+        for (let i = 0; i < sliceCount; i += 1) {
+            const angle = (Math.PI * 2 * i) / sliceCount + phase * Math.PI * 0.3;
+            const ex = cx + Math.cos(angle) * Math.max(1, rx - sauceInset - 1);
+            const ey = cy + Math.sin(angle) * Math.max(1, ry - sauceInset - 1);
+            target.moveTo(cx, cy);
+            target.lineTo(ex, ey);
+        }
+        target.lineStyle(0, 0, 0);
+        let local = ((idNum || 1) * 2654435761) >>> 0;
+        const rand = () => {
+            local ^= (local << 13) >>> 0;
+            local ^= local >>> 17;
+            local ^= (local << 5) >>> 0;
+            return (local >>> 0) / 0x100000000;
+        };
+        const toppingRadius = Math.max(1.2, Math.min(5, Math.min(w, h) * 0.06));
+        for (let i = 0; i < toppingCount; i += 1) {
+            const a = rand() * Math.PI * 2;
+            const r = Math.sqrt(rand()) * 0.72;
+            const tx = cx + Math.cos(a) * (rx - cheeseInset - toppingRadius) * r;
+            const ty = cy + Math.sin(a) * (ry - cheeseInset - toppingRadius) * r;
+            target.beginFill(toppingColor, alphaBase * 0.86);
+            target.drawCircle(tx, ty, toppingRadius);
+            target.endFill();
+        }
+    }
+    _drawTextureGiftWrap(target, w, h, inset, alphaBase, seamColor, seamWidth, cfg) {
+        const ribbonColor = toPixiColor(cfg.ribbonColor ?? '#fef3c7');
+        const ribbonAlpha = Math.max(0, Math.min(1, Number(cfg.ribbonAlpha ?? 1)));
+        const ribbonWidthRatio = Math.max(0.08, Math.min(0.5, Number(cfg.ribbonWidthRatio ?? 0.24)));
+        const ribbonInsetPx = Math.max(0, Number(cfg.ribbonInsetPx ?? inset));
+        const bowBorderColor = toPixiColor(cfg.bowBorderColor ?? seamColor);
+        const bowBorderAlpha = Math.max(0, Math.min(1, Number(cfg.bowBorderAlpha ?? 0.7)));
+        const bowBorderWidth = Math.max(1, Number(cfg.bowBorderWidthPx ?? seamWidth));
+        const ribbonW = Math.max(3, Math.round(w * ribbonWidthRatio));
+        const ribbonH = Math.max(3, Math.round(h * ribbonWidthRatio));
+        const cx = Math.round((w - ribbonW) * 0.5);
+        const cy = Math.round((h - ribbonH) * 0.5);
+        const usableW = Math.max(1, w - ribbonInsetPx * 2);
+        const usableH = Math.max(1, h - ribbonInsetPx * 2);
+        const paperPatternColor = toPixiColor(cfg.paperPatternColor ?? '#ffffff');
+        const paperPatternAlpha = Math.max(0, Math.min(0.75, Number(cfg.paperPatternAlpha ?? 0.32)));
+        const paperDotStep = Math.max(6, Math.floor(Number(cfg.paperDotStepPx ?? 11)));
+        for (let py = ribbonInsetPx + 2; py < ribbonInsetPx + usableH - 1; py += paperDotStep) {
+            for (let px = ribbonInsetPx + 2; px < ribbonInsetPx + usableW - 1; px += paperDotStep) {
+                target.beginFill(paperPatternColor, alphaBase * paperPatternAlpha);
+                target.drawCircle(px + ((Math.floor(py / paperDotStep) % 2) ? 2 : 0), py, 0.8);
+                target.endFill();
+            }
+        }
+        target.beginFill(ribbonColor, alphaBase * ribbonAlpha);
+        target.drawRect(cx, ribbonInsetPx, ribbonW, usableH);
+        target.drawRect(ribbonInsetPx, cy, usableW, ribbonH);
+        target.endFill();
+        const bowAlpha = alphaBase * Math.max(0.55, ribbonAlpha);
+        const bowSize = Math.max(3, Math.round(Math.min(w, h) * 0.18));
+        target.beginFill(ribbonColor, bowAlpha);
+        target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
+        target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
+        target.drawCircle(cx + ribbonW * 0.5, cy + ribbonH * 0.5, Math.max(1.2, bowSize * 0.58));
+        target.drawPolygon([
+            cx + ribbonW * 0.5 - bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+            cx + ribbonW * 0.5 - bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+            cx + ribbonW * 0.5 - bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+        ]);
+        target.drawPolygon([
+            cx + ribbonW * 0.5 + bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+            cx + ribbonW * 0.5 + bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+            cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+        ]);
+        target.endFill();
+        target.lineStyle(bowBorderWidth, bowBorderColor, alphaBase * bowBorderAlpha);
+        target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
+        target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
+        target.drawCircle(cx + ribbonW * 0.5, cy + ribbonH * 0.5, Math.max(1.2, bowSize * 0.58));
+        target.drawPolygon([
+            cx + ribbonW * 0.5 - bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+            cx + ribbonW * 0.5 - bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+            cx + ribbonW * 0.5 - bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+        ]);
+        target.drawPolygon([
+            cx + ribbonW * 0.5 + bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
+            cx + ribbonW * 0.5 + bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
+            cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
+        ]);
+        target.lineStyle(0, 0, 0);
+    }
+    _drawTextureCheckerboard(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, cfg) {
+        const colorA = toPixiColor(cfg.checkerColorA ?? '#e2e8f0');
+        const colorB = toPixiColor(cfg.checkerColorB ?? '#334155');
+        const cellPx = Math.max(4, Math.round(Number(cfg.checkerCellPx ?? 10)));
+        const usableW = Math.max(1, w - inset * 2);
+        const usableH = Math.max(1, h - inset * 2);
+        for (let y = 0; y < usableH; y += cellPx) {
+            const row = Math.floor(y / cellPx);
+            for (let x = 0; x < usableW; x += cellPx) {
+                const col = Math.floor(x / cellPx);
+                const fill = ((row + col + Math.floor(phase * 2)) % 2 === 0) ? colorA : colorB;
+                target.beginFill(fill, alphaBase * 0.76);
+                target.drawRect(inset + x, inset + y, Math.max(1, Math.min(cellPx, usableW - x)), Math.max(1, Math.min(cellPx, usableH - y)));
+                target.endFill();
+            }
+        }
+        if (topSheenAlpha > 0) {
+            target.beginFill(highlightColor, alphaBase * topSheenAlpha);
+            target.drawRoundedRect(inset, inset, Math.max(1, w - inset * 2), Math.max(1, h * 0.18), Math.max(0, radius * 0.45));
+            target.endFill();
+        }
+        this._drawTextureLabelPatch(target, w, h, inset, alphaBase, cfg);
+        this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
+    }
+    _drawTextureCardboardBlock(target, w, h, inset, alphaBase, idNum, cfg) {
+        const speckleColor = toPixiColor(cfg.speckleColor ?? '#7a5b3d');
+        const speckleAlpha = Math.max(0, Math.min(1, Number(cfg.speckleAlpha ?? 0.12)));
+        const speckleCount = Math.max(0, Math.floor(Number(cfg.speckleCount ?? 12)));
+        const tapeColor = cfg.tapeColor != null ? toPixiColor(cfg.tapeColor) : null;
+        const tapeAlpha = Math.max(0, Math.min(1, Number(cfg.tapeAlpha ?? 0)));
+        const tapeWidthRatio = Math.max(0.04, Math.min(0.45, Number(cfg.tapeWidthRatio ?? 0.16)));
+        const tapeInset = Math.max(0, Number(cfg.tapeInsetPx ?? inset));
+        const tapeOrientation = String(cfg.tapeOrientation ?? 'vertical').toLowerCase();
+        const usableW = Math.max(1, w - inset * 2);
+        const usableH = Math.max(1, h - inset * 2);
+        let local = ((idNum || 1) * 1103515245) >>> 0;
+        const rand = () => {
+            local ^= (local << 13) >>> 0;
+            local ^= local >>> 17;
+            local ^= (local << 5) >>> 0;
+            return (local >>> 0) / 0x100000000;
+        };
+        for (let i = 0; i < speckleCount; i += 1) {
+            const px = inset + Math.floor(rand() * usableW);
+            const py = inset + Math.floor(rand() * usableH);
+            const sw = Math.max(1, Math.floor(1 + rand() * 2));
+            const sh = Math.max(1, Math.floor(1 + rand() * 2));
+            target.beginFill(speckleColor, alphaBase * (speckleAlpha * (0.6 + rand() * 0.7)));
+            target.drawRect(px, py, sw, sh);
+            target.endFill();
+        }
+        if (tapeColor !== null && tapeAlpha > 0) {
+            const tapeX = tapeInset;
+            const tapeY = tapeInset;
+            const tapeW = Math.max(2, Math.round((w - tapeInset * 2) * tapeWidthRatio));
+            const tapeH = Math.max(2, Math.round((h - tapeInset * 2) * tapeWidthRatio));
+            const vx = Math.round((w - tapeW) * 0.5);
+            const hy = Math.round((h - tapeH) * 0.5);
+            target.beginFill(tapeColor, alphaBase * tapeAlpha);
+            if (tapeOrientation === 'horizontal' || tapeOrientation === 'cross') {
+                target.drawRect(tapeX, hy, Math.max(1, w - tapeInset * 2), tapeH);
+            }
+            if (tapeOrientation === 'vertical' || tapeOrientation === 'cross') {
+                target.drawRect(vx, tapeY, tapeW, Math.max(1, h - tapeInset * 2));
+            }
+            target.endFill();
+        }
+        this._drawTextureLabelPatch(target, w, h, inset, alphaBase, cfg);
+        this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
+    }
+    _drawTextureWoodPlanks(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, seamColor, seamWidth, plankCount, grainCount, nailRadius, cfg) {
+        // Top sheen (optional; can create a strong two-tone look if too high).
+        if (topSheenAlpha > 0) {
+            target.beginFill(highlightColor, alphaBase * topSheenAlpha);
+            target.drawRoundedRect(inset, inset, Math.max(1, w - inset * 2), Math.max(1, h * 0.2), Math.max(0, radius * 0.55));
+            target.endFill();
+        }
+        // Horizontal plank seams.
+        for (let i = 1; i < plankCount; i += 1) {
+            const y = Math.round((h * i) / plankCount);
+            target.beginFill(seamColor, alphaBase * 0.62);
+            target.drawRect(inset, y - seamWidth / 2, Math.max(1, w - inset * 2), seamWidth);
+            target.endFill();
+        }
+        // Light grain streaks.
+        for (let i = 0; i < grainCount; i += 1) {
+            const y = Math.round(inset + ((h - inset * 2) * ((i + phase) % grainCount)) / Math.max(1, grainCount));
+            const streakW = Math.max(6, Math.round(w * (0.28 + ((i + phase) % 3) * 0.11)));
+            const x = inset + ((i * 13 + Math.floor(phase * 17)) % Math.max(1, Math.floor(w - inset * 2 - streakW)));
+            target.beginFill(highlightColor, alphaBase * 0.18);
+            target.drawRect(x, y, streakW, 1);
+            target.endFill();
+        }
+        // Small corner nails.
+        const nailAlpha = alphaBase * 0.7;
+        const nailOffsetX = Math.max(inset + nailRadius + 1, w * 0.13);
+        const nailOffsetY = Math.max(inset + nailRadius + 1, h * 0.2);
+        const nailYBottom = Math.max(nailOffsetY, h - nailOffsetY);
+        target.beginFill(seamColor, nailAlpha);
+        target.drawCircle(nailOffsetX, nailOffsetY, nailRadius);
+        target.drawCircle(Math.max(nailOffsetX, w - nailOffsetX), nailOffsetY, nailRadius);
+        target.drawCircle(nailOffsetX, nailYBottom, nailRadius);
+        target.drawCircle(Math.max(nailOffsetX, w - nailOffsetX), nailYBottom, nailRadius);
+        target.endFill();
+        this._drawTextureLabelPatch(target, w, h, inset, alphaBase, cfg);
+        this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
+    }
     _drawBrickTextureOverlay(target, brick, shape, width, height, cornerRadius, fillAlpha = 1) {
         const cfg = this._resolveBrickTextureOverlayConfig(brick);
         if (!cfg || cfg.enable !== true) {
@@ -2660,286 +3137,32 @@ export class ConveyorRenderer {
             target.endFill();
         }
         if (pattern === 'pizza') {
-            if (!isCircular) {
-                return;
-            }
-            const crustColor = toPixiColor(cfg.crustColor ?? '#a16207');
-            const sauceColor = toPixiColor(cfg.sauceColor ?? '#b91c1c');
-            const cheeseColor = toPixiColor(cfg.cheeseColor ?? '#facc15');
-            const toppingColor = toPixiColor(cfg.toppingColor ?? '#7f1d1d');
-            const sliceLineColor = toPixiColor(cfg.sliceLineColor ?? '#7c2d12');
-            const sliceCount = Math.max(4, Math.min(12, Math.floor(Number(cfg.sliceCount ?? 6))));
-            const toppingCount = Math.max(0, Math.min(24, Math.floor(Number(cfg.toppingCount ?? 7))));
-            const cx = w * 0.5;
-            const cy = h * 0.5;
-            const rx = Math.max(2, w * 0.5 - inset);
-            const ry = Math.max(2, h * 0.5 - inset);
-            const crustThickness = Math.max(2, Math.round(Math.min(rx, ry) * 0.13));
-            const sauceInset = crustThickness + 1;
-            const cheeseInset = crustThickness + Math.max(2, Math.round(crustThickness * 0.7));
-            target.beginFill(crustColor, alphaBase * 0.98);
-            target.drawEllipse(cx, cy, rx, ry);
-            target.endFill();
-            target.beginFill(sauceColor, alphaBase * 0.78);
-            target.drawEllipse(cx, cy, Math.max(1, rx - sauceInset), Math.max(1, ry - sauceInset));
-            target.endFill();
-            target.beginFill(cheeseColor, alphaBase * 0.72);
-            target.drawEllipse(cx, cy, Math.max(1, rx - cheeseInset), Math.max(1, ry - cheeseInset));
-            target.endFill();
-            target.lineStyle(Math.max(1, seamWidth), sliceLineColor, alphaBase * 0.5);
-            for (let i = 0; i < sliceCount; i += 1) {
-                const angle = (Math.PI * 2 * i) / sliceCount + phase * Math.PI * 0.3;
-                const ex = cx + Math.cos(angle) * Math.max(1, rx - sauceInset - 1);
-                const ey = cy + Math.sin(angle) * Math.max(1, ry - sauceInset - 1);
-                target.moveTo(cx, cy);
-                target.lineTo(ex, ey);
-            }
-            target.lineStyle(0, 0, 0);
-            let local = ((idNum || 1) * 2654435761) >>> 0;
-            const rand = () => {
-                local ^= (local << 13) >>> 0;
-                local ^= local >>> 17;
-                local ^= (local << 5) >>> 0;
-                return (local >>> 0) / 0x100000000;
-            };
-            const toppingRadius = Math.max(1.2, Math.min(5, Math.min(w, h) * 0.06));
-            for (let i = 0; i < toppingCount; i += 1) {
-                const a = rand() * Math.PI * 2;
-                const r = Math.sqrt(rand()) * 0.72;
-                const tx = cx + Math.cos(a) * (rx - cheeseInset - toppingRadius) * r;
-                const ty = cy + Math.sin(a) * (ry - cheeseInset - toppingRadius) * r;
-                target.beginFill(toppingColor, alphaBase * 0.86);
-                target.drawCircle(tx, ty, toppingRadius);
-                target.endFill();
+            if (isCircular) {
+                this._drawTexturePizza(target, w, h, inset, alphaBase, phase, idNum, cfg);
             }
             return;
         }
         if (pattern === 'gift_wrap') {
-            if (!isRectangular) {
-                return;
+            if (isRectangular) {
+                this._drawTextureGiftWrap(target, w, h, inset, alphaBase, seamColor, seamWidth, cfg);
             }
-            const ribbonColor = toPixiColor(cfg.ribbonColor ?? '#fef3c7');
-            const ribbonAlpha = Math.max(0, Math.min(1, Number(cfg.ribbonAlpha ?? 1)));
-            const ribbonWidthRatio = Math.max(0.08, Math.min(0.5, Number(cfg.ribbonWidthRatio ?? 0.24)));
-            const ribbonInsetPx = Math.max(0, Number(cfg.ribbonInsetPx ?? inset));
-            const bowBorderColor = toPixiColor(cfg.bowBorderColor ?? seamColor);
-            const bowBorderAlpha = Math.max(0, Math.min(1, Number(cfg.bowBorderAlpha ?? 0.7)));
-            const bowBorderWidth = Math.max(1, Number(cfg.bowBorderWidthPx ?? seamWidth));
-            const ribbonW = Math.max(3, Math.round(w * ribbonWidthRatio));
-            const ribbonH = Math.max(3, Math.round(h * ribbonWidthRatio));
-            const cx = Math.round((w - ribbonW) * 0.5);
-            const cy = Math.round((h - ribbonH) * 0.5);
-            const usableW = Math.max(1, w - ribbonInsetPx * 2);
-            const usableH = Math.max(1, h - ribbonInsetPx * 2);
-            const paperPatternColor = toPixiColor(cfg.paperPatternColor ?? '#ffffff');
-            const paperPatternAlpha = Math.max(0, Math.min(0.75, Number(cfg.paperPatternAlpha ?? 0.32)));
-            const paperDotStep = Math.max(6, Math.floor(Number(cfg.paperDotStepPx ?? 11)));
-            for (let py = ribbonInsetPx + 2; py < ribbonInsetPx + usableH - 1; py += paperDotStep) {
-                for (let px = ribbonInsetPx + 2; px < ribbonInsetPx + usableW - 1; px += paperDotStep) {
-                    target.beginFill(paperPatternColor, alphaBase * paperPatternAlpha);
-                    target.drawCircle(px + ((Math.floor(py / paperDotStep) % 2) ? 2 : 0), py, 0.8);
-                    target.endFill();
-                }
-            }
-            target.beginFill(ribbonColor, alphaBase * ribbonAlpha);
-            target.drawRect(cx, ribbonInsetPx, ribbonW, usableH);
-            target.drawRect(ribbonInsetPx, cy, usableW, ribbonH);
-            target.endFill();
-            const bowAlpha = alphaBase * Math.max(0.55, ribbonAlpha);
-            const bowSize = Math.max(3, Math.round(Math.min(w, h) * 0.18));
-            target.beginFill(ribbonColor, bowAlpha);
-            target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
-            target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
-            target.drawCircle(cx + ribbonW * 0.5, cy + ribbonH * 0.5, Math.max(1.2, bowSize * 0.58));
-            target.drawPolygon([
-                cx + ribbonW * 0.5 - bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
-                cx + ribbonW * 0.5 - bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
-                cx + ribbonW * 0.5 - bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
-            ]);
-            target.drawPolygon([
-                cx + ribbonW * 0.5 + bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
-                cx + ribbonW * 0.5 + bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
-                cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
-            ]);
-            target.endFill();
-            target.lineStyle(bowBorderWidth, bowBorderColor, alphaBase * bowBorderAlpha);
-            target.drawCircle(cx + ribbonW * 0.5 - bowSize, cy + ribbonH * 0.5, bowSize);
-            target.drawCircle(cx + ribbonW * 0.5 + bowSize, cy + ribbonH * 0.5, bowSize);
-            target.drawCircle(cx + ribbonW * 0.5, cy + ribbonH * 0.5, Math.max(1.2, bowSize * 0.58));
-            target.drawPolygon([
-                cx + ribbonW * 0.5 - bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
-                cx + ribbonW * 0.5 - bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
-                cx + ribbonW * 0.5 - bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
-            ]);
-            target.drawPolygon([
-                cx + ribbonW * 0.5 + bowSize * 0.2, cy + ribbonH * 0.5 + bowSize * 0.6,
-                cx + ribbonW * 0.5 + bowSize * 0.95, cy + ribbonH * 0.5 + bowSize * 1.75,
-                cx + ribbonW * 0.5 + bowSize * 0.15, cy + ribbonH * 0.5 + bowSize * 1.2,
-            ]);
-            target.lineStyle(0, 0, 0);
             return;
         }
-        const drawLabelPatch = () => {
-            if (cfg.labelPatch !== true) {
-                return;
-            }
-            const patchW = Math.max(8, Math.round(w * 0.26));
-            const patchH = Math.max(5, Math.round(h * 0.2));
-            const px = Math.round(w - patchW - inset - 1);
-            const py = Math.round(inset + 1);
-            const patchColor = toPixiColor(cfg.labelPatchColor ?? '#f8fafc');
-            const patchAlpha = Math.max(0, Math.min(1, Number(cfg.labelPatchAlpha ?? 0.8)));
-            const patchBorder = toPixiColor(cfg.labelPatchBorderColor ?? '#334155');
-            const barcodeColor = toPixiColor(cfg.labelBarcodeColor ?? '#111827');
-            target.beginFill(patchColor, alphaBase * patchAlpha);
-            target.drawRoundedRect(px, py, patchW, patchH, 1);
-            target.endFill();
-            target.beginFill(patchBorder, alphaBase * 0.35);
-            target.drawRect(px, py + patchH - 1, patchW, 1);
-            target.endFill();
-            for (let i = 0; i < 4; i += 1) {
-                const bx = px + 2 + i * Math.max(1, Math.floor((patchW - 4) / 4));
-                const bw = Math.max(1, (i % 2 === 0 ? 1 : 2));
-                target.beginFill(barcodeColor, alphaBase * 0.55);
-                target.drawRect(bx, py + Math.max(1, Math.floor(patchH * 0.34)), bw, Math.max(1, patchH - 3));
-                target.endFill();
-            }
-        };
-        const drawBandAndPlate = () => {
-            if (cfg.bandColor == null) {
-                return;
-            }
-            const bandColor = toPixiColor(cfg.bandColor);
-            const bandAlpha = Math.max(0, Math.min(1, Number(cfg.bandAlpha ?? 0.28)));
-            const bandW = Math.max(2, Math.round(w * 0.12));
-            target.beginFill(bandColor, alphaBase * bandAlpha);
-            target.drawRect(inset, inset, bandW, Math.max(1, h - inset * 2));
-            target.drawRect(Math.max(inset, w - inset - bandW), inset, bandW, Math.max(1, h - inset * 2));
-            target.endFill();
-            const plateColor = toPixiColor(cfg.lockPlateColor ?? '#fef3c7');
-            const plateAlpha = Math.max(0, Math.min(1, Number(cfg.lockPlateAlpha ?? 0.68)));
-            const plateW = Math.max(3, Math.round(w * 0.14));
-            const plateH = Math.max(3, Math.round(h * 0.22));
-            target.beginFill(plateColor, alphaBase * plateAlpha);
-            target.drawRoundedRect(Math.round((w - plateW) * 0.5), Math.round((h - plateH) * 0.5), plateW, plateH, 1);
-            target.endFill();
-        };
         if (pattern === 'checkerboard') {
-            if (!isRectangular) {
-                return;
+            if (isRectangular) {
+                this._drawTextureCheckerboard(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, cfg);
             }
-            const colorA = toPixiColor(cfg.checkerColorA ?? '#e2e8f0');
-            const colorB = toPixiColor(cfg.checkerColorB ?? '#334155');
-            const cellPx = Math.max(4, Math.round(Number(cfg.checkerCellPx ?? 10)));
-            const usableW = Math.max(1, w - inset * 2);
-            const usableH = Math.max(1, h - inset * 2);
-            for (let y = 0; y < usableH; y += cellPx) {
-                const row = Math.floor(y / cellPx);
-                for (let x = 0; x < usableW; x += cellPx) {
-                    const col = Math.floor(x / cellPx);
-                    const fill = ((row + col + Math.floor(phase * 2)) % 2 === 0) ? colorA : colorB;
-                    target.beginFill(fill, alphaBase * 0.76);
-                    target.drawRect(inset + x, inset + y, Math.max(1, Math.min(cellPx, usableW - x)), Math.max(1, Math.min(cellPx, usableH - y)));
-                    target.endFill();
-                }
-            }
-            if (topSheenAlpha > 0) {
-                target.beginFill(highlightColor, alphaBase * topSheenAlpha);
-                target.drawRoundedRect(inset, inset, Math.max(1, w - inset * 2), Math.max(1, h * 0.18), Math.max(0, radius * 0.45));
-                target.endFill();
-            }
-            drawLabelPatch();
-            drawBandAndPlate();
             return;
         }
         if (pattern === 'cardboard_block') {
-            if (!isRectangular) {
-                return;
+            if (isRectangular) {
+                this._drawTextureCardboardBlock(target, w, h, inset, alphaBase, idNum, cfg);
             }
-            const speckleColor = toPixiColor(cfg.speckleColor ?? '#7a5b3d');
-            const speckleAlpha = Math.max(0, Math.min(1, Number(cfg.speckleAlpha ?? 0.12)));
-            const speckleCount = Math.max(0, Math.floor(Number(cfg.speckleCount ?? 12)));
-            const tapeColor = cfg.tapeColor != null ? toPixiColor(cfg.tapeColor) : null;
-            const tapeAlpha = Math.max(0, Math.min(1, Number(cfg.tapeAlpha ?? 0)));
-            const tapeWidthRatio = Math.max(0.04, Math.min(0.45, Number(cfg.tapeWidthRatio ?? 0.16)));
-            const tapeInset = Math.max(0, Number(cfg.tapeInsetPx ?? inset));
-            const tapeOrientation = String(cfg.tapeOrientation ?? 'vertical').toLowerCase();
-            const usableW = Math.max(1, w - inset * 2);
-            const usableH = Math.max(1, h - inset * 2);
-            let local = ((idNum || 1) * 1103515245) >>> 0;
-            const rand = () => {
-                local ^= (local << 13) >>> 0;
-                local ^= local >>> 17;
-                local ^= (local << 5) >>> 0;
-                return (local >>> 0) / 0x100000000;
-            };
-            for (let i = 0; i < speckleCount; i += 1) {
-                const px = inset + Math.floor(rand() * usableW);
-                const py = inset + Math.floor(rand() * usableH);
-                const sw = Math.max(1, Math.floor(1 + rand() * 2));
-                const sh = Math.max(1, Math.floor(1 + rand() * 2));
-                target.beginFill(speckleColor, alphaBase * (speckleAlpha * (0.6 + rand() * 0.7)));
-                target.drawRect(px, py, sw, sh);
-                target.endFill();
-            }
-            if (tapeColor !== null && tapeAlpha > 0) {
-                const tapeX = tapeInset;
-                const tapeY = tapeInset;
-                const tapeW = Math.max(2, Math.round((w - tapeInset * 2) * tapeWidthRatio));
-                const tapeH = Math.max(2, Math.round((h - tapeInset * 2) * tapeWidthRatio));
-                const vx = Math.round((w - tapeW) * 0.5);
-                const hy = Math.round((h - tapeH) * 0.5);
-                target.beginFill(tapeColor, alphaBase * tapeAlpha);
-                if (tapeOrientation === 'horizontal' || tapeOrientation === 'cross') {
-                    target.drawRect(tapeX, hy, Math.max(1, w - tapeInset * 2), tapeH);
-                }
-                if (tapeOrientation === 'vertical' || tapeOrientation === 'cross') {
-                    target.drawRect(vx, tapeY, tapeW, Math.max(1, h - tapeInset * 2));
-                }
-                target.endFill();
-            }
-            drawLabelPatch();
-            drawBandAndPlate();
             return;
         }
-        if (!isRectangular) {
-            return;
+        if (isRectangular) {
+            this._drawTextureWoodPlanks(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, seamColor, seamWidth, plankCount, grainCount, nailRadius, cfg);
         }
-        // Top sheen (optional; can create a strong two-tone look if too high).
-        if (topSheenAlpha > 0) {
-            target.beginFill(highlightColor, alphaBase * topSheenAlpha);
-            target.drawRoundedRect(inset, inset, Math.max(1, w - inset * 2), Math.max(1, h * 0.2), Math.max(0, radius * 0.55));
-            target.endFill();
-        }
-        // Horizontal plank seams.
-        for (let i = 1; i < plankCount; i += 1) {
-            const y = Math.round((h * i) / plankCount);
-            target.beginFill(seamColor, alphaBase * 0.62);
-            target.drawRect(inset, y - seamWidth / 2, Math.max(1, w - inset * 2), seamWidth);
-            target.endFill();
-        }
-        // Light grain streaks.
-        for (let i = 0; i < grainCount; i += 1) {
-            const y = Math.round(inset + ((h - inset * 2) * ((i + phase) % grainCount)) / Math.max(1, grainCount));
-            const streakW = Math.max(6, Math.round(w * (0.28 + ((i + phase) % 3) * 0.11)));
-            const x = inset + ((i * 13 + Math.floor(phase * 17)) % Math.max(1, Math.floor(w - inset * 2 - streakW)));
-            target.beginFill(highlightColor, alphaBase * 0.18);
-            target.drawRect(x, y, streakW, 1);
-            target.endFill();
-        }
-        // Small corner nails.
-        const nailAlpha = alphaBase * 0.7;
-        const nailOffsetX = Math.max(inset + nailRadius + 1, w * 0.13);
-        const nailOffsetY = Math.max(inset + nailRadius + 1, h * 0.2);
-        const nailYBottom = Math.max(nailOffsetY, h - nailOffsetY);
-        target.beginFill(seamColor, nailAlpha);
-        target.drawCircle(nailOffsetX, nailOffsetY, nailRadius);
-        target.drawCircle(Math.max(nailOffsetX, w - nailOffsetX), nailOffsetY, nailRadius);
-        target.drawCircle(nailOffsetX, nailYBottom, nailRadius);
-        target.drawCircle(Math.max(nailOffsetX, w - nailOffsetX), nailYBottom, nailRadius);
-        target.endFill();
-        drawLabelPatch();
-        drawBandAndPlate();
     }
     _drawBrickPrimitive(sprite, shape, width, height, cornerRadius) {
         const w = Math.max(1, Number(width) || 1);
@@ -2993,6 +3216,7 @@ export class ConveyorRenderer {
             if (this._isSpotlightHitAreaEnabled()) {
                 this._teardownSpotlightZone();
             }
+            this.spotlightRect = null;
             this._lastSpotlightSignature = '';
             return;
         }
@@ -3008,23 +3232,44 @@ export class ConveyorRenderer {
         if (!sprite) {
             this.spotlightGraphics.clear();
             this.spotlightRing.clear();
+            this.spotlightRect = null;
             return;
         }
-        const pad = Math.max(0, Number(focusState.spotlightPadding ?? 18));
-        const dimAlpha = Math.max(0, Math.min(0.95, Number(focusState.dimAlpha ?? 0.45)));
-        const cornerRadius = 10;
-        const holeX = sprite.x - pad;
-        const holeY = sprite.y - pad;
-        const holeW = sprite.brickWidth + pad * 2;
-        const holeH = sprite.brickHeight + pad * 2;
+        const spotlightCfg = this.config?.display?.spotlight || {};
+        const pad = Math.max(0, Number(focusState.spotlightPadding ?? spotlightCfg.paddingPx ?? 18));
+        const dimAlpha = Math.max(0, Math.min(0.95, Number(focusState.dimAlpha ?? spotlightCfg.dimAlpha ?? 0.45)));
+        const baseCornerRadius = Math.max(0, Number(spotlightCfg.cornerRadiusPx ?? 10));
+        const ringWidth = Math.max(1, Number(spotlightCfg.ringWidthPx ?? 3));
+        const ringAlpha = Math.max(0, Math.min(1, Number(spotlightCfg.ringAlpha ?? 0.95)));
+        const ringColor = toPixiColor(spotlightCfg.ringColor ?? '#f8fafc');
+        const snapMode = this._resolveSpotlightSnapMode();
+        const rawHoleX = sprite.x - pad;
+        const rawHoleY = sprite.y - pad;
+        const rawHoleW = sprite.brickWidth + pad * 2;
+        const rawHoleH = sprite.brickHeight + pad * 2;
+        const cornerRadiusRaw = Math.min(baseCornerRadius, rawHoleW / 2, rawHoleH / 2);
+        const holeX = this._snapSpotlightGeometry(rawHoleX, snapMode);
+        const holeY = this._snapSpotlightGeometry(rawHoleY, snapMode);
+        const holeW = Math.max(1, this._snapSpotlightGeometry(rawHoleW, snapMode));
+        const holeH = Math.max(1, this._snapSpotlightGeometry(rawHoleH, snapMode));
+        const cornerRadius = Math.max(0, this._snapSpotlightGeometry(cornerRadiusRaw, snapMode));
+        this.spotlightRect = { x: holeX, y: holeY, w: holeW, h: holeH };
         const canvasW = this.config.display.canvasWidth;
         const canvasH = this.config.display.canvasHeight;
+        const signatureStepRaw = Number(spotlightCfg.signatureQuantizePx);
+        const signatureStep = Number.isFinite(signatureStepRaw)
+            ? Math.max(0.001, signatureStepRaw)
+            : (snapMode === 'none' ? 0.25 : 1);
         const signature = [
-            Math.round(holeX),
-            Math.round(holeY),
-            Math.round(holeW),
-            Math.round(holeH),
+            this._quantizeSpotlightSignature(holeX, signatureStep),
+            this._quantizeSpotlightSignature(holeY, signatureStep),
+            this._quantizeSpotlightSignature(holeW, signatureStep),
+            this._quantizeSpotlightSignature(holeH, signatureStep),
+            this._quantizeSpotlightSignature(cornerRadius, signatureStep),
             Math.round(dimAlpha * 1000),
+            Math.round(ringWidth * 1000),
+            Math.round(ringAlpha * 1000),
+            ringColor,
             canvasW,
             canvasH
         ].join('|');
@@ -3048,7 +3293,7 @@ export class ConveyorRenderer {
         }
         this.spotlightGraphics.endFill();
         this.spotlightRing.clear();
-        this.spotlightRing.lineStyle(3, 0xf8fafc, 0.95);
+        this.spotlightRing.lineStyle(ringWidth, ringColor, ringAlpha);
         this.spotlightRing.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
         this._ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius);
     }
@@ -3280,6 +3525,7 @@ export class ConveyorRenderer {
         this._teardownSpotlightZone();
         this.bricksByConveyor.clear();
         this.conveyorZones.clear();
+        this._clearBrickHoverState();
         this.brickHoldStart.clear();
         this.brickSprites.forEach((sprite) => sprite.destroy());
         this.brickSprites.clear();
@@ -3297,6 +3543,10 @@ export class ConveyorRenderer {
                 this.root.removeChild(view);
             }
         }
+        if (this._teardownCanvasPointerTracking) {
+            this._teardownCanvasPointerTracking();
+            this._teardownCanvasPointerTracking = null;
+        }
         if (this.backgroundTextureOwned && this.backgroundTexture?.destroy) {
             this.backgroundTexture.destroy(true);
         }
@@ -3311,6 +3561,10 @@ export class ConveyorRenderer {
         this.beltTextureOwned = false;
         this.hudPointsAdornment = null;
         this._lastHudPointsAdornmentSignature = '';
+        this.canvasView = null;
+        this.pointerInCanvas = false;
+        this.pointerCanvasPos = { x: null, y: null };
+        this.spotlightRect = null;
     }
     getPerformanceSnapshot() {
         return {
