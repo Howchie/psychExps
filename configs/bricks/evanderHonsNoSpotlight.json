@@ -74,7 +74,7 @@
         },
         "present_green_blue": {
           "pattern": "gift_wrap",
-          "baseFillColor": "#149214 ",
+          "baseFillColor": "#149214",
           "baseFillAlpha": 1,
           "alpha": 1,
           "ribbonColor": "#15f4ee",

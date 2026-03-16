@@ -80,7 +80,7 @@
         },
         "present_green_blue": {
           "pattern": "gift_wrap",
-          "baseFillColor": "#149214 ",
+          "baseFillColor": "#149214",
           "baseFillAlpha": 1,
           "alpha": 1,
           "ribbonColor": "#15f4ee",
@@ -483,7 +483,7 @@
                   "fields": {
                     "textureCategoryId": {
                       "values": [
-                        "Otherx",
+                        "Other",
                         "Other",
                         "Other",
                         "Other"
@@ -657,9 +657,10 @@
         "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it.\n\nYou need to try to hold the mouse button for 1000 ms (1 second), then release it (and do so over and over again).\nThe closer to exactly 1 second you hold the button for, the more of the box will disappear.\nIf you hold the button too long or too short, little-to-none of the brick will be removed.\n\nOnly the highlighted box is currently actionable. Once you clear a box, another random block will be selected for you to work on.\nBy working hard at estimating 1 second holds, you can clear the boxes faster.",
         "Complete as many boxes as possible before their deadlines.\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
     ],
-    "blockSummary": {
+   "blockSummary": {
       "enabled": false
    },
+   "showBlockLabel": false,
    "endPages": "That concludes the experiment.\nThank you very much for participating."
   }
 }

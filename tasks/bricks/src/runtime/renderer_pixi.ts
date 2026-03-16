@@ -4,7 +4,18 @@ import { buildHUDLines } from './hud.js';
 import { getOrCreateProceduralTexture, loadCachedImageTexture, makeMaterialKey } from './material_cache.js';
 
 // Helper to convert CSS color strings or numeric values into Pixi-compatible numbers
-const toPixiColor = (value: unknown) => PIXI.Color.shared.setValue((value ?? 0xffffff) as PIXI.ColorSource).toNumber();
+const toPixiColor = (value: unknown) => {
+  if (value === null || value === undefined || value === '') {
+    return 0xffffff;
+  }
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  try {
+    return PIXI.Color.shared.setValue(normalized as PIXI.ColorSource).toNumber();
+  } catch (error) {
+    console.warn(`[bricks] Failed to convert color: ${value}`, error);
+    return 0xffffff;
+  }
+};
 const normalizeBrickShape = (rawShape: unknown): string => {
   if (typeof rawShape !== 'string') {
     return 'rounded_rect';
@@ -2758,8 +2769,11 @@ export class ConveyorRenderer {
         this._drawBrickGraphics(sprite, brick, completionMode);
       }
       this._updateBrickProgressVisual(sprite, brick, completionMode);
-      const x = this.pixelSnapBricks ? Math.round(brick.x) : brick.x;
-      const y = this.pixelSnapBricks ? Math.round(brick.y) : brick.y;
+
+      const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+      const x = this.pixelSnapBricks ? Math.round(brick.x) : (Math.round(brick.x * resolution) / resolution);
+      const y = this.pixelSnapBricks ? Math.round(brick.y) : (Math.round(brick.y * resolution) / resolution);
+
       sprite.position.set(x, y);
       const isFocused = !focusEnabled || brick.id === this.activeBrickId;
       if (conveyorWideHitArea || spotlightWideHitArea) {
@@ -3538,6 +3552,7 @@ export class ConveyorRenderer {
     const rawHoleW = sprite.brickWidth + pad * 2;
     const rawHoleH = sprite.brickHeight + pad * 2;
     const cornerRadiusRaw = Math.min(baseCornerRadius, rawHoleW / 2, rawHoleH / 2);
+    const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
     const holeX = this._snapSpotlightGeometry(rawHoleX, snapMode);
     const holeY = this._snapSpotlightGeometry(rawHoleY, snapMode);
     const holeW = Math.max(1, this._snapSpotlightGeometry(rawHoleW, snapMode));
@@ -3549,7 +3564,7 @@ export class ConveyorRenderer {
     const signatureStepRaw = Number(spotlightCfg.signatureQuantizePx);
     const signatureStep = Number.isFinite(signatureStepRaw)
       ? Math.max(0.001, signatureStepRaw)
-      : (snapMode === 'none' ? 0.25 : 1);
+      : (snapMode === 'none' ? 0.25 : (1 / resolution));
     const signature = [
       this._quantizeSpotlightSignature(holeX, signatureStep),
       this._quantizeSpotlightSignature(holeY, signatureStep),
