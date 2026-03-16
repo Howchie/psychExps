@@ -73,3 +73,4 @@ export * from "./web/stimulusExport";
 export * from "./utils/coerce";
 export * from "./utils/validation";
 export * from "./utils/colors";
+export * from "./engines/jspsychRtTask";
