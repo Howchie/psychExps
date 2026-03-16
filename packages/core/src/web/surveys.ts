@@ -254,7 +254,7 @@ function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: 
     ))
     .join("");
   const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
-  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div style="width:min(900px,96vw);padding:1rem 1.25rem;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1rem 0 0 0;"><button id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
+  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div class="card" style="width:min(900px,96vw);padding:24px 32px;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1.5rem 0 0 0;text-align:center;"><button class="exp-continue-btn" id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
 
 function renderQuestion(
