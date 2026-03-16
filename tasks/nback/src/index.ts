@@ -278,13 +278,6 @@ type NbackDrtConfig = DrtControllerConfig & {
   transformPersistence: "scope" | "session";
 };
 
-interface NbackTiming {
-  trialDurationMs: number;
-  fixationDurationMs: number;
-  stimulusOnsetMs: number;
-  responseWindowStartMs: number;
-  responseWindowEndMs: number;
-}
 
 interface NbackBlockConfig {
   label: string;
@@ -346,7 +339,6 @@ interface ParsedNbackConfig {
   title: string;
   mapping: NbackMapping;
   responseSemantics: ResponseSemantics;
-  timing: NbackTiming;
   display: {
     aperturePx: number;
     paddingYPx: number;
@@ -499,7 +491,6 @@ function appendJsPsychNbackTrial(args: {
   eventLogger: ReturnType<typeof createEventLogger>;
 }): NbackTrialCapture {
   const { timeline, parsed, block, trial, resolvedStimulus, runtime, preloaded, eventLogger } = args;
-  const { timing } = parsed;
   const layout = computeCanvasFrameLayout({
     aperturePx: parsed.display.aperturePx,
     paddingYPx: parsed.display.paddingYPx,
@@ -508,18 +499,8 @@ function appendJsPsychNbackTrial(args: {
   });
   const jsPsychAllowedKeys = toJsPsychChoices(resolveAllowedKeysForNback(parsed.responseSemantics, block));
 
-  const rtTiming = block.rtTask.enabled
-    ? block.rtTask.timing
-    : {
-        trialDurationMs: timing.trialDurationMs,
-        fixationOnsetMs: 0,
-        fixationDurationMs: timing.fixationDurationMs,
-        stimulusOnsetMs: timing.stimulusOnsetMs,
-        stimulusDurationMs: timing.trialDurationMs - timing.stimulusOnsetMs,
-        responseWindowStartMs: timing.responseWindowStartMs,
-        responseWindowEndMs: timing.responseWindowEndMs,
-      };
-  const responseTerminatesTrial = block.rtTask.enabled ? block.rtTask.responseTerminatesTrial : false;
+  const rtTiming = block.rtTask.timing;
+  const responseTerminatesTrial = block.rtTask.responseTerminatesTrial;
   const phaseTiming = computeRtPhaseDurations(rtTiming, {
     responseTerminatesTrial,
   });
@@ -808,23 +789,16 @@ function parseNbackConfig(
   });
 
   const timingRaw = asObject(config.timing);
-  const timing: NbackTiming = {
-    trialDurationMs: toPositiveNumber(timingRaw?.trialDurationMs, 5000),
-    fixationDurationMs: toNonNegativeNumber(timingRaw?.fixationDurationMs, 500),
-    stimulusOnsetMs: toNonNegativeNumber(timingRaw?.stimulusOnsetMs, 1000),
-    responseWindowStartMs: toNonNegativeNumber(timingRaw?.responseWindowStartMs, 1000),
-    responseWindowEndMs: toNonNegativeNumber(timingRaw?.responseWindowEndMs, 5000),
-  };
   const rtTaskRaw = asObject(taskRaw?.rtTask);
   const rtTask = resolveRtTaskConfig({
     baseTiming: {
-      trialDurationMs: timing.trialDurationMs,
+      trialDurationMs: toPositiveNumber(timingRaw?.trialDurationMs, 5000),
       fixationOnsetMs: 0,
-      fixationDurationMs: timing.fixationDurationMs,
-      stimulusOnsetMs: timing.stimulusOnsetMs,
-      stimulusDurationMs: Math.max(0, timing.trialDurationMs - timing.stimulusOnsetMs),
-      responseWindowStartMs: timing.responseWindowStartMs,
-      responseWindowEndMs: timing.responseWindowEndMs,
+      fixationDurationMs: toNonNegativeNumber(timingRaw?.fixationDurationMs, 500),
+      stimulusOnsetMs: toNonNegativeNumber(timingRaw?.stimulusOnsetMs, 1000),
+      stimulusDurationMs: Math.max(0, toPositiveNumber(timingRaw?.trialDurationMs, 5000) - toNonNegativeNumber(timingRaw?.stimulusOnsetMs, 1000)),
+      responseWindowStartMs: toNonNegativeNumber(timingRaw?.responseWindowStartMs, 1000),
+      responseWindowEndMs: toNonNegativeNumber(timingRaw?.responseWindowEndMs, 5000),
     },
     override: rtTaskRaw,
     defaultEnabled: false,
@@ -982,7 +956,6 @@ function parseNbackConfig(
     title: asString(taskRaw?.title) || "NBack Task",
     mapping: { targetKey, nonTargetKey },
     responseSemantics,
-    timing,
     display,
     rtTask,
     drt,

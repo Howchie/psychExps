@@ -91,7 +91,17 @@ describe('NbackTaskAdapter', () => {
             canvasBorder: '2px solid #ddd',
           },
         },
-        rtTask: { enabled: false, responseTerminatesTrial: false },
+        rtTask: {
+          enabled: false,
+          responseTerminatesTrial: false,
+          timing: {
+            trialDurationMs: 1000,
+            fixationDurationMs: 200,
+            stimulusOnsetMs: 300,
+            responseWindowStartMs: 300,
+            responseWindowEndMs: 1000,
+          }
+        },
         beforeBlockScreens: [],
         afterBlockScreens: [],
         drt: { enabled: false },

@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 // We'll mock core to avoid complex setups
 vi.mock('@experiments/core', async () => {
