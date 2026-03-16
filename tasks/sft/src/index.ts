@@ -745,14 +745,6 @@ function appendDotTrialTimeline(args: {
   }
 }
 
-function extractTrialResponse(data: Record<string, unknown>): TrialResponse {
-  const rawKey = data.response;
-  const rawRt = data.rt;
-
-  const key = typeof rawKey === "string" ? normalizeKey(rawKey) : null;
-  const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
-  return { key, rtMs };
-}
 
 function applyGlobalSalience(config: SftParsedConfig, salience: { low: number; high: number }): void {
   config.salience = { ...salience };

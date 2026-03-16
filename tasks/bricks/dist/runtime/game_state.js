@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createCoreRng } from '@experiments/core';
 import { createSampler } from './sampling.js';
 import { getBrickVisibleWidth } from './brick_logic.js';
@@ -14,6 +13,26 @@ const BRICK_STATUS = {
  */
 export class GameState {
     activeBricks;
+    config;
+    onEvent;
+    rng;
+    samplerCache;
+    elapsed;
+    events;
+    stats;
+    bricks;
+    conveyors;
+    conveyorsById;
+    spawnControllers;
+    pendingDropVisuals;
+    pendingClearVisuals;
+    nextBrickId;
+    globalInterSpawnSampler;
+    nextGlobalSpawnAt;
+    defaultConveyorLength;
+    categoryPalettes;
+    brickCategories;
+    forcedControl;
     constructor(config, { onEvent, seed } = {}) {
         this.config = config;
         this.onEvent = typeof onEvent === 'function' ? onEvent : () => { };
@@ -80,7 +99,7 @@ export class GameState {
             const length = Number.isFinite(sampledLength)
                 ? Math.max(minLength, sampledLength)
                 : fallbackLength;
-            const speed = Math.max(0, speedSampler());
+            const speed = Math.max(0, Number(speedSampler()));
             const conveyor = {
                 id: `c${i}`,
                 index: i,
@@ -228,12 +247,13 @@ export class GameState {
     }
     _createForcedPlanFieldResolver(fieldSpec) {
         if (fieldSpec && typeof fieldSpec === 'object' && !Array.isArray(fieldSpec)) {
-            if (Array.isArray(fieldSpec.values)) {
-                const values = fieldSpec.values.slice();
+            const spec = fieldSpec;
+            if (Array.isArray(spec.values)) {
+                const values = spec.values.slice();
                 if (values.length === 0) {
                     return () => null;
                 }
-                const drawMode = String(fieldSpec.draw ?? fieldSpec.mode ?? 'with_replacement').toLowerCase();
+                const drawMode = String(spec.draw ?? spec.mode ?? 'with_replacement').toLowerCase();
                 if (drawMode === 'sequence') {
                     return (index) => values[index % values.length];
                 }
@@ -241,21 +261,21 @@ export class GameState {
                     const sampler = createSampler({
                         type: 'list',
                         values,
-                        weights: fieldSpec.weights,
-                        draw: fieldSpec.draw,
-                        mode: fieldSpec.mode,
-                        without_replacement: fieldSpec.without_replacement,
-                        shuffle: fieldSpec.shuffle
+                        weights: spec.weights,
+                        draw: spec.draw,
+                        mode: spec.mode,
+                        without_replacement: spec.without_replacement,
+                        shuffle: spec.shuffle
                     }, this.rng);
                     return () => sampler();
                 }
                 catch (error) {
-                    console.warn('Invalid forced-set list field spec; falling back to uniform with replacement.', fieldSpec, error);
+                    console.warn('Invalid forced-set list field spec; falling back to uniform with replacement.', spec, error);
                     return () => values[Math.floor(this.rng.nextRange(0, values.length))];
                 }
             }
-            if (typeof fieldSpec.type === 'string') {
-                return () => this._sampleField(fieldSpec);
+            if (typeof spec.type === 'string') {
+                return () => this._sampleField(spec);
             }
         }
         return () => fieldSpec;
@@ -281,8 +301,11 @@ export class GameState {
         if (typeof spec === 'number') {
             return spec;
         }
-        if (spec && typeof spec === 'object' && spec.type === 'fixed') {
-            return Number(spec.value);
+        if (spec && typeof spec === 'object') {
+            const s = spec;
+            if (s.type === 'fixed') {
+                return Number(s.value);
+            }
         }
         return 0;
     }
@@ -314,7 +337,7 @@ export class GameState {
                     }
                 };
             })
-                .filter(Boolean);
+                .filter((item) => Boolean(item));
         };
         return {
             color: normalizePalette(this.config?.bricks?.colorCategories, 'color', (entry) => {
@@ -380,13 +403,14 @@ export class GameState {
         if (!source || typeof source !== 'object') {
             return {};
         }
+        const src = source;
         const out = {};
         const copyRaw = (keys, targetKey, transform = (value) => value) => {
-            const key = keys.find((candidate) => source[candidate] !== undefined && source[candidate] !== null);
+            const key = keys.find((candidate) => src[candidate] !== undefined && src[candidate] !== null);
             if (!key) {
                 return;
             }
-            const rawValue = source[key];
+            const rawValue = src[key];
             if (!(typeof rawValue === 'string' || typeof rawValue === 'number' || this._isSamplerSpec(rawValue))) {
                 return;
             }
@@ -502,14 +526,15 @@ export class GameState {
             if (!catTraits || typeof catTraits !== 'object') {
                 return;
             }
-            Object.entries(catTraits).forEach(([key, value]) => {
+            for (const key in catTraits) {
+                const value = catTraits[key];
                 if (value === null || value === undefined) {
-                    return;
+                    continue;
                 }
                 if (categoryTraits[key] === undefined) {
                     categoryTraits[key] = value;
                 }
-            });
+            }
         });
         return {
             categories: resolvedCategories,
@@ -526,12 +551,13 @@ export class GameState {
             return () => value;
         }
         if (lengthSpec && typeof lengthSpec === 'object') {
-            if (typeof lengthSpec.value === 'number' && !lengthSpec.type) {
-                const value = Number(lengthSpec.value);
+            const ls = lengthSpec;
+            if (typeof ls.value === 'number' && !ls.type) {
+                const value = Number(ls.value);
                 return () => value;
             }
             const sampler = createSampler(lengthSpec, this.rng);
-            return () => sampler();
+            return () => Number(sampler());
         }
         const fallback = this.config.display?.canvasWidth ?? 1000;
         return () => fallback;
@@ -680,8 +706,7 @@ export class GameState {
         const width = Number.isFinite(widthRaw) ? Math.max(8, widthRaw) : Math.max(8, Number(cfg.display.brickWidth) || 80);
         const minSpacing = cfg.bricks.spawn.minSpacingPx ?? 0;
         const maxActive = cfg.bricks.spawn.maxActivePerConveyor ?? Infinity;
-        const activeBricks = conveyor.activeIds.map((id) => this.bricks.get(id)).filter(Boolean);
-        if (activeBricks.length >= maxActive) {
+        if (conveyor.activeIds.length >= maxActive) {
             return false;
         }
         const id = `b${++this.nextBrickId}`;
@@ -693,7 +718,9 @@ export class GameState {
         const buffer = Math.max(0, minSpacing);
         const newStart = x;
         const newEnd = x + width;
-        const overlaps = !bypassSpacing && activeBricks.some((existing) => {
+        const overlaps = !bypassSpacing && this.activeBricks.some((existing) => {
+            if (existing.conveyorId !== conveyor.id)
+                return false;
             const existingStart = existing.x;
             const existingEnd = existing.x + existing.width;
             return newStart < existingEnd + buffer && newEnd + buffer > existingStart;
@@ -726,10 +753,10 @@ export class GameState {
             holds: 0,
             clearProgress: 0,
             isHovered: false,
-            color: pickedColor,
-            borderColor: pickedBorderColor,
+            color: String(pickedColor ?? ''),
+            borderColor: pickedBorderColor != null ? String(pickedBorderColor) : null,
             shape: pickedShape,
-            textureStyle: pickedTextureStyle,
+            textureStyle: pickedTextureStyle != null ? String(pickedTextureStyle) : null,
             colorCategoryId: selectedCategories.color?.id ?? null,
             colorCategoryLabel: selectedCategories.color?.label ?? null,
             widthCategoryId: selectedCategories.width?.id ?? null,
@@ -746,7 +773,7 @@ export class GameState {
             targetHoldMs: optionalNumber(resolvedTraits.targetHoldMs),
             progressPerPerfect: optionalNumber(resolvedTraits.progressPerPerfect),
             forcedSetIndex: optionalNumber(metadata?.forcedSetIndex),
-            label: resolvedTraits.label ?? metadata?.label ?? null
+            label: resolvedTraits.label != null ? String(resolvedTraits.label) : (metadata?.label != null ? String(metadata.label) : null)
         };
         this.bricks.set(id, brick);
         this.activeBricks.push(brick);
@@ -834,7 +861,11 @@ export class GameState {
         this.bricks.delete(brick.id);
         const idx = this.activeBricks.findIndex((b) => b.id === brick.id);
         if (idx !== -1) {
-            this.activeBricks.splice(idx, 1);
+            const lastIdx = this.activeBricks.length - 1;
+            if (idx !== lastIdx) {
+                this.activeBricks[idx] = this.activeBricks[lastIdx];
+            }
+            this.activeBricks.pop();
         }
         const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
         if (status === BRICK_STATUS.CLEARED) {
@@ -899,7 +930,7 @@ export class GameState {
         if (!this._isCurrentForcedBrick(brick.id)) {
             return { ok: false, reason: 'forced_order_locked' };
         }
-        if (Number.isFinite(brick.workDeadlineMs) && this.elapsed > brick.workDeadlineMs) {
+        if (brick.workDeadlineMs !== null && Number.isFinite(brick.workDeadlineMs) && this.elapsed > brick.workDeadlineMs) {
             return { ok: false, reason: 'work_window_closed' };
         }
         return { ok: true, reason: null };
@@ -1101,6 +1132,7 @@ export class GameState {
         if (this.forcedControl.enabled) {
             const mode = this.forcedControl.switchMode;
             if ((mode === 'interval' || mode === 'interval_or_clear') &&
+                this.forcedControl.nextSwitchAtMs !== null &&
                 Number.isFinite(this.forcedControl.nextSwitchAtMs) &&
                 this.elapsed >= this.forcedControl.nextSwitchAtMs) {
                 this._advanceForcedActiveBrick('scheduled_switch');
@@ -1158,7 +1190,7 @@ export class GameState {
      * Returns a lightweight snapshot for HUD rendering.
      */
     getHUDStats() {
-        const focusBrick = this.forcedControl.enabled
+        const focusBrick = this.forcedControl.enabled && this.forcedControl.activeBrickId
             ? this.bricks.get(this.forcedControl.activeBrickId)
             : null;
         return {
@@ -1179,7 +1211,7 @@ export class GameState {
                 activeBrickId: null
             };
         }
-        const active = this.bricks.get(this.forcedControl.activeBrickId) || null;
+        const active = this.forcedControl.activeBrickId ? (this.bricks.get(this.forcedControl.activeBrickId) || null) : null;
         const ammoLabel = this.forcedControl.coverStory.enableAmmoCue && active
             ? `${active.colorCategoryLabel ?? active.color ?? 'Current'} ammo`
             : null;

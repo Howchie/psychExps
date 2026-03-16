@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { createCoreRng } from '@experiments/core';
+import type { CoreRng } from '@experiments/core';
 import { createSampler } from './sampling.js';
 import { getBrickVisibleWidth } from './brick_logic.js';
 
@@ -7,7 +7,105 @@ const BRICK_STATUS = {
   ACTIVE: 'active',
   CLEARED: 'cleared',
   DROPPED: 'dropped'
-};
+} as const;
+
+interface BrickRecord {
+  id: string;
+  conveyorId: string;
+  status: string;
+  x: number;
+  y: number;
+  speed: number;
+  width: number;
+  initialWidth: number;
+  height: number;
+  createdAt: number;
+  clicks: number;
+  holds: number;
+  clearProgress: number;
+  isHovered: boolean;
+  color: string;
+  borderColor: string | null;
+  shape: string;
+  textureStyle: string | null;
+  colorCategoryId: string | null;
+  colorCategoryLabel: string | null;
+  widthCategoryId: string | null;
+  widthCategoryLabel: string | null;
+  borderColorCategoryId: string | null;
+  borderColorCategoryLabel: string | null;
+  shapeCategoryId: string | null;
+  shapeCategoryLabel: string | null;
+  textureCategoryId: string | null;
+  textureCategoryLabel: string | null;
+  value: number;
+  isTarget: boolean;
+  workDeadlineMs: number | null;
+  targetHoldMs: number | null;
+  progressPerPerfect: number | null;
+  forcedSetIndex: number | null;
+  label: string | null;
+}
+
+interface ConveyorRecord {
+  id: string;
+  index: number;
+  y: number;
+  length: number;
+  speed: number;
+  interSpawnSampler: () => number;
+  nextSpawnAt: number;
+  activeIds: string[];
+}
+
+interface CategoryEntry {
+  id: string;
+  label: string | null;
+  dimension: string;
+  traits: Record<string, unknown>;
+}
+
+interface CategoryPalettes {
+  color: CategoryEntry[];
+  width: CategoryEntry[];
+  borderColor: CategoryEntry[];
+  shape: CategoryEntry[];
+  texture: CategoryEntry[];
+}
+
+interface ForcedControlState {
+  enabled: boolean;
+  switchMode: string;
+  switchIntervalMs: number;
+  switchOnDrop: boolean;
+  sequence: unknown[] | null;
+  spotlightPadding: number;
+  dimAlpha: number;
+  coverStory: { enableAmmoCue: boolean };
+  activeOrderIndex: number;
+  activeBrickId: string | null;
+  nextSwitchAtMs: number | null;
+  orderedBrickIds: string[];
+}
+
+interface GameStats {
+  spawned: number;
+  cleared: number;
+  dropped: number;
+  clickErrors: number;
+  points: number;
+}
+
+interface GameEvent {
+  time: number;
+  type: string;
+  [key: string]: unknown;
+}
+
+interface PointerPos {
+  x?: number | null;
+  y?: number | null;
+}
 
 /**
  * Represents the trial-level game state, including conveyors, bricks, and
@@ -15,9 +113,29 @@ const BRICK_STATUS = {
  * via the public methods exposed here.
  */
 export class GameState {
-  public activeBricks: any[];
+  public activeBricks: BrickRecord[];
+  config: Record<string, any>;
+  onEvent: (event: GameEvent) => void;
+  rng: CoreRng;
+  samplerCache: WeakMap<object, () => unknown>;
+  elapsed: number;
+  events: GameEvent[];
+  stats: GameStats;
+  bricks: Map<string, BrickRecord>;
+  conveyors: ConveyorRecord[];
+  conveyorsById: Map<string, ConveyorRecord>;
+  spawnControllers: unknown[];
+  pendingDropVisuals: Record<string, unknown>[];
+  pendingClearVisuals: Record<string, unknown>[];
+  nextBrickId: number;
+  globalInterSpawnSampler: () => number;
+  nextGlobalSpawnAt: number;
+  defaultConveyorLength: number;
+  categoryPalettes: CategoryPalettes;
+  brickCategories: CategoryEntry[];
+  forcedControl: ForcedControlState;
 
-  constructor(config, { onEvent, seed } = {}) {
+  constructor(config: Record<string, any>, { onEvent, seed }: { onEvent?: (event: GameEvent) => void; seed?: unknown } = {}) {
     this.config = config;
     this.onEvent = typeof onEvent === 'function' ? onEvent : () => {};
     this.rng = createCoreRng(seed ?? config?.trial?.seed);
@@ -52,7 +170,7 @@ export class GameState {
     this._initForcedControl();
   }
 
-  _log(type, payload = {}) {
+  _log(type: string, payload: Record<string, unknown> = {}) {
     const event = {
       time: this.elapsed,
       type,
@@ -83,11 +201,11 @@ export class GameState {
     for (let i = 0; i < n; i += 1) {
       const sampledLength = explicitLengths
         ? Number(explicitLengths[i] ?? explicitLengths[explicitLengths.length - 1])
-        : Number(lengthSampler());
+        : Number(lengthSampler!());
       const length = Number.isFinite(sampledLength)
         ? Math.max(minLength, sampledLength)
         : fallbackLength;
-      const speed = Math.max(0, speedSampler());
+      const speed = Math.max(0, Number(speedSampler()));
       const conveyor = {
         id: `c${i}`,
         index: i,
@@ -135,7 +253,7 @@ export class GameState {
     if (set.length === 0) {
       return false;
     }
-    set.forEach((entry, index) => {
+    set.forEach((entry: Record<string, any>, index: number) => {
       const conveyorIndexSpec = entry?.conveyorIndex ?? entry?.conveyor_index ?? 0;
       const conveyorIndexRaw = Number(this._sampleField(conveyorIndexSpec));
       const conveyorIndex = Number.isFinite(conveyorIndexRaw)
@@ -180,7 +298,7 @@ export class GameState {
           borderColor: entry?.borderColor ?? entry?.border_colour ?? entry?.border_color ?? null,
           shape: entry?.shape ?? null,
           textureStyle: entry?.textureStyle ?? entry?.texture_style ?? entry?.texture ?? null
-        },
+        } as Record<string, unknown>,
         metadata: {
           forcedSetIndex: index,
           label: entry?.label ?? null,
@@ -195,7 +313,7 @@ export class GameState {
           progressPerPerfect: Number.isFinite(Number(sampledProgressPerPerfect))
             ? Number(sampledProgressPerPerfect)
             : null
-        }
+        } as Record<string, unknown>
       });
     });
     return true;
@@ -213,7 +331,7 @@ export class GameState {
     return Array.isArray(bricksCfg?.forcedSet) ? bricksCfg.forcedSet : [];
   }
 
-  _generateForcedSetFromPlan(plan) {
+  _generateForcedSetFromPlan(plan: Record<string, any>) {
     const countRaw = Number(this._sampleField(plan.count ?? plan.n ?? 0));
     const count = Number.isFinite(countRaw) ? Math.max(0, Math.floor(countRaw)) : 0;
     if (count <= 0) {
@@ -221,13 +339,13 @@ export class GameState {
     }
     const defaults = plan.defaults && typeof plan.defaults === 'object' ? plan.defaults : {};
     const fields = plan.fields && typeof plan.fields === 'object' ? plan.fields : {};
-    const resolvers = Object.entries(fields).reduce((acc, [fieldKey, fieldSpec]) => {
+    const resolvers: Record<string, (index: number) => unknown> = Object.entries(fields).reduce((acc: Record<string, (index: number) => unknown>, [fieldKey, fieldSpec]) => {
       acc[fieldKey] = this._createForcedPlanFieldResolver(fieldSpec);
       return acc;
     }, {});
-    const output = [];
+    const output: Record<string, unknown>[] = [];
     for (let i = 0; i < count; i += 1) {
-      const entry = {
+      const entry: Record<string, unknown> = {
         ...defaults
       };
       Object.entries(resolvers).forEach(([fieldKey, resolver]) => {
@@ -238,69 +356,73 @@ export class GameState {
     return output;
   }
 
-  _createForcedPlanFieldResolver(fieldSpec) {
+  _createForcedPlanFieldResolver(fieldSpec: unknown): (index: number) => unknown {
     if (fieldSpec && typeof fieldSpec === 'object' && !Array.isArray(fieldSpec)) {
-      if (Array.isArray(fieldSpec.values)) {
-        const values = fieldSpec.values.slice();
+      const spec = fieldSpec as Record<string, any>;
+      if (Array.isArray(spec.values)) {
+        const values = spec.values.slice();
         if (values.length === 0) {
           return () => null;
         }
-        const drawMode = String(fieldSpec.draw ?? fieldSpec.mode ?? 'with_replacement').toLowerCase();
+        const drawMode = String(spec.draw ?? spec.mode ?? 'with_replacement').toLowerCase();
         if (drawMode === 'sequence') {
-          return (index) => values[index % values.length];
+          return (index: number) => values[index % values.length];
         }
         try {
           const sampler = createSampler({
             type: 'list',
             values,
-            weights: fieldSpec.weights,
-            draw: fieldSpec.draw,
-            mode: fieldSpec.mode,
-            without_replacement: fieldSpec.without_replacement,
-            shuffle: fieldSpec.shuffle
+            weights: spec.weights,
+            draw: spec.draw,
+            mode: spec.mode,
+            without_replacement: spec.without_replacement,
+            shuffle: spec.shuffle
           }, this.rng);
           return () => sampler();
         } catch (error) {
-          console.warn('Invalid forced-set list field spec; falling back to uniform with replacement.', fieldSpec, error);
+          console.warn('Invalid forced-set list field spec; falling back to uniform with replacement.', spec, error);
           return () => values[Math.floor(this.rng.nextRange(0, values.length))];
         }
       }
-      if (typeof fieldSpec.type === 'string') {
-        return () => this._sampleField(fieldSpec);
+      if (typeof spec.type === 'string') {
+        return () => this._sampleField(spec);
       }
     }
     return () => fieldSpec;
   }
 
-  _sampleField(spec) {
-    if (spec && typeof spec === 'object' && !Array.isArray(spec) && (typeof spec.type === 'string')) {
+  _sampleField(spec: unknown): unknown {
+    if (spec && typeof spec === 'object' && !Array.isArray(spec) && (typeof (spec as Record<string, unknown>).type === 'string')) {
       try {
         let sampler = this.samplerCache.get(spec);
         if (!sampler) {
-          sampler = createSampler(spec, this.rng);
+          sampler = createSampler(spec as Record<string, unknown>, this.rng);
           this.samplerCache.set(spec, sampler);
         }
         return sampler();
       } catch (error) {
         console.warn('Invalid forced-set sampler spec; falling back to raw value.', spec, error);
-        return spec.value ?? null;
+        return (spec as Record<string, unknown>).value ?? null;
       }
     }
     return spec;
   }
 
-  _resolveValue(spec) {
+  _resolveValue(spec: unknown): number {
     if (typeof spec === 'number') {
       return spec;
     }
-    if (spec && typeof spec === 'object' && spec.type === 'fixed') {
-      return Number(spec.value);
+    if (spec && typeof spec === 'object') {
+      const s = spec as Record<string, unknown>;
+      if (s.type === 'fixed') {
+        return Number(s.value);
+      }
     }
     return 0;
   }
 
   _prepareBrickCategories() {
-    const normalizePalette = (entries, dimension, featureExtractor) => {
+    const normalizePalette = (entries: unknown, dimension: string, featureExtractor: (entry: Record<string, any>) => Record<string, unknown> | null): CategoryEntry[] => {
       if (!Array.isArray(entries) || entries.length === 0) {
         return [];
       }
@@ -327,18 +449,18 @@ export class GameState {
             }
           };
         })
-        .filter(Boolean);
+        .filter((item): item is CategoryEntry => Boolean(item));
     };
 
     return {
-      color: normalizePalette(this.config?.bricks?.colorCategories, 'color', (entry) => {
+      color: normalizePalette(this.config?.bricks?.colorCategories, 'color', (entry: Record<string, any>) => {
         const color = entry.color ?? entry.colour ?? null;
         if (color === null || color === undefined) {
           return null;
         }
         return { color };
       }),
-      width: normalizePalette(this.config?.bricks?.widthCategories, 'width', (entry) => {
+      width: normalizePalette(this.config?.bricks?.widthCategories, 'width', (entry: Record<string, any>) => {
         const width = entry.width;
         const isSampler = this._isSamplerSpec(width);
         if (!isSampler && !Number.isFinite(Number(width))) {
@@ -346,14 +468,14 @@ export class GameState {
         }
         return { width };
       }),
-      borderColor: normalizePalette(this.config?.bricks?.borderColorCategories, 'borderColor', (entry) => {
+      borderColor: normalizePalette(this.config?.bricks?.borderColorCategories, 'borderColor', (entry: Record<string, any>) => {
         const borderColor = entry.borderColor ?? entry.border_colour ?? entry.border_color ?? null;
         if (borderColor === null || borderColor === undefined) {
           return null;
         }
         return { borderColor };
       }),
-      shape: normalizePalette(this.config?.bricks?.shapeCategories, 'shape', (entry) => {
+      shape: normalizePalette(this.config?.bricks?.shapeCategories, 'shape', (entry: Record<string, any>) => {
         const shape = entry.shape;
         const isSampler = this._isSamplerSpec(shape);
         const normalized = isSampler ? shape : this._normalizeBrickShape(shape);
@@ -362,7 +484,7 @@ export class GameState {
         }
         return { shape: normalized };
       }),
-      texture: normalizePalette(this.config?.bricks?.textureCategories, 'texture', (entry) => {
+      texture: normalizePalette(this.config?.bricks?.textureCategories, 'texture', (entry: Record<string, any>) => {
         const textureStyle = entry.textureStyle ?? entry.texture_style ?? entry.texture ?? null;
         if (textureStyle === null || textureStyle === undefined) {
           return null;
@@ -372,7 +494,7 @@ export class GameState {
     };
   }
 
-  _normalizeBrickShape(rawShape) {
+  _normalizeBrickShape(rawShape: unknown): string | null {
     if (typeof rawShape !== 'string') {
       return null;
     }
@@ -380,7 +502,7 @@ export class GameState {
     if (!normalized) {
       return null;
     }
-    const aliases = {
+    const aliases: Record<string, string> = {
       square: 'rect',
       rectangle: 'rect',
       rounded: 'rounded_rect',
@@ -389,21 +511,22 @@ export class GameState {
     return aliases[normalized] ?? normalized;
   }
 
-  _isSamplerSpec(value) {
-    return Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof value.type === 'string');
+  _isSamplerSpec(value: unknown): boolean {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof (value as Record<string, unknown>).type === 'string');
   }
 
-  _collectCategoryTraitSpecs(source) {
+  _collectCategoryTraitSpecs(source: unknown): Record<string, unknown> {
     if (!source || typeof source !== 'object') {
       return {};
     }
-    const out = {};
-    const copyRaw = (keys, targetKey, transform = (value) => value) => {
-      const key = keys.find((candidate) => source[candidate] !== undefined && source[candidate] !== null);
+    const src = source as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    const copyRaw = (keys: string[], targetKey: string, transform: (value: unknown) => unknown = (value: unknown) => value) => {
+      const key = keys.find((candidate: string) => src[candidate] !== undefined && src[candidate] !== null);
       if (!key) {
         return;
       }
-      const rawValue = source[key];
+      const rawValue = src[key];
       if (!(typeof rawValue === 'string' || typeof rawValue === 'number' || this._isSamplerSpec(rawValue))) {
         return;
       }
@@ -428,10 +551,10 @@ export class GameState {
     return out;
   }
 
-  _materializeBrickTraits(traitSpecs) {
-    const specs = traitSpecs && typeof traitSpecs === 'object' ? traitSpecs : {};
-    const out = {};
-    const readString = (key, transform = (value) => value) => {
+  _materializeBrickTraits(traitSpecs: unknown): Record<string, unknown> {
+    const specs: Record<string, unknown> = traitSpecs && typeof traitSpecs === 'object' ? traitSpecs as Record<string, unknown> : {};
+    const out: Record<string, unknown> = {};
+    const readString = (key: string, transform: (value: string) => string | null = (value: string) => value) => {
       if (specs[key] === undefined || specs[key] === null) {
         return;
       }
@@ -444,7 +567,7 @@ export class GameState {
         out[key] = value;
       }
     };
-    const readNumber = (key, { min = null, max = null } = {}) => {
+    const readNumber = (key: string, { min = null, max = null }: { min?: number | null; max?: number | null } = {}) => {
       if (specs[key] === undefined || specs[key] === null) {
         return;
       }
@@ -476,7 +599,7 @@ export class GameState {
     return out;
   }
 
-  _pickRandomCategory(dimension) {
+  _pickRandomCategory(dimension: keyof CategoryPalettes): CategoryEntry | null {
     const palette = this.categoryPalettes?.[dimension];
     if (!Array.isArray(palette) || palette.length === 0) {
       return null;
@@ -485,7 +608,7 @@ export class GameState {
     return palette[index] ?? null;
   }
 
-  _resolveCategoryById(dimension, id) {
+  _resolveCategoryById(dimension: keyof CategoryPalettes, id: unknown): CategoryEntry | null {
     if (!id) {
       return null;
     }
@@ -496,12 +619,12 @@ export class GameState {
     return palette.find((item) => item.id === id) ?? null;
   }
 
-  _resolveCategorySelectionsForEntry(entry) {
-    const categoryIds = entry?.categoryIds && typeof entry.categoryIds === 'object' ? entry.categoryIds : {};
-    const sampledId = (keys) => {
+  _resolveCategorySelectionsForEntry(entry: Record<string, any>) {
+    const categoryIds = entry?.categoryIds && typeof entry.categoryIds === 'object' ? entry.categoryIds : {} as Record<string, any>;
+    const sampledId = (keys: string[]) => {
       const first = keys
-        .map((key) => entry?.[key])
-        .find((value) => value !== undefined && value !== null);
+        .map((key: string) => entry?.[key])
+        .find((value: unknown) => value !== undefined && value !== null);
       return this._sampleField(first);
     };
     return {
@@ -528,7 +651,7 @@ export class GameState {
     };
   }
 
-  _resolveBrickTraits({ categories = null, traits = null, metadata = null } = {}) {
+  _resolveBrickTraits({ categories = null, traits = null, metadata = null }: { categories?: Record<string, any> | null; traits?: Record<string, unknown> | null; metadata?: Record<string, unknown> | null } = {}) {
     const resolvedCategories = {
       color: categories?.color ?? this._pickRandomCategory('color'),
       width: categories?.width ?? this._pickRandomCategory('width'),
@@ -536,8 +659,8 @@ export class GameState {
       shape: categories?.shape ?? this._pickRandomCategory('shape'),
       texture: categories?.texture ?? this._pickRandomCategory('texture')
     };
-    const categoryTraits = {};
-    ['color', 'width', 'borderColor', 'shape', 'texture'].forEach((dimension) => {
+    const categoryTraits: Record<string, unknown> = {};
+    (['color', 'width', 'borderColor', 'shape', 'texture'] as const).forEach((dimension) => {
       const catTraits = resolvedCategories[dimension]?.traits;
       if (!catTraits || typeof catTraits !== 'object') {
         return;
@@ -562,35 +685,36 @@ export class GameState {
     };
   }
 
-  _makeLengthSampler(lengthSpec) {
+  _makeLengthSampler(lengthSpec: unknown): () => number {
     if (typeof lengthSpec === 'number') {
       const value = Number(lengthSpec);
       return () => value;
     }
     if (lengthSpec && typeof lengthSpec === 'object') {
-      if (typeof lengthSpec.value === 'number' && !lengthSpec.type) {
-        const value = Number(lengthSpec.value);
+      const ls = lengthSpec as Record<string, unknown>;
+      if (typeof ls.value === 'number' && !ls.type) {
+        const value = Number(ls.value);
         return () => value;
       }
-      const sampler = createSampler(lengthSpec, this.rng);
-      return () => sampler();
+      const sampler = createSampler(lengthSpec as Record<string, unknown>, this.rng);
+      return () => Number(sampler());
     }
     const fallback = this.config.display?.canvasWidth ?? 1000;
     return () => fallback;
   }
 
-  _makeInterSpawnSampler(spawnCfg = {}) {
+  _makeInterSpawnSampler(spawnCfg: Record<string, any> = {}): () => number {
     const interSpawnSpec = spawnCfg?.interSpawnDist;
     if (typeof interSpawnSpec === 'number' && Number.isFinite(interSpawnSpec) && interSpawnSpec >= 0) {
       return () => interSpawnSpec;
     }
     if (interSpawnSpec && typeof interSpawnSpec === 'object') {
-      return createSampler(interSpawnSpec, this.rng);
+      return createSampler(interSpawnSpec, this.rng) as () => number;
     }
     const spawnRate = this._resolveValue(spawnCfg?.ratePerSec);
     if (Number.isFinite(spawnRate) && spawnRate > 0) {
       // Fall back to Poisson arrivals when only ratePerSec is configured.
-      return createSampler({ type: 'exponential', lambda: spawnRate }, this.rng);
+      return createSampler({ type: 'exponential', lambda: spawnRate }, this.rng) as () => number;
     }
     // Spawning disabled.
     return () => Number.POSITIVE_INFINITY;
@@ -624,8 +748,8 @@ export class GameState {
     if (!this.forcedControl.enabled) {
       return;
     }
-    const configured = Array.from(this.bricks.values())
-      .sort((a, b) => (a.forcedSetIndex ?? Number.MAX_SAFE_INTEGER) - (b.forcedSetIndex ?? Number.MAX_SAFE_INTEGER));
+    const configured: BrickRecord[] = Array.from(this.bricks.values())
+      .sort((a: BrickRecord, b: BrickRecord) => (a.forcedSetIndex ?? Number.MAX_SAFE_INTEGER) - (b.forcedSetIndex ?? Number.MAX_SAFE_INTEGER));
     const sequence = this.forcedControl.sequence;
     if (Array.isArray(sequence) && sequence.length > 0) {
       const chosen = sequence
@@ -635,12 +759,12 @@ export class GameState {
         .filter(Boolean);
       this.forcedControl.orderedBrickIds = chosen;
     } else {
-      this.forcedControl.orderedBrickIds = configured.map((brick) => brick.id);
+      this.forcedControl.orderedBrickIds = configured.map((brick: BrickRecord) => brick.id);
     }
     this._setForcedActiveBrick(0, 'trial_start');
   }
 
-  _setForcedActiveBrick(orderIndex, reason) {
+  _setForcedActiveBrick(orderIndex: number, reason: string) {
     if (!this.forcedControl.enabled) {
       return;
     }
@@ -668,7 +792,7 @@ export class GameState {
     });
   }
 
-  _advanceForcedActiveBrick(reason) {
+  _advanceForcedActiveBrick(reason: string) {
     if (!this.forcedControl.enabled) {
       return;
     }
@@ -687,14 +811,14 @@ export class GameState {
     }
   }
 
-  _computeBrickY(conveyorY, brickHeight) {
+  _computeBrickY(conveyorY: number, brickHeight: number) {
     const beltHeight = Math.max(1, Number(this.config?.display?.beltHeight) || 1);
     const fallbackY = conveyorY + (beltHeight - brickHeight) / 2;
     const bandCfg = this.config?.display?.beltTexture?.brickContactBand;
     if (!bandCfg || bandCfg.enable !== true) {
       return fallbackY;
     }
-    const readInsetPx = (pxValue, ratioValue) => {
+    const readInsetPx = (pxValue: unknown, ratioValue: unknown) => {
       const px = Number(pxValue);
       if (Number.isFinite(px)) {
         return px;
@@ -717,7 +841,7 @@ export class GameState {
   /**
    * Spawns a new brick on the given conveyor if safety constraints permit.
    */
-  _spawnBrick(conveyor, { x = 0, reason = 'spawn', bypassSpacing = false, categories = null, traits = null, metadata = null } = {}) {
+  _spawnBrick(conveyor: ConveyorRecord, { x = 0, reason = 'spawn', bypassSpacing = false, categories = null, traits = null, metadata = null }: { x?: number; reason?: string; bypassSpacing?: boolean; categories?: Record<string, any> | null; traits?: Record<string, unknown> | null; metadata?: Record<string, unknown> | null } = {}): boolean {
     const cfg = this.config;
     const { categories: selectedCategories, traits: resolvedTraits } = this._resolveBrickTraits({
       categories,
@@ -750,7 +874,7 @@ export class GameState {
     if (overlaps) {
       return false;
     }
-    const optionalNumber = (value) => {
+    const optionalNumber = (value: unknown): number | null => {
       if (value === null || value === undefined || value === '') {
         return null;
       }
@@ -761,7 +885,7 @@ export class GameState {
     const brickHeight = Number.isFinite(Number(cfg.display.brickHeight))
       ? Math.max(8, Number(cfg.display.brickHeight))
       : 60;
-    const brick = {
+    const brick: BrickRecord = {
       id,
       conveyorId: conveyor.id,
       status: BRICK_STATUS.ACTIVE,
@@ -776,10 +900,10 @@ export class GameState {
       holds: 0,
       clearProgress: 0,
       isHovered: false,
-      color: pickedColor,
-      borderColor: pickedBorderColor,
+      color: String(pickedColor ?? ''),
+      borderColor: pickedBorderColor != null ? String(pickedBorderColor) : null,
       shape: pickedShape,
-      textureStyle: pickedTextureStyle,
+      textureStyle: pickedTextureStyle != null ? String(pickedTextureStyle) : null,
       colorCategoryId: selectedCategories.color?.id ?? null,
       colorCategoryLabel: selectedCategories.color?.label ?? null,
       widthCategoryId: selectedCategories.width?.id ?? null,
@@ -796,7 +920,7 @@ export class GameState {
       targetHoldMs: optionalNumber(resolvedTraits.targetHoldMs),
       progressPerPerfect: optionalNumber(resolvedTraits.progressPerPerfect),
       forcedSetIndex: optionalNumber(metadata?.forcedSetIndex),
-      label: resolvedTraits.label ?? metadata?.label ?? null
+      label: resolvedTraits.label != null ? String(resolvedTraits.label) : (metadata?.label != null ? String(metadata.label) : null)
     };
     this.bricks.set(id, brick);
     this.activeBricks.push(brick);
@@ -831,7 +955,7 @@ export class GameState {
     return true;
   }
 
-  handleBrickHover(brickId, isHovering, timestamp, pointerPos = {}) {
+  handleBrickHover(brickId: string, isHovering: boolean, timestamp: number, pointerPos: PointerPos = {}) {
     const { x = null, y = null } = pointerPos || {};
     const brick = this.bricks.get(brickId);
     if (!brick) {
@@ -874,14 +998,14 @@ export class GameState {
   /**
    * Removes a brick and updates stats/logging.
    */
-  _finalizeBrick(brick, status, payload = {}) {
+  _finalizeBrick(brick: BrickRecord, status: string, payload: Record<string, unknown> = {}) {
     if (!brick || brick.status !== BRICK_STATUS.ACTIVE) {
       return;
     }
     brick.status = status;
     const conveyor = this.conveyorsById.get(brick.conveyorId);
     if (conveyor) {
-      conveyor.activeIds = conveyor.activeIds.filter((id) => id !== brick.id);
+      conveyor.activeIds = conveyor.activeIds.filter((id: string) => id !== brick.id);
     }
     this.bricks.delete(brick.id);
     const idx = this.activeBricks.findIndex((b) => b.id === brick.id);
@@ -941,21 +1065,21 @@ export class GameState {
     }
   }
 
-  _isCurrentForcedBrick(brickId) {
+  _isCurrentForcedBrick(brickId: string) {
     if (!this.forcedControl.enabled) {
       return true;
     }
     return brickId === this.forcedControl.activeBrickId;
   }
 
-  _canWorkOnBrick(brick) {
+  _canWorkOnBrick(brick: BrickRecord) {
     if (!brick || brick.status !== BRICK_STATUS.ACTIVE) {
       return { ok: false, reason: 'inactive' };
     }
     if (!this._isCurrentForcedBrick(brick.id)) {
       return { ok: false, reason: 'forced_order_locked' };
     }
-    if (Number.isFinite(brick.workDeadlineMs) && this.elapsed > brick.workDeadlineMs) {
+    if (brick.workDeadlineMs !== null && Number.isFinite(brick.workDeadlineMs) && this.elapsed > brick.workDeadlineMs) {
       return { ok: false, reason: 'work_window_closed' };
     }
     return { ok: true, reason: null };
@@ -964,7 +1088,7 @@ export class GameState {
   /**
    * Handles player interaction depending on completion mode.
    */
-  handleBrickInteraction(brickId, timestamp, clickPos = {}) {
+  handleBrickInteraction(brickId: string, timestamp: number, clickPos: PointerPos = {}) {
     const { x = null, y = null } = clickPos || {};
     const brick = this.bricks.get(brickId);
     if (!brick) {
@@ -1042,7 +1166,7 @@ export class GameState {
     }
   }
 
-  handleBrickHold(brickId, holdDurationMs, timestamp, clickPos = {}) {
+  handleBrickHold(brickId: string, holdDurationMs: number, timestamp: number, clickPos: PointerPos = {}) {
     const { x = null, y = null } = clickPos || {};
     const brick = this.bricks.get(brickId);
     const holdMs = Math.max(0, Number(holdDurationMs) || 0);
@@ -1118,13 +1242,13 @@ export class GameState {
   /**
    * Advances the simulation by dt milliseconds.
    */
-  step(dtMs) {
+  step(dtMs: number) {
     const dt = dtMs / 1000;
     this.elapsed += dtMs;
     const completionMode = this.config.bricks.completionMode;
 
     // Update brick positions and check for drops.
-    this.bricks.forEach((brick) => {
+    this.bricks.forEach((brick: BrickRecord) => {
       if (brick.status !== BRICK_STATUS.ACTIVE) {
         return;
       }
@@ -1164,6 +1288,7 @@ export class GameState {
     if (this.forcedControl.enabled) {
       const mode = this.forcedControl.switchMode;
       if ((mode === 'interval' || mode === 'interval_or_clear') &&
+        this.forcedControl.nextSwitchAtMs !== null &&
         Number.isFinite(this.forcedControl.nextSwitchAtMs) &&
         this.elapsed >= this.forcedControl.nextSwitchAtMs) {
         this._advanceForcedActiveBrick('scheduled_switch');
@@ -1181,7 +1306,7 @@ export class GameState {
         if (this.config?.bricks?.spawn?.byConveyor === false) {
           if (this.elapsed >= this.nextGlobalSpawnAt) {
             // Try conveyors in randomized order until one accepts the spawn.
-            const queue = this.conveyors.map((_, index) => index);
+            const queue = this.conveyors.map((_: ConveyorRecord, index: number) => index);
             for (let i = queue.length - 1; i > 0; i -= 1) {
               const j = Math.floor(this.rng.nextRange(0, i + 1));
               const tmp = queue[i];
@@ -1189,7 +1314,7 @@ export class GameState {
               queue[j] = tmp;
             }
             let spawned = false;
-            queue.forEach((index) => {
+            queue.forEach((index: number) => {
               if (!spawned) {
                 spawned = this._spawnBrick(this.conveyors[index]);
               }
@@ -1201,7 +1326,7 @@ export class GameState {
             }
           }
         } else {
-          this.conveyors.forEach((conveyor) => {
+          this.conveyors.forEach((conveyor: ConveyorRecord) => {
             const nextSpawn = conveyor.nextSpawnAt;
             if (this.elapsed >= nextSpawn) {
               const spawned = this._spawnBrick(conveyor);
@@ -1222,7 +1347,7 @@ export class GameState {
    * Returns a lightweight snapshot for HUD rendering.
    */
   getHUDStats() {
-    const focusBrick = this.forcedControl.enabled
+    const focusBrick = this.forcedControl.enabled && this.forcedControl.activeBrickId
       ? this.bricks.get(this.forcedControl.activeBrickId)
       : null;
     return {
@@ -1244,7 +1369,7 @@ export class GameState {
         activeBrickId: null
       };
     }
-    const active = this.bricks.get(this.forcedControl.activeBrickId) || null;
+    const active = this.forcedControl.activeBrickId ? (this.bricks.get(this.forcedControl.activeBrickId) || null) : null;
     const ammoLabel = this.forcedControl.coverStory.enableAmmoCue && active
       ? `${active.colorCategoryLabel ?? active.color ?? 'Current'} ammo`
       : null;
@@ -1271,7 +1396,7 @@ export class GameState {
    * Cleans up any remaining bricks (used when the trial ends abruptly).
    */
   forceEnd() {
-    this.bricks.forEach((brick) => {
+    this.bricks.forEach((brick: BrickRecord) => {
       this._finalizeBrick(brick, BRICK_STATUS.DROPPED, { forced: true });
     });
   }

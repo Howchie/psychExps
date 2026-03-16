@@ -1,12 +1,11 @@
-// @ts-nocheck
 import * as PIXI from 'pixi.js';
 import { brickProgressTint, getBrickVisibleWidth } from './brick_logic.js';
 import { buildHUDLines } from './hud.js';
 import { getOrCreateProceduralTexture, loadCachedImageTexture, makeMaterialKey } from './material_cache.js';
 
 // Helper to convert CSS color strings or numeric values into Pixi-compatible numbers
-const toPixiColor = (value) => PIXI.Color.shared.setValue(value ?? 0xffffff).toNumber();
-const normalizeBrickShape = (rawShape) => {
+const toPixiColor = (value: unknown) => PIXI.Color.shared.setValue((value ?? 0xffffff) as PIXI.ColorSource).toNumber();
+const normalizeBrickShape = (rawShape: unknown): string => {
   if (typeof rawShape !== 'string') {
     return 'rounded_rect';
   }
@@ -20,10 +19,10 @@ const normalizeBrickShape = (rawShape) => {
     rounded: 'rounded_rect',
     rounded_rectangle: 'rounded_rect'
   };
-  return aliases[normalized] ?? normalized;
+  return (aliases as Record<string, string>)[normalized] ?? normalized;
 };
 
-const normalizeTextureStyleId = (value) => {
+const normalizeTextureStyleId = (value: unknown): string => {
   if (typeof value !== 'string') {
     return '';
   }
@@ -409,7 +408,80 @@ const BUILTIN_BELT_TEXTURE_STYLES = {
  * visual DRT stimuli. Audio DRT is handled by the jsPsych plugin directly.
  */
 export class ConveyorRenderer {
-  constructor(config, { onBrickClick, onBrickHold, onBrickHover, onPointerDebug, runtimeLengths, seed } = {}) {
+  config: Record<string, any>;
+  onBrickClick: (brickId: string, x: number | null, y: number | null) => void;
+  onBrickHold: (brickId: string, durationMs: number, x: number | null, y: number | null) => void;
+  onBrickHover: (brickId: string, hovering: boolean, x: number | null, y: number | null) => void;
+  onPointerDebug: (payload: Record<string, any>) => void;
+  runtimeLengths: number[] | null;
+  app: PIXI.Application | null;
+  root: HTMLElement | null;
+  brickSprites: Map<string, any>;
+  hudElements: Record<string, any>;
+  hudBackground: PIXI.Graphics | null;
+  hudPointsAdornment: PIXI.Graphics | null;
+  _lastHudText: string;
+  _lastHudPanelSignature: string;
+  _lastHudPointsAdornmentSignature: string;
+  drtGraphics: PIXI.Graphics | null;
+  backgroundTexture: PIXI.Texture | null;
+  backgroundTextureOwned: boolean;
+  backgroundVisual: PIXI.TilingSprite | null;
+  beltTexture: PIXI.Texture | null;
+  beltTextureOwned: boolean;
+  beltVisuals: Array<Record<string, any>>;
+  interactionLayer: PIXI.Container | null;
+  conveyorZones: Map<string, PIXI.Graphics>;
+  bricksByConveyor: Map<string, any[]>;
+  conveyorHoldStart: Map<string, { brickId: string; t: number }>;
+  conveyorHovered: Set<string>;
+  conveyorHoverTarget: Map<string, string>;
+  conveyorPointerPos: Map<string, { x: number | null; y: number | null }>;
+  spotlightZone: PIXI.Graphics | null;
+  spotlightHoldStart: { brickId: string; t: number } | null;
+  spotlightHoveredBrickId: string | null;
+  spotlightPointerPos: { x: number | null; y: number | null };
+  spotlightPointerInside: boolean;
+  effectVisuals: Array<Record<string, any>>;
+  dueMarkerAnchors: Map<string, { x: number; y: number; width: number; height: number }>;
+  furnaceAnchors: Map<string, { mouthX: number; mouthY: number; mouthWidth: number; mouthHeight: number }>;
+  furnaceVisuals: Map<string, Record<string, any>>;
+  furnaceFlickerTimeMs: number;
+  spotlightGraphics: PIXI.Graphics | null;
+  spotlightRing: PIXI.Graphics | null;
+  spotlightRect: { x: number; y: number; w: number; h: number } | null;
+  activeBrickId: string | null;
+  brickHoldStart: Map<string, { t: number; x: number; y: number }>;
+  canvasView: any;
+  pointerInCanvas: boolean;
+  pointerCanvasPos: { x: number | null; y: number | null };
+  _teardownCanvasPointerTracking: (() => void) | null;
+  _brickHoveredId: string | null;
+  pointerDebugEnabled: boolean;
+  pointerDebugLines: string[];
+  pointerDebugText: PIXI.Text | null;
+  pointerDebugSeq: number;
+  pixelSnapBricks: boolean;
+  _spriteSyncEpoch: number;
+  _lastSpotlightSignature: string;
+  perfStats: {
+    effectDropsSkipped: number;
+    effectsDestroyed: number;
+    clearEffectsQueued: number;
+    peakActiveEffects: number;
+    peakBrickSprites: number;
+  };
+  seed: number;
+  _rngState: number;
+  beltLayer!: PIXI.Container;
+  backgroundLayer!: PIXI.Container;
+  brickLayer!: PIXI.Container;
+  effectLayer!: PIXI.Container;
+  spotlightLayer!: PIXI.Container;
+  hudLayer!: PIXI.Container;
+  drtLayer!: PIXI.Container;
+
+  constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
     this.config = config;
     this.onBrickClick = typeof onBrickClick === 'function' ? onBrickClick : () => {};
     this.onBrickHold = typeof onBrickHold === 'function' ? onBrickHold : () => {};
@@ -487,7 +559,7 @@ export class ConveyorRenderer {
     return (this._rngState >>> 0) / 0x100000000;
   }
 
-  async init(container) {
+  async init(container: HTMLElement) {
     if (!container) {
       throw new Error('Renderer requires a DOM container.');
     }
@@ -508,18 +580,18 @@ export class ConveyorRenderer {
       resolution,
     });
     container.innerHTML = '';
-    const view = this.app.view || this.app.canvas || null;
+    const view = (this.app as any).view || (this.app as any).canvas || null;
     if (view) {
-      container.appendChild(view);
+      container.appendChild(view as Node);
       this.canvasView = view;
       const imageRendering = String(perfCfg.imageRendering ?? 'crisp-edges').trim();
       if (imageRendering) {
-        view.style.imageRendering = imageRendering;
+        (view as any).style.imageRendering = imageRendering;
       }
       this._bindCanvasPointerTracking(view);
     }
     if (this.app?.renderer) {
-      this.app.renderer.roundPixels = this.pixelSnapBricks;
+      (this.app.renderer as any).roundPixels = this.pixelSnapBricks;
     }
 
     this.beltLayer = new PIXI.Container();
@@ -577,7 +649,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _emitPointerDebug(type, brickId, e, extra = {}) {
+  _emitPointerDebug(type: string, brickId: string | null, e: any, extra: Record<string, any> = {}) {
     if (!this.pointerDebugEnabled) {
       return;
     }
@@ -610,9 +682,9 @@ export class ConveyorRenderer {
     this.pointerDebugText.text = `POINTER DEBUG\n${lines.join('\n')}`;
   }
 
-  _resolveBeltProceduralStyleConfig(texCfg) {
+  _resolveBeltProceduralStyleConfig(texCfg: Record<string, any>) {
     const styleId = normalizeTextureStyleId(texCfg?.style ?? '');
-    const builtin = BUILTIN_BELT_TEXTURE_STYLES?.[styleId];
+    const builtin = (BUILTIN_BELT_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const base = (builtin && typeof builtin === 'object') ? builtin : {};
     const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
     const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
@@ -623,9 +695,9 @@ export class ConveyorRenderer {
     return { ...base, ...customObj, ...procedural };
   }
 
-  _resolveWarehouseProceduralStyleConfig(texCfg) {
+  _resolveWarehouseProceduralStyleConfig(texCfg: Record<string, any>) {
     const styleId = normalizeTextureStyleId(texCfg?.style ?? '');
-    const builtin = BUILTIN_WAREHOUSE_TEXTURE_STYLES?.[styleId];
+    const builtin = (BUILTIN_WAREHOUSE_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const base = (builtin && typeof builtin === 'object') ? builtin : {};
     const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
     const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
@@ -676,7 +748,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _buildProceduralTopdownBeltTexture(styleCfg = {}) {
+  _buildProceduralTopdownBeltTexture(styleCfg: Record<string, any> = {}) {
     if (!this.app?.renderer) {
       return null;
     }
@@ -768,14 +840,14 @@ export class ConveyorRenderer {
     return texture;
   }
 
-  _drawProceduralTopdownBeltGraphics(target, {
+  _drawProceduralTopdownBeltGraphics(target: PIXI.Graphics, {
     beltLength,
     beltHeight,
     phaseX = 0,
     styleCfg = {},
     styleScaleX = 1,
     styleScaleY = 1
-  } = {}) {
+  }: Record<string, any> = {}) {
     if (!target) {
       return;
     }
@@ -785,8 +857,8 @@ export class ConveyorRenderer {
       const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
       return 1 / resolution;
     })();
-    const snap = (value) => Math.round((Number(value) || 0) / pixelStep) * pixelStep;
-    const snapSize = (value, min = pixelStep) => Math.max(min, snap(value));
+    const snap = (value: number) => Math.round((Number(value) || 0) / pixelStep) * pixelStep;
+    const snapSize = (value: number, min: number = pixelStep) => Math.max(min, snap(value));
 
     const tileSize = Math.max(48, Number(styleCfg.tileSizePx ?? 120));
     const patternScaleX = Math.max(1e-6, (height / tileSize) * Math.max(0.01, Number(styleScaleX) || 1));
@@ -814,7 +886,7 @@ export class ConveyorRenderer {
     // Keep sign so visual direction matches prior belt motion convention.
     const phase = snap(-(Number(phaseX) || 0));
 
-    const wrappedOffset = (step) => {
+    const wrappedOffset = (step: number) => {
       const s = Math.max(1, Number(step) || 1);
       const rem = ((phase % s) + s) % s;
       return -rem;
@@ -869,7 +941,7 @@ export class ConveyorRenderer {
     const tileSpanX = Math.max(pixelStep, snapSize(tileSize * patternScaleX, pixelStep));
     const tileSpanY = Math.max(pixelStep, snapSize(tileSize * patternScaleY, pixelStep));
     const tileStart = wrappedOffset(tileSpanX) - tileSpanX;
-    const prand = (seed) => {
+    const prand = (seed: number) => {
       let x = (seed >>> 0) || 1;
       x ^= (x << 13) >>> 0;
       x ^= x >>> 17;
@@ -918,7 +990,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _buildProceduralWarehouseTexture(styleCfg = {}) {
+  _buildProceduralWarehouseTexture(styleCfg: Record<string, any> = {}) {
     if (!this.app?.renderer) {
       return null;
     }
@@ -948,8 +1020,8 @@ export class ConveyorRenderer {
     const rivetColor = toPixiColor(styleCfg.rivetColor ?? '#d1d5db');
     const edgeShadingAlpha = Math.max(0, Math.min(1, Number(styleCfg.edgeShadingAlpha ?? 0)));
 
-    const toHexRgb = (r, g, b) => ((r << 16) | (g << 8) | b);
-    const varyColor = (rgb, amp, bias = 0) => {
+    const toHexRgb = (r: number, g: number, b: number) => ((r << 16) | (g << 8) | b);
+    const varyColor = (rgb: number[], amp: number, bias: number = 0) => {
       const jitter = ((this._nextRand() * 2) - 1) * amp * 255;
       const delta = jitter + (bias * 255);
       const r = Math.max(0, Math.min(255, Math.round(rgb[0] * 255 + delta)));
@@ -1151,7 +1223,7 @@ export class ConveyorRenderer {
         const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
         const pixelStep = 1 / resolution;
         g.y = pixelSnap ? Math.round(y / pixelStep) * pixelStep : y;
-        g.roundPixels = pixelSnap;
+        (g as any).roundPixels = pixelSnap;
         this._drawProceduralTopdownBeltGraphics(g, {
           beltLength: length,
           beltHeight,
@@ -1175,9 +1247,9 @@ export class ConveyorRenderer {
       } else if (useTexture) {
         let sprite;
         try {
-          sprite = new PIXI.TilingSprite({ texture: this.beltTexture, width: length, height: beltHeight });
+          sprite = new (PIXI.TilingSprite as any)({ texture: this.beltTexture, width: length, height: beltHeight });
         } catch (_) {
-          sprite = new PIXI.TilingSprite(this.beltTexture, length, beltHeight);
+          sprite = new PIXI.TilingSprite(this.beltTexture!, length, beltHeight);
         }
         sprite.x = 0;
         sprite.y = y;
@@ -1234,7 +1306,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _isInteractionToggleEnabled(setting) {
+  _isInteractionToggleEnabled(setting: any) {
     if (typeof setting === 'boolean') {
       return setting;
     }
@@ -1282,7 +1354,7 @@ export class ConveyorRenderer {
     return 'screen';
   }
 
-  _snapSpotlightGeometry(value, mode) {
+  _snapSpotlightGeometry(value: number, mode: string) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) {
       return 0;
@@ -1297,7 +1369,7 @@ export class ConveyorRenderer {
     return Math.round(numeric * resolution) / resolution;
   }
 
-  _quantizeSpotlightSignature(value, step) {
+  _quantizeSpotlightSignature(value: number, step: number) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) {
       return '0';
@@ -1306,18 +1378,18 @@ export class ConveyorRenderer {
     return String(Math.round(numeric / safeStep));
   }
 
-  _extractPointerPosition(e) {
+  _extractPointerPosition(e: any) {
     return {
       x: (e && (e.globalX ?? (e.global && e.global.x))) ?? null,
       y: (e && (e.globalY ?? (e.global && e.global.y))) ?? null
     };
   }
 
-  _bindCanvasPointerTracking(view) {
+  _bindCanvasPointerTracking(view: any) {
     if (!view || typeof view.addEventListener !== 'function') {
       return;
     }
-    const updateFromEvent = (event) => {
+    const updateFromEvent = (event: PointerEvent) => {
       const rect = view.getBoundingClientRect?.();
       if (!rect || rect.width <= 0 || rect.height <= 0) {
         return;
@@ -1328,15 +1400,15 @@ export class ConveyorRenderer {
       const y = ny * Number(this.config?.display?.canvasHeight ?? 0);
       this.pointerCanvasPos = { x, y };
     };
-    const onPointerEnter = (event) => {
+    const onPointerEnter = (event: PointerEvent) => {
       this.pointerInCanvas = true;
       updateFromEvent(event);
     };
-    const onPointerMove = (event) => {
+    const onPointerMove = (event: PointerEvent) => {
       this.pointerInCanvas = true;
       updateFromEvent(event);
     };
-    const onPointerDown = (event) => {
+    const onPointerDown = (event: PointerEvent) => {
       this.pointerInCanvas = true;
       updateFromEvent(event);
     };
@@ -1368,17 +1440,17 @@ export class ConveyorRenderer {
     return { x, y };
   }
 
-  _setCanvasCursor(cursor) {
+  _setCanvasCursor(cursor: string) {
     if (!this.canvasView || !this.pointerInCanvas) {
       return;
     }
     this.canvasView.style.cursor = cursor;
   }
 
-  _pickInteractiveBrickAtPoint(x, y) {
-    let chosen = null;
+  _pickInteractiveBrickAtPoint(x: number, y: number) {
+    let chosen: any = null;
     let chosenDepth = -Infinity;
-    this.brickSprites.forEach((sprite) => {
+    this.brickSprites.forEach((sprite: any) => {
       if (!sprite || sprite.eventMode === 'none' || sprite.visible === false) {
         return;
       }
@@ -1401,7 +1473,7 @@ export class ConveyorRenderer {
     return chosen;
   }
 
-  _clearBrickHoverState(pos = null) {
+  _clearBrickHoverState(pos: { x: number | null; y: number | null } | null = null) {
     if (!this._brickHoveredId) {
       return;
     }
@@ -1411,7 +1483,7 @@ export class ConveyorRenderer {
     this._brickHoveredId = null;
   }
 
-  _reconcileStationaryPointerInteractions(completionMode) {
+  _reconcileStationaryPointerInteractions(completionMode: string) {
     const pos = this._getTrackedPointerPosition();
     if (!pos) {
       this._clearBrickHoverState();
@@ -1434,7 +1506,7 @@ export class ConveyorRenderer {
       canInteract = inside && Boolean(this.activeBrickId);
       this._clearBrickHoverState(pos);
     } else if (interactionMode === 'conveyor') {
-      let hoveredConveyorId = null;
+      let hoveredConveyorId: string | null = null;
       this.conveyorZones.forEach((zone, cid) => {
         if (hoveredConveyorId) {
           return;
@@ -1486,7 +1558,7 @@ export class ConveyorRenderer {
     this._setCanvasCursor(canInteract ? 'pointer' : 'default');
   }
 
-  _getConveyorTargetBrickId(conveyorId) {
+  _getConveyorTargetBrickId(conveyorId: string) {
     const entries = this.bricksByConveyor.get(String(conveyorId)) || [];
     if (!entries.length) {
       return null;
@@ -1504,7 +1576,7 @@ export class ConveyorRenderer {
     return selected?.id ?? null;
   }
 
-  _syncSpotlightHoverTarget(completionMode) {
+  _syncSpotlightHoverTarget(completionMode: string) {
     if (!this._isSpotlightHitAreaEnabled() || completionMode !== 'hover_to_clear') {
       if (this.spotlightHoveredBrickId) {
         this.onBrickHover(
@@ -1557,7 +1629,7 @@ export class ConveyorRenderer {
     this.spotlightZone = null;
   }
 
-  _ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius) {
+  _ensureSpotlightZone(holeX: number, holeY: number, holeW: number, holeH: number, cornerRadius: number) {
     if (!this.interactionLayer || !this._isSpotlightHitAreaEnabled()) {
       this._teardownSpotlightZone();
       return;
@@ -1567,7 +1639,7 @@ export class ConveyorRenderer {
       zone.eventMode = 'dynamic';
       zone.cursor = 'pointer';
 
-      const endSpotlightHold = (e) => {
+      const endSpotlightHold = (e: any) => {
         const mode = this.config?.bricks?.completionMode;
         const holdState = this.spotlightHoldStart;
         if (mode !== 'hold_duration' || !holdState) {
@@ -1639,7 +1711,7 @@ export class ConveyorRenderer {
     this.spotlightZone.endFill();
   }
 
-  _drawConveyorZone(conveyorId, beltY, beltLength, beltHeight) {
+  _drawConveyorZone(conveyorId: string, beltY: number, beltLength: number, beltHeight: number) {
     if (!this.interactionLayer || !this._isConveyorHitAreaEnabled()) {
       return;
     }
@@ -1650,10 +1722,10 @@ export class ConveyorRenderer {
     zone.endFill();
     zone.eventMode = 'dynamic';
     zone.cursor = 'pointer';
-    zone.conveyorId = String(conveyorId);
+    (zone as any).conveyorId = String(conveyorId);
 
-    const endConveyorHold = (e) => {
-      const cid = zone.conveyorId;
+    const endConveyorHold = (e: any) => {
+      const cid = (zone as any).conveyorId;
       const mode = this.config?.bricks?.completionMode;
       const holdState = this.conveyorHoldStart.get(cid);
       if (mode !== 'hold_duration' || !holdState) {
@@ -1668,7 +1740,7 @@ export class ConveyorRenderer {
     };
 
     zone.on('pointerdown', (e) => {
-      const cid = zone.conveyorId;
+      const cid = (zone as any).conveyorId;
       const mode = this.config?.bricks?.completionMode;
       const targetBrickId = this._getConveyorTargetBrickId(cid);
       const pos = this._extractPointerPosition(e);
@@ -1691,7 +1763,7 @@ export class ConveyorRenderer {
     zone.on('pointerup', endConveyorHold);
     zone.on('pointerupoutside', endConveyorHold);
     zone.on('pointerout', (e) => {
-      const cid = zone.conveyorId;
+      const cid = (zone as any).conveyorId;
       endConveyorHold(e);
       if (this.config?.bricks?.completionMode !== 'hover_to_clear') {
         return;
@@ -1707,7 +1779,7 @@ export class ConveyorRenderer {
       }
     });
     zone.on('pointerleave', (e) => {
-      const cid = zone.conveyorId;
+      const cid = (zone as any).conveyorId;
       this.conveyorHovered.delete(cid);
       const prev = this.conveyorHoverTarget.get(cid);
       this.conveyorHoverTarget.delete(cid);
@@ -1720,7 +1792,7 @@ export class ConveyorRenderer {
       endConveyorHold(e);
     });
     zone.on('pointercancel', (e) => {
-      const cid = zone.conveyorId;
+      const cid = (zone as any).conveyorId;
       this.conveyorHovered.delete(cid);
       const prev = this.conveyorHoverTarget.get(cid);
       this.conveyorHoverTarget.delete(cid);
@@ -1736,7 +1808,7 @@ export class ConveyorRenderer {
       if (this.config?.bricks?.completionMode !== 'hover_to_clear') {
         return;
       }
-      const cid = zone.conveyorId;
+      const cid = (zone as any).conveyorId;
       const pos = this._extractPointerPosition(e);
       this.conveyorPointerPos.set(cid, pos);
       this.conveyorHovered.add(cid);
@@ -1760,11 +1832,11 @@ export class ConveyorRenderer {
     this.conveyorZones.set(String(conveyorId), zone);
   }
 
-  _drawEndFurnace(conveyorId, beltY, beltHeight, beltLength) {
+  _drawEndFurnace(conveyorId: string, beltY: number, beltHeight: number, beltLength: number) {
     const cfgRaw = this.config?.display?.endFurnace || {};
     const rawStyleId = normalizeTextureStyleId(cfgRaw?.style ?? '');
     const styleId = rawStyleId === 'incinerator' ? 'furnace' : rawStyleId;
-    const styleCfg = BUILTIN_END_FURNACE_STYLES[styleId] || {};
+    const styleCfg = (BUILTIN_END_FURNACE_STYLES as Record<string, any>)[styleId] || {};
     const cfg = { ...styleCfg, ...cfgRaw, style: styleId || cfgRaw?.style };
     if (cfg.enable === false) {
       return;
@@ -1934,7 +2006,7 @@ export class ConveyorRenderer {
    * Scrolls belt textures to suggest motion matching each conveyor's speed.
    * Expects the same ordering as created in _drawBelts.
    */
-  updateBelts(conveyors, dtMs) {
+  updateBelts(conveyors: any[], dtMs: number) {
     if (!this.beltVisuals || !this.beltVisuals.length) {
       return;
     }
@@ -2004,7 +2076,7 @@ export class ConveyorRenderer {
     }
   }
 
-  updateFurnaces(dtMs) {
+  updateFurnaces(dtMs: number) {
     if (!this.furnaceVisuals.size) {
       return;
     }
@@ -2081,7 +2153,7 @@ export class ConveyorRenderer {
     });
   }
 
-  clampFrameDelta(dtMs) {
+  clampFrameDelta(dtMs: number) {
     const perfCfg = this.config?.display?.performance || {};
     const maxFrameDtMs = Number(perfCfg.maxFrameDtMs ?? 50);
     if (!Number.isFinite(maxFrameDtMs) || maxFrameDtMs <= 0) {
@@ -2090,7 +2162,7 @@ export class ConveyorRenderer {
     return Math.max(0, Math.min(Number(dtMs) || 0, maxFrameDtMs));
   }
 
-  updateBackground(dtMs) {
+  updateBackground(dtMs: number) {
     if (!this.backgroundVisual) {
       return;
     }
@@ -2147,7 +2219,7 @@ export class ConveyorRenderer {
     };
   }
 
-  _seedFromValue(input, fallback = 1) {
+  _seedFromValue(input: any, fallback: number = 1) {
     const text = String(input ?? '');
     if (!text) {
       return (fallback >>> 0) || 1;
@@ -2160,7 +2232,7 @@ export class ConveyorRenderer {
     return hash || (fallback >>> 0) || 1;
   }
 
-  _drawCoinPrimitive(target, sizePx, coinCfg, seed = 1) {
+  _drawCoinPrimitive(target: PIXI.Graphics, sizePx: number, coinCfg: Record<string, any>, seed: number = 1) {
     const size = Math.max(6, Number(sizePx) || 6);
     const r = size * 0.5;
     const rimColor = toPixiColor(coinCfg?.rimColor ?? '#b8860b');
@@ -2219,7 +2291,7 @@ export class ConveyorRenderer {
     target.lineStyle(0, 0, 0);
   }
 
-  _resolveHudCoinSize(text, uiCfg, clearCfg) {
+  _resolveHudCoinSize(text: any, uiCfg: Record<string, any>, clearCfg: Record<string, any>) {
     const explicit = Number(clearCfg?.coin?.hudSizePx);
     if (Number.isFinite(explicit)) {
       return Math.max(6, explicit);
@@ -2241,7 +2313,7 @@ export class ConveyorRenderer {
     return Math.max(6, Math.min(lineHeight * 0.92, baseCap * scale));
   }
 
-  queueClearEffects(clearEvents = []) {
+  queueClearEffects(clearEvents: any[] = []) {
     if (!Array.isArray(clearEvents) || clearEvents.length === 0) {
       return;
     }
@@ -2275,7 +2347,7 @@ export class ConveyorRenderer {
         fill: toPixiColor(clearCfg.textColor),
         fontSize: textSize,
         fontFamily: clearCfg.textFontFamily,
-        fontWeight: clearCfg.textFontWeight,
+        fontWeight: clearCfg.textFontWeight as PIXI.TextStyleFontWeight,
         stroke: toPixiColor(clearCfg.textStrokeColor),
         strokeThickness: clearCfg.textStrokeThickness,
         dropShadow: true,
@@ -2318,7 +2390,7 @@ export class ConveyorRenderer {
     this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
   }
 
-  queueDropEffects(dropEvents = []) {
+  queueDropEffects(dropEvents: any[] = []) {
     if (!Array.isArray(dropEvents) || dropEvents.length === 0) {
       return;
     }
@@ -2548,7 +2620,7 @@ export class ConveyorRenderer {
     this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
   }
 
-  updateEffects(dtMs) {
+  updateEffects(dtMs: number) {
     if (!this.effectVisuals.length) {
       return;
     }
@@ -2629,7 +2701,7 @@ export class ConveyorRenderer {
       fill: hudColor,
       fontSize: Number.isFinite(hudFontSize) ? hudFontSize : 16,
       fontFamily: hudFontFamily,
-      fontWeight: String(uiCfg.hudFontWeight || '500'),
+      fontWeight: String(uiCfg.hudFontWeight || '500') as PIXI.TextStyleFontWeight,
       lineHeight: Number(uiCfg.hudLineHeight ?? 22)
     });
     // Pixi v7 Text constructor signature: (text, style)
@@ -2643,7 +2715,7 @@ export class ConveyorRenderer {
   /**
    * Synchronises PIXI sprites with the logical bricks iterable.
    */
-  syncBricks(bricks, completionMode, completionParams, focusState = null) {
+  syncBricks(bricks: Iterable<any>, completionMode: string, completionParams: any, focusState: any = null) {
     this._spriteSyncEpoch += 1;
     const syncEpoch = this._spriteSyncEpoch;
     const interactionMode = this._getInteractionTargetMode();
@@ -2657,7 +2729,7 @@ export class ConveyorRenderer {
       if (!this.bricksByConveyor.has(cid)) {
         this.bricksByConveyor.set(cid, []);
       }
-      this.bricksByConveyor.get(cid).push(brick);
+      this.bricksByConveyor.get(cid)!.push(brick);
 
       let sprite = this.brickSprites.get(brick.id);
       if (!sprite) {
@@ -2724,7 +2796,7 @@ export class ConveyorRenderer {
       this.conveyorHovered.forEach((cid) => {
         const next = this._getConveyorTargetBrickId(cid);
         const prev = this.conveyorHoverTarget.get(cid) || null;
-        const pos = this.conveyorPointerPos.get(cid) || {};
+        const pos = this.conveyorPointerPos.get(cid) || { x: null, y: null };
         if (prev && prev !== next) {
           this.onBrickHover(prev, false, pos.x ?? null, pos.y ?? null);
         }
@@ -2739,12 +2811,12 @@ export class ConveyorRenderer {
     this._syncSpotlightHoverTarget(completionMode);
   }
 
-  _resetBrickVisualChildren(sprite) {
+  _resetBrickVisualChildren(sprite: any) {
     if (!sprite) {
       return;
     }
     const children = sprite.removeChildren();
-    children.forEach((child) => child?.destroy?.());
+    children.forEach((child: any) => child?.destroy?.());
     sprite.mainGraphic = null;
     sprite.progressGraphic = null;
     sprite.progressMask = null;
@@ -2753,7 +2825,7 @@ export class ConveyorRenderer {
     sprite.progressMaskWidth = -1;
   }
 
-  _drawBrickBody(target, {
+  _drawBrickBody(target: PIXI.Graphics, {
     brick,
     shape,
     width,
@@ -2765,7 +2837,7 @@ export class ConveyorRenderer {
     borderAlpha = 0.5,
     borderWidth = 1.25,
     withTextureOverlay = true,
-  }) {
+  }: { brick: any; shape: string; width: number; height: number; cornerRadius: number; fillColor: number; fillAlpha?: number; borderColor: number; borderAlpha?: number; borderWidth?: number; withTextureOverlay?: boolean }) {
     target.beginFill(fillColor, fillAlpha);
     this._drawBrickPrimitive(target, shape, width, height, cornerRadius);
     target.endFill();
@@ -2779,20 +2851,20 @@ export class ConveyorRenderer {
     }
   }
 
-  _shouldUseProgressMask(shape, completionMode) {
+  _shouldUseProgressMask(shape: string, completionMode: string) {
     if (!['hold_duration', 'hover_to_clear'].includes(completionMode)) {
       return false;
     }
     return shape === 'rect' || shape === 'rounded_rect';
   }
 
-  _createBrickSprite(brick) {
-    const sprite = new PIXI.Container();
+  _createBrickSprite(brick: any) {
+    const sprite: any = new PIXI.Container();
     sprite.brickId = brick.id;
     sprite.cursor = 'pointer';
     sprite.eventMode = 'dynamic';
     if (this.config.bricks.completionMode === 'hold_duration') {
-      const beginHold = (e) => {
+      const beginHold = (e: any) => {
         const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
         const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
         this._emitPointerDebug('brick_hold_begin', brick.id, e);
@@ -2802,7 +2874,7 @@ export class ConveyorRenderer {
           y: gy
         });
       };
-      const endHold = (e) => {
+      const endHold = (e: any) => {
         const start = this.brickHoldStart.get(brick.id);
         if (!start) {
           return;
@@ -2824,13 +2896,13 @@ export class ConveyorRenderer {
       sprite.on('pointeroutoutside', endHold);
       sprite.on('pointercancel', endHold);
     } else if (this.config.bricks.completionMode === 'hover_to_clear') {
-      const beginHover = (e) => {
+      const beginHover = (e: any) => {
         const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
         const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
         this._emitPointerDebug('brick_hover_begin', brick.id, e);
         this.onBrickHover(brick.id, true, gx, gy);
       };
-      const endHover = (e) => {
+      const endHover = (e: any) => {
         const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
         const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
         this._emitPointerDebug('brick_hover_end', brick.id, e);
@@ -2841,7 +2913,7 @@ export class ConveyorRenderer {
       sprite.on('pointeroutoutside', endHover);
       sprite.on('pointercancel', endHover);
     } else {
-      const handleClick = (e) => {
+      const handleClick = (e: any) => {
         // Use pointerdown so moving bricks still register immediately.
         const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
         const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
@@ -2857,7 +2929,7 @@ export class ConveyorRenderer {
     return sprite;
   }
 
-  _drawBrickGraphics(sprite, brick, completionMode) {
+  _drawBrickGraphics(sprite: any, brick: any, completionMode: string) {
     const color = toPixiColor(brick.color ?? this.config.display.brickColor);
     const borderColor = toPixiColor(brick.borderColor ?? this.config.display.brickBorderColor ?? 0x0f172a);
     const shape = normalizeBrickShape(brick.shape ?? this.config.display.brickShape);
@@ -2977,7 +3049,7 @@ export class ConveyorRenderer {
     sprite.progressMaskWidth = -1;
   }
 
-  _updateBrickProgressVisual(sprite, brick, completionMode) {
+  _updateBrickProgressVisual(sprite: any, brick: any, completionMode: string) {
     sprite.progressValue = brick.clearProgress;
     if (!sprite.usesProgressMask || !sprite.progressMask) {
       return;
@@ -3001,7 +3073,7 @@ export class ConveyorRenderer {
     sprite.progressMask.endFill();
   }
 
-  _resolveBrickTextureOverlayConfig(brick) {
+  _resolveBrickTextureOverlayConfig(brick: any) {
     const base = this.config?.display?.brickTextureOverlay || {};
     if (base.enable !== true) {
       return null;
@@ -3012,7 +3084,7 @@ export class ConveyorRenderer {
     }
     const customStyles = base?.styles && typeof base.styles === 'object' ? base.styles : {};
     const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
-    const builtin = BUILTIN_BRICK_TEXTURE_STYLES?.[styleId];
+    const builtin = (BUILTIN_BRICK_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const override = custom && typeof custom === 'object'
       ? custom
       : (builtin && typeof builtin === 'object' ? builtin : null);
@@ -3022,7 +3094,7 @@ export class ConveyorRenderer {
     return { ...base, ...override };
   }
 
-  _drawTextureLabelPatch(target, w, h, inset, alphaBase, cfg) {
+  _drawTextureLabelPatch(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, cfg: Record<string, any>) {
     if (cfg.labelPatch !== true) {
       return;
     }
@@ -3049,7 +3121,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg) {
+  _drawTextureBandAndPlate(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, cfg: Record<string, any>) {
     if (cfg.bandColor == null) {
       return;
     }
@@ -3069,7 +3141,7 @@ export class ConveyorRenderer {
     target.endFill();
   }
 
-  _drawTexturePizza(target, w, h, inset, alphaBase, phase, idNum, cfg) {
+  _drawTexturePizza(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, phase: number, idNum: number, cfg: Record<string, any>) {
     const crustColor = toPixiColor(cfg.crustColor ?? '#a16207');
     const sauceColor = toPixiColor(cfg.sauceColor ?? '#b91c1c');
     const cheeseColor = toPixiColor(cfg.cheeseColor ?? '#facc15');
@@ -3127,7 +3199,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _drawTextureGiftWrap(target, w, h, inset, alphaBase, seamColor, seamWidth, cfg) {
+  _drawTextureGiftWrap(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, seamColor: number, seamWidth: number, cfg: Record<string, any>) {
     const ribbonColor = toPixiColor(cfg.ribbonColor ?? '#fef3c7');
     const ribbonAlpha = Math.max(0, Math.min(1, Number(cfg.ribbonAlpha ?? 1)));
     const ribbonWidthRatio = Math.max(0.08, Math.min(0.5, Number(cfg.ribbonWidthRatio ?? 0.24)));
@@ -3191,7 +3263,7 @@ export class ConveyorRenderer {
     target.lineStyle(0, 0, 0);
   }
 
-  _drawTextureCheckerboard(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, cfg) {
+  _drawTextureCheckerboard(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, phase: number, topSheenAlpha: number, highlightColor: number, radius: number, cfg: Record<string, any>) {
     const colorA = toPixiColor(cfg.checkerColorA ?? '#e2e8f0');
     const colorB = toPixiColor(cfg.checkerColorB ?? '#334155');
     const cellPx = Math.max(4, Math.round(Number(cfg.checkerCellPx ?? 10)));
@@ -3221,7 +3293,7 @@ export class ConveyorRenderer {
     this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
   }
 
-  _drawTextureCardboardBlock(target, w, h, inset, alphaBase, idNum, cfg) {
+  _drawTextureCardboardBlock(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, idNum: number, cfg: Record<string, any>) {
     const speckleColor = toPixiColor(cfg.speckleColor ?? '#7a5b3d');
     const speckleAlpha = Math.max(0, Math.min(1, Number(cfg.speckleAlpha ?? 0.12)));
     const speckleCount = Math.max(0, Math.floor(Number(cfg.speckleCount ?? 12)));
@@ -3268,7 +3340,7 @@ export class ConveyorRenderer {
     this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
   }
 
-  _drawTextureWoodPlanks(target, w, h, inset, alphaBase, phase, topSheenAlpha, highlightColor, radius, seamColor, seamWidth, plankCount, grainCount, nailRadius, cfg) {
+  _drawTextureWoodPlanks(target: PIXI.Graphics, w: number, h: number, inset: number, alphaBase: number, phase: number, topSheenAlpha: number, highlightColor: number, radius: number, seamColor: number, seamWidth: number, plankCount: number, grainCount: number, nailRadius: number, cfg: Record<string, any>) {
     // Top sheen (optional; can create a strong two-tone look if too high).
     if (topSheenAlpha > 0) {
       target.beginFill(highlightColor, alphaBase * topSheenAlpha);
@@ -3310,7 +3382,7 @@ export class ConveyorRenderer {
     this._drawTextureBandAndPlate(target, w, h, inset, alphaBase, cfg);
   }
 
-  _drawBrickTextureOverlay(target, brick, shape, width, height, cornerRadius, fillAlpha = 1) {
+  _drawBrickTextureOverlay(target: PIXI.Graphics, brick: any, shape: string, width: number, height: number, cornerRadius: number, fillAlpha: number = 1) {
     const cfg = this._resolveBrickTextureOverlayConfig(brick);
     if (!cfg || cfg.enable !== true) {
       return;
@@ -3380,7 +3452,7 @@ export class ConveyorRenderer {
     }
   }
 
-  _drawBrickPrimitive(sprite, shape, width, height, cornerRadius) {
+  _drawBrickPrimitive(sprite: PIXI.Graphics, shape: string, width: number, height: number, cornerRadius: number) {
     const w = Math.max(1, Number(width) || 1);
     const h = Math.max(1, Number(height) || 1);
     const radius = Math.max(0, Math.min(Number(cornerRadius) || 0, w / 2, h / 2));
@@ -3405,7 +3477,7 @@ export class ConveyorRenderer {
     sprite.drawRoundedRect(0, 0, w, h, radius);
   }
 
-  _buildBrickHitArea(shape, width, height) {
+  _buildBrickHitArea(shape: string, width: number, height: number) {
     const w = Math.max(1, Number(width) || 1);
     const h = Math.max(1, Number(height) || 1);
     if (shape === 'circle') {
@@ -3420,7 +3492,7 @@ export class ConveyorRenderer {
     return new PIXI.Rectangle(0, 0, w, h);
   }
 
-  _updateSpotlight(focusState) {
+  _updateSpotlight(focusState: any) {
     if (!this._isSpotlightHitAreaEnabled()) {
       this._teardownSpotlightZone();
     }
@@ -3522,7 +3594,7 @@ export class ConveyorRenderer {
     this._ensureSpotlightZone(holeX, holeY, holeW, holeH, cornerRadius);
   }
 
-  _updateHudPointsAdornment(lines, text, uiCfg, clearCfg = null, layout = null) {
+  _updateHudPointsAdornment(lines: any[], text: any, uiCfg: Record<string, any>, clearCfg: Record<string, any> | null = null, layout: Record<string, any> | null = null) {
     const resolvedClearCfg = clearCfg || this._resolveClearAnimationConfig();
     const showPoints = uiCfg?.showPoints === true;
     const shouldShow = resolvedClearCfg.enable && showPoints && resolvedClearCfg.coin.enable && resolvedClearCfg.coin.showInHud;
@@ -3550,13 +3622,13 @@ export class ConveyorRenderer {
       this.hudLayer.addChild(this.hudPointsAdornment);
     }
     const coinSize = Number.isFinite(Number(layout?.coinSize))
-      ? Math.max(6, Number(layout.coinSize))
+      ? Math.max(6, Number(layout!.coinSize))
       : this._resolveHudCoinSize(text, uiCfg, resolvedClearCfg);
     const coinGap = Number.isFinite(Number(layout?.coinGap))
-      ? Math.max(0, Number(layout.coinGap))
+      ? Math.max(0, Number(layout!.coinGap))
       : Math.max(4, Number(resolvedClearCfg.coin.gapPx ?? 5));
     const pointsLineWidthMeasured = Number.isFinite(Number(layout?.pointsLineWidth))
-      ? Math.max(0, Number(layout.pointsLineWidth))
+      ? Math.max(0, Number(layout!.pointsLineWidth))
       : 0;
     const pointsLineWidth = pointsLineWidthMeasured > 0 ? pointsLineWidthMeasured : Number(text.width);
     const panelEnabled = uiCfg.hudPanel !== false;
@@ -3593,7 +3665,7 @@ export class ConveyorRenderer {
     this.hudPointsAdornment.visible = true;
   }
 
-  updateHUD(stats, remainingMs, blockInfo) {
+  updateHUD(stats: any, remainingMs: any, blockInfo: any) {
     const text = this.hudElements.status;
     if (!text) {
       return;
@@ -3661,7 +3733,7 @@ export class ConveyorRenderer {
   /**
    * Shows or hides the visual DRT indicator.
    */
-  toggleVisualDRT(show, config) {
+  toggleVisualDRT(show: any, config: any) {
     if (!config) {
       return;
     }
@@ -3730,9 +3802,9 @@ export class ConveyorRenderer {
     const height = this.config.display.canvasHeight;
     let sprite;
     try {
-      sprite = new PIXI.TilingSprite({ texture: this.backgroundTexture, width, height });
+      sprite = new (PIXI.TilingSprite as any)({ texture: this.backgroundTexture, width, height });
     } catch (_) {
-      sprite = new PIXI.TilingSprite(this.backgroundTexture, width, height);
+      sprite = new PIXI.TilingSprite(this.backgroundTexture!, width, height);
     }
     const alpha = Number(texCfg.alpha ?? 1);
     const scaleX = Number(texCfg.scaleX ?? texCfg.scale ?? 1);
@@ -3761,9 +3833,9 @@ export class ConveyorRenderer {
     this.conveyorZones.clear();
     this._clearBrickHoverState();
     this.brickHoldStart.clear();
-    this.brickSprites.forEach((sprite) => sprite.destroy());
+    this.brickSprites.forEach((sprite: any) => sprite.destroy());
     this.brickSprites.clear();
-    this.effectVisuals.forEach((effect) => effect?.node?.destroy?.());
+    this.effectVisuals.forEach((effect: any) => effect?.node?.destroy?.());
     this.effectVisuals = [];
     this.dueMarkerAnchors.clear();
     this.furnaceVisuals.clear();
@@ -3772,9 +3844,9 @@ export class ConveyorRenderer {
       // Destroying cached BaseTextures breaks subsequent trial loads; if cleanup is
       // needed, use PIXI.Assets.unload() on specific asset keys instead.
       this.app.destroy(true, { children: true, texture: false, baseTexture: false });
-      const view = this.app.canvas || this.app.view;
-      if (this.root && view && view.parentNode === this.root) {
-        this.root.removeChild(view);
+      const view = (this.app as any).canvas || (this.app as any).view;
+      if (this.root && view && (view as any).parentNode === this.root) {
+        this.root.removeChild(view as Node);
       }
     }
     if (this._teardownCanvasPointerTracking) {

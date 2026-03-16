@@ -1,74 +1,165 @@
+import type { CoreRng } from '@experiments/core';
 declare const BRICK_STATUS: {
-    ACTIVE: string;
-    CLEARED: string;
-    DROPPED: string;
+    readonly ACTIVE: "active";
+    readonly CLEARED: "cleared";
+    readonly DROPPED: "dropped";
 };
+interface BrickRecord {
+    id: string;
+    conveyorId: string;
+    status: string;
+    x: number;
+    y: number;
+    speed: number;
+    width: number;
+    initialWidth: number;
+    height: number;
+    createdAt: number;
+    clicks: number;
+    holds: number;
+    clearProgress: number;
+    isHovered: boolean;
+    color: string;
+    borderColor: string | null;
+    shape: string;
+    textureStyle: string | null;
+    colorCategoryId: string | null;
+    colorCategoryLabel: string | null;
+    widthCategoryId: string | null;
+    widthCategoryLabel: string | null;
+    borderColorCategoryId: string | null;
+    borderColorCategoryLabel: string | null;
+    shapeCategoryId: string | null;
+    shapeCategoryLabel: string | null;
+    textureCategoryId: string | null;
+    textureCategoryLabel: string | null;
+    value: number;
+    isTarget: boolean;
+    workDeadlineMs: number | null;
+    targetHoldMs: number | null;
+    progressPerPerfect: number | null;
+    forcedSetIndex: number | null;
+    label: string | null;
+}
+interface ConveyorRecord {
+    id: string;
+    index: number;
+    y: number;
+    length: number;
+    speed: number;
+    interSpawnSampler: () => number;
+    nextSpawnAt: number;
+    activeIds: string[];
+}
+interface CategoryEntry {
+    id: string;
+    label: string | null;
+    dimension: string;
+    traits: Record<string, unknown>;
+}
+interface CategoryPalettes {
+    color: CategoryEntry[];
+    width: CategoryEntry[];
+    borderColor: CategoryEntry[];
+    shape: CategoryEntry[];
+    texture: CategoryEntry[];
+}
+interface ForcedControlState {
+    enabled: boolean;
+    switchMode: string;
+    switchIntervalMs: number;
+    switchOnDrop: boolean;
+    sequence: unknown[] | null;
+    spotlightPadding: number;
+    dimAlpha: number;
+    coverStory: {
+        enableAmmoCue: boolean;
+    };
+    activeOrderIndex: number;
+    activeBrickId: string | null;
+    nextSwitchAtMs: number | null;
+    orderedBrickIds: string[];
+}
+interface GameStats {
+    spawned: number;
+    cleared: number;
+    dropped: number;
+    clickErrors: number;
+    points: number;
+}
+interface GameEvent {
+    time: number;
+    type: string;
+    [key: string]: unknown;
+}
+interface PointerPos {
+    x?: number | null;
+    y?: number | null;
+}
 /**
  * Represents the trial-level game state, including conveyors, bricks, and
  * high-level statistics. Rendering and jsPsych plugin orchestrate updates
  * via the public methods exposed here.
  */
 export declare class GameState {
-    activeBricks: any[];
-    constructor(config: any, { onEvent, seed }?: {});
-    _log(type: any, payload?: {}): void;
+    activeBricks: BrickRecord[];
+    config: Record<string, any>;
+    onEvent: (event: GameEvent) => void;
+    rng: CoreRng;
+    samplerCache: WeakMap<object, () => unknown>;
+    elapsed: number;
+    events: GameEvent[];
+    stats: GameStats;
+    bricks: Map<string, BrickRecord>;
+    conveyors: ConveyorRecord[];
+    conveyorsById: Map<string, ConveyorRecord>;
+    spawnControllers: unknown[];
+    pendingDropVisuals: Record<string, unknown>[];
+    pendingClearVisuals: Record<string, unknown>[];
+    nextBrickId: number;
+    globalInterSpawnSampler: () => number;
+    nextGlobalSpawnAt: number;
+    defaultConveyorLength: number;
+    categoryPalettes: CategoryPalettes;
+    brickCategories: CategoryEntry[];
+    forcedControl: ForcedControlState;
+    constructor(config: Record<string, any>, { onEvent, seed }?: {
+        onEvent?: (event: GameEvent) => void;
+        seed?: unknown;
+    });
+    _log(type: string, payload?: Record<string, unknown>): void;
     _initConveyors(): void;
     _initBricks(): void;
     _initForcedBricks(): boolean;
     _materializeForcedSet(): any;
-    _generateForcedSetFromPlan(plan: any): any[];
-    _createForcedPlanFieldResolver(fieldSpec: any): (index: any) => any;
-    _sampleField(spec: any): any;
-    _resolveValue(spec: any): number;
+    _generateForcedSetFromPlan(plan: Record<string, any>): Record<string, unknown>[];
+    _createForcedPlanFieldResolver(fieldSpec: unknown): (index: number) => unknown;
+    _sampleField(spec: unknown): unknown;
+    _resolveValue(spec: unknown): number;
     _prepareBrickCategories(): {
-        color: ({
-            id: any;
-            label: any;
-            dimension: any;
-            traits: any;
-        } | null)[];
-        width: ({
-            id: any;
-            label: any;
-            dimension: any;
-            traits: any;
-        } | null)[];
-        borderColor: ({
-            id: any;
-            label: any;
-            dimension: any;
-            traits: any;
-        } | null)[];
-        shape: ({
-            id: any;
-            label: any;
-            dimension: any;
-            traits: any;
-        } | null)[];
-        texture: ({
-            id: any;
-            label: any;
-            dimension: any;
-            traits: any;
-        } | null)[];
+        color: CategoryEntry[];
+        width: CategoryEntry[];
+        borderColor: CategoryEntry[];
+        shape: CategoryEntry[];
+        texture: CategoryEntry[];
     };
-    _normalizeBrickShape(rawShape: any): any;
-    _isSamplerSpec(value: any): boolean;
-    _collectCategoryTraitSpecs(source: any): {};
-    _materializeBrickTraits(traitSpecs: any): {};
-    _pickRandomCategory(dimension: any): any;
-    _resolveCategoryById(dimension: any, id: any): any;
-    _resolveCategorySelectionsForEntry(entry: any): {
-        color: any;
-        width: any;
-        borderColor: any;
-        shape: any;
-        texture: any;
+    _normalizeBrickShape(rawShape: unknown): string | null;
+    _isSamplerSpec(value: unknown): boolean;
+    _collectCategoryTraitSpecs(source: unknown): Record<string, unknown>;
+    _materializeBrickTraits(traitSpecs: unknown): Record<string, unknown>;
+    _pickRandomCategory(dimension: keyof CategoryPalettes): CategoryEntry | null;
+    _resolveCategoryById(dimension: keyof CategoryPalettes, id: unknown): CategoryEntry | null;
+    _resolveCategorySelectionsForEntry(entry: Record<string, any>): {
+        color: CategoryEntry | null;
+        width: CategoryEntry | null;
+        borderColor: CategoryEntry | null;
+        shape: CategoryEntry | null;
+        texture: CategoryEntry | null;
     };
     _resolveBrickTraits({ categories, traits, metadata }?: {
-        categories?: null | undefined;
-        traits?: null | undefined;
-        metadata?: null | undefined;
+        categories?: Record<string, any> | null;
+        traits?: Record<string, unknown> | null;
+        metadata?: Record<string, unknown> | null;
     }): {
         categories: {
             color: any;
@@ -77,10 +168,10 @@ export declare class GameState {
             shape: any;
             texture: any;
         };
-        traits: {};
+        traits: Record<string, unknown>;
     };
-    _makeLengthSampler(lengthSpec: any): () => any;
-    _makeInterSpawnSampler(spawnCfg?: {}): () => unknown;
+    _makeLengthSampler(lengthSpec: unknown): () => number;
+    _makeInterSpawnSampler(spawnCfg?: Record<string, any>): () => number;
     _buildForcedControlConfig(): {
         enabled: boolean;
         switchMode: string;
@@ -98,28 +189,28 @@ export declare class GameState {
         orderedBrickIds: never[];
     };
     _initForcedControl(): void;
-    _setForcedActiveBrick(orderIndex: any, reason: any): void;
-    _advanceForcedActiveBrick(reason: any): void;
+    _setForcedActiveBrick(orderIndex: number, reason: string): void;
+    _advanceForcedActiveBrick(reason: string): void;
     _scheduleForcedTimedSwitch(): void;
-    _computeBrickY(conveyorY: any, brickHeight: any): any;
+    _computeBrickY(conveyorY: number, brickHeight: number): number;
     /**
      * Spawns a new brick on the given conveyor if safety constraints permit.
      */
-    _spawnBrick(conveyor: any, { x, reason, bypassSpacing, categories, traits, metadata }?: {
-        x?: number | undefined;
-        reason?: string | undefined;
-        bypassSpacing?: boolean | undefined;
-        categories?: null | undefined;
-        traits?: null | undefined;
-        metadata?: null | undefined;
+    _spawnBrick(conveyor: ConveyorRecord, { x, reason, bypassSpacing, categories, traits, metadata }?: {
+        x?: number;
+        reason?: string;
+        bypassSpacing?: boolean;
+        categories?: Record<string, any> | null;
+        traits?: Record<string, unknown> | null;
+        metadata?: Record<string, unknown> | null;
     }): boolean;
-    handleBrickHover(brickId: any, isHovering: any, timestamp: any, pointerPos?: {}): void;
+    handleBrickHover(brickId: string, isHovering: boolean, timestamp: number, pointerPos?: PointerPos): void;
     /**
      * Removes a brick and updates stats/logging.
      */
-    _finalizeBrick(brick: any, status: any, payload?: {}): void;
-    _isCurrentForcedBrick(brickId: any): boolean;
-    _canWorkOnBrick(brick: any): {
+    _finalizeBrick(brick: BrickRecord, status: string, payload?: Record<string, unknown>): void;
+    _isCurrentForcedBrick(brickId: string): boolean;
+    _canWorkOnBrick(brick: BrickRecord): {
         ok: boolean;
         reason: string;
     } | {
@@ -129,24 +220,24 @@ export declare class GameState {
     /**
      * Handles player interaction depending on completion mode.
      */
-    handleBrickInteraction(brickId: any, timestamp: any, clickPos?: {}): void;
-    handleBrickHold(brickId: any, holdDurationMs: any, timestamp: any, clickPos?: {}): void;
+    handleBrickInteraction(brickId: string, timestamp: number, clickPos?: PointerPos): void;
+    handleBrickHold(brickId: string, holdDurationMs: number, timestamp: number, clickPos?: PointerPos): void;
     /**
      * Advances the simulation by dt milliseconds.
      */
-    step(dtMs: any): void;
+    step(dtMs: number): void;
     /**
      * Returns a lightweight snapshot for HUD rendering.
      */
     getHUDStats(): {
-        timeElapsedMs: any;
-        bricksActive: any;
-        spawned: any;
-        cleared: any;
-        dropped: any;
-        points: any;
-        focusBrickId: any;
-        focusBrickValue: any;
+        timeElapsedMs: number;
+        bricksActive: number;
+        spawned: number;
+        cleared: number;
+        dropped: number;
+        points: number;
+        focusBrickId: string | null;
+        focusBrickValue: number | null;
     };
     getFocusState(): {
         enabled: boolean;
@@ -156,23 +247,29 @@ export declare class GameState {
         ammoLabel?: undefined;
     } | {
         enabled: boolean;
-        activeBrickId: any;
-        spotlightPadding: any;
-        dimAlpha: any;
+        activeBrickId: string | null;
+        spotlightPadding: number;
+        dimAlpha: number;
         ammoLabel: string | null;
     };
     /**
      * Returns serializable data for persistent storage.
      */
     exportData(): {
-        stats: any;
-        events: any;
+        stats: {
+            spawned: number;
+            cleared: number;
+            dropped: number;
+            clickErrors: number;
+            points: number;
+        };
+        events: GameEvent[];
     };
     /**
      * Cleans up any remaining bricks (used when the trial ends abruptly).
      */
     forceEnd(): void;
-    consumeDroppedVisuals(): any;
-    consumeClearedVisuals(): any;
+    consumeDroppedVisuals(): Record<string, unknown>[];
+    consumeClearedVisuals(): Record<string, unknown>[];
 }
 export { BRICK_STATUS };

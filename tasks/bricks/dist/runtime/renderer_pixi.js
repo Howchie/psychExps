@@ -1,10 +1,9 @@
-// @ts-nocheck
 import * as PIXI from 'pixi.js';
 import { brickProgressTint, getBrickVisibleWidth } from './brick_logic.js';
 import { buildHUDLines } from './hud.js';
 import { getOrCreateProceduralTexture, loadCachedImageTexture, makeMaterialKey } from './material_cache.js';
 // Helper to convert CSS color strings or numeric values into Pixi-compatible numbers
-const toPixiColor = (value) => PIXI.Color.shared.setValue(value ?? 0xffffff).toNumber();
+const toPixiColor = (value) => PIXI.Color.shared.setValue((value ?? 0xffffff)).toNumber();
 const normalizeBrickShape = (rawShape) => {
     if (typeof rawShape !== 'string') {
         return 'rounded_rect';
@@ -401,6 +400,72 @@ const BUILTIN_BELT_TEXTURE_STYLES = {
  * visual DRT stimuli. Audio DRT is handled by the jsPsych plugin directly.
  */
 export class ConveyorRenderer {
+    config;
+    onBrickClick;
+    onBrickHold;
+    onBrickHover;
+    onPointerDebug;
+    runtimeLengths;
+    app;
+    root;
+    brickSprites;
+    hudElements;
+    hudBackground;
+    hudPointsAdornment;
+    _lastHudText;
+    _lastHudPanelSignature;
+    _lastHudPointsAdornmentSignature;
+    drtGraphics;
+    backgroundTexture;
+    backgroundTextureOwned;
+    backgroundVisual;
+    beltTexture;
+    beltTextureOwned;
+    beltVisuals;
+    interactionLayer;
+    conveyorZones;
+    bricksByConveyor;
+    conveyorHoldStart;
+    conveyorHovered;
+    conveyorHoverTarget;
+    conveyorPointerPos;
+    spotlightZone;
+    spotlightHoldStart;
+    spotlightHoveredBrickId;
+    spotlightPointerPos;
+    spotlightPointerInside;
+    effectVisuals;
+    dueMarkerAnchors;
+    furnaceAnchors;
+    furnaceVisuals;
+    furnaceFlickerTimeMs;
+    spotlightGraphics;
+    spotlightRing;
+    spotlightRect;
+    activeBrickId;
+    brickHoldStart;
+    canvasView;
+    pointerInCanvas;
+    pointerCanvasPos;
+    _teardownCanvasPointerTracking;
+    _brickHoveredId;
+    pointerDebugEnabled;
+    pointerDebugLines;
+    pointerDebugText;
+    pointerDebugSeq;
+    pixelSnapBricks;
+    _spriteSyncEpoch;
+    _lastSpotlightSignature;
+    perfStats;
+    seed;
+    _rngState;
+    beltLayer;
+    backgroundLayer;
+    brickLayer;
+    effectLayer;
+    spotlightLayer;
+    hudLayer;
+    drtLayer;
     constructor(config, { onBrickClick, onBrickHold, onBrickHover, onPointerDebug, runtimeLengths, seed } = {}) {
         this.config = config;
         this.onBrickClick = typeof onBrickClick === 'function' ? onBrickClick : () => { };
@@ -2471,7 +2536,7 @@ export class ConveyorRenderer {
         this.hudElements.status = hudText;
     }
     /**
-     * Synchronises PIXI sprites with the logical bricks array.
+     * Synchronises PIXI sprites with the logical bricks iterable.
      */
     syncBricks(bricks, completionMode, completionParams, focusState = null) {
         this._spriteSyncEpoch += 1;
@@ -2480,16 +2545,14 @@ export class ConveyorRenderer {
         const conveyorWideHitArea = interactionMode === 'conveyor';
         const spotlightWideHitArea = interactionMode === 'spotlight';
         this.bricksByConveyor.clear();
-        bricks.forEach((brick) => {
+        const focusEnabled = Boolean(focusState?.enabled);
+        this.activeBrickId = focusEnabled ? focusState?.activeBrickId ?? null : null;
+        for (const brick of bricks) {
             const cid = String(brick.conveyorId ?? '');
             if (!this.bricksByConveyor.has(cid)) {
                 this.bricksByConveyor.set(cid, []);
             }
             this.bricksByConveyor.get(cid).push(brick);
-        });
-        const focusEnabled = Boolean(focusState?.enabled);
-        this.activeBrickId = focusEnabled ? focusState?.activeBrickId ?? null : null;
-        bricks.forEach((brick) => {
             let sprite = this.brickSprites.get(brick.id);
             if (!sprite) {
                 sprite = this._createBrickSprite(brick);
@@ -2539,7 +2602,7 @@ export class ConveyorRenderer {
                 sprite.tint = 0xffffff;
             }
             sprite._syncEpoch = syncEpoch;
-        });
+        }
         // Remove stale sprites.
         this.brickSprites.forEach((sprite, id) => {
             if (sprite?._syncEpoch !== syncEpoch) {
@@ -2555,7 +2618,7 @@ export class ConveyorRenderer {
             this.conveyorHovered.forEach((cid) => {
                 const next = this._getConveyorTargetBrickId(cid);
                 const prev = this.conveyorHoverTarget.get(cid) || null;
-                const pos = this.conveyorPointerPos.get(cid) || {};
+                const pos = this.conveyorPointerPos.get(cid) || { x: null, y: null };
                 if (prev && prev !== next) {
                     this.onBrickHover(prev, false, pos.x ?? null, pos.y ?? null);
                 }

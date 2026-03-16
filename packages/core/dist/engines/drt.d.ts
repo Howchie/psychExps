@@ -166,6 +166,44 @@ export interface DrtResponseTransformRow {
     estimate: OnlineParameterTransformEstimate | null;
     transformColumns: Record<string, string | number | null>;
 }
+interface NormalizedControllerConfig {
+    enabled: boolean;
+    key: string;
+    responseWindowMs: number;
+    displayDurationMs: number;
+    responseTerminatesStimulus: boolean;
+    modes: Set<DrtStimMode>;
+    nextIsiMs: () => number;
+    visual: Required<DrtVisualPresentationConfig>;
+    audio: Required<DrtAuditoryPresentationConfig>;
+    border: Required<DrtBorderPresentationConfig>;
+}
+interface ActivePresentation {
+    stim: DrtStimulusState;
+    visible: boolean;
+    hideAtMs: number;
+}
+export declare class DrtPresenter {
+    private readonly config;
+    private readonly displayElement;
+    private readonly borderTargetElement;
+    private readonly borderTargetRect;
+    private visualElement;
+    private borderOverlayElement;
+    private audioContext;
+    constructor(config: NormalizedControllerConfig, displayElement: HTMLElement | null, borderTargetElement: HTMLElement | null, borderTargetRect: (() => DOMRect | null) | null);
+    showPresentation(activePresentation: ActivePresentation | null): void;
+    hidePresentation(activePresentation: ActivePresentation | null): void;
+    private ensureVisualElement;
+    private showVisual;
+    private hideVisual;
+    private resolveBorderTarget;
+    private ensureBorderOverlayElement;
+    private showBorder;
+    private hideBorder;
+    private playTone;
+    dispose(): void;
+}
 export declare class DrtController {
     readonly enabled: boolean;
     private readonly hooks;
@@ -177,13 +215,11 @@ export declare class DrtController {
     private readonly borderTargetRect;
     private readonly transformRunner;
     private readonly responseRows;
+    private readonly presenter;
     private rafId;
     private started;
     private epochMs;
     private activePresentation;
-    private visualElement;
-    private borderOverlayElement;
-    private audioContext;
     private readonly onKeyDownBound;
     constructor(config: DrtControllerConfig, hooks?: DrtControllerHooks, options?: DrtControllerOptions);
     isRunning(): boolean;
@@ -205,18 +241,8 @@ export declare class DrtController {
     private scheduleNextFrame;
     private handleStimStart;
     private handleStimEnd;
-    private tickPresentationTimeout;
-    private showPresentation;
     private hidePresentation;
-    private ensureVisualElement;
-    private showVisual;
-    private hideVisual;
-    private resolveBorderTarget;
-    private ensureBorderOverlayElement;
-    private showBorder;
-    private hideBorder;
-    private playTone;
-    private disposePresenters;
+    private tickPresentationTimeout;
 }
 /**
  * TASK MODULE IMPLEMENTATION
@@ -233,3 +259,4 @@ export declare class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleR
     getModularSemantics(config: ScopedDrtConfig): Record<string, string | string[]>;
     start(config: ScopedDrtConfig, address: TaskModuleAddress, context: TaskModuleContext): TaskModuleHandle<DrtModuleResult>;
 }
+export {};

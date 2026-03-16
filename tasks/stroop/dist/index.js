@@ -1,6 +1,5 @@
-import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createEventLogger, createMulberry32, createSemanticResolver, createResponseSemantics, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, hashSeed, TaskEnvironmentGuard, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, buildTaskInstructionConfig, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, shouldHideCursorForPhase, extractJsPsychTrialResponse, computeAccuracy, TaskOrchestrator, createInstructionRenderer, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, ensureJsPsychCanvasCentered, maybeExportStimulusRows, applyTaskInstructionConfig, createTaskAdapter, } from "@experiments/core";
+import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createEventLogger, createMulberry32, createSemanticResolver, createResponseSemantics, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, hashSeed, TaskEnvironmentGuard, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, buildTaskInstructionConfig, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, shouldHideCursorForPhase, computeAccuracy, TaskOrchestrator, createInstructionRenderer, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, ensureJsPsychCanvasCentered, maybeExportStimulusRows, applyTaskInstructionConfig, createTaskAdapter, buildJsPsychRtTimelineNodes, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
-import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 const stroopManifest = {
     taskId: "stroop",
     label: "Stroop",
@@ -146,54 +145,14 @@ function appendStroopTrialTimeline(args) {
     const phase = computeRtPhaseDurations(parsed.rtTask.timing, {
         responseTerminatesTrial: parsed.rtTask.responseTerminatesTrial,
     });
-    let feedbackView = null;
-    timeline.push({
-        type: CanvasKeyboardResponsePlugin,
-        stimulus: (canvas) => {
-            drawFixation(canvas, parsed, layout);
-        },
-        canvas_size: [layout.totalHeightPx, parsed.display.aperturePx],
-        choices: "NO_KEYS",
-        response_ends_trial: false,
-        trial_duration: Math.max(0, Math.round(phase.fixationMs)),
-        data: {
-            phase: "fixation",
-            blockIndex,
-            trialIndex: trial.trialIndex,
-            blockId: block.id,
-            trialId: trial.id,
-        },
-    });
-    if (phase.blankMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawBlank(canvas, parsed, layout);
-            },
-            canvas_size: [layout.totalHeightPx, parsed.display.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: Math.max(0, Math.round(phase.blankMs)),
-            data: {
-                phase: "blank",
-                blockIndex,
-                trialIndex: trial.trialIndex,
-                blockId: block.id,
-                trialId: trial.id,
-            },
-        });
-    }
-    timeline.push({
-        type: CanvasKeyboardResponsePlugin,
-        stimulus: (canvas) => {
-            drawStimulus(canvas, parsed, layout, trial);
-        },
-        canvas_size: [layout.totalHeightPx, parsed.display.aperturePx],
-        choices: toJsPsychChoices(parsed.allowedKeys),
-        response_ends_trial: parsed.rtTask.responseTerminatesTrial,
-        trial_duration: Math.max(0, Math.round(phase.responseMs)),
-        data: {
-            phase: "response_window",
+    const state = { feedbackView: null };
+    const nodes = buildJsPsychRtTimelineNodes({
+        phasePrefix: "",
+        responseTerminatesTrial: parsed.rtTask.responseTerminatesTrial,
+        durations: phase,
+        canvasSize: [layout.totalHeightPx, parsed.display.aperturePx],
+        allowedKeys: toJsPsychChoices(parsed.allowedKeys),
+        baseData: {
             blockIndex,
             trialIndex: trial.trialIndex,
             blockId: block.id,
@@ -203,15 +162,32 @@ function appendStroopTrialTimeline(args) {
             fontColorToken: trial.fontColorToken,
             word: trial.word,
         },
-        on_finish: (data) => {
-            const response = extractJsPsychTrialResponse(data);
+        renderFixation: (canvas) => {
+            drawFixation(canvas, parsed, layout);
+        },
+        renderBlank: (canvas) => {
+            drawBlank(canvas, parsed, layout);
+        },
+        renderStimulus: (canvas) => {
+            drawStimulus(canvas, parsed, layout, trial);
+        },
+        renderFeedback: (canvas) => {
+            drawFeedback(canvas, parsed, layout, feedback, state.feedbackView);
+        },
+        feedback: {
+            enabled: feedback.enabled,
+            durationMs: feedback.durationMs,
+            phaseMode: parsed.rtTask.feedbackPhase,
+        },
+        postResponseContent: parsed.rtTask.postResponseContent,
+        onResponse: (response, data) => {
             const responseCategory = parsed.responseSemantics.responseCategoryFromKey(response.key);
             const outcome = evaluateTrialOutcome({
                 responseCategory,
                 expectedCategory: trial.fontColorToken,
                 rt: response.rtMs,
             });
-            feedbackView = resolveTrialFeedbackView({
+            state.feedbackView = resolveTrialFeedbackView({
                 feedback,
                 responseCategory,
                 correct: outcome.correct,
@@ -253,54 +229,8 @@ function appendStroopTrialTimeline(args) {
             }, { blockIndex, trialIndex: trial.trialIndex });
         },
     });
-    const postResponseMs = Math.max(0, Math.round(phase.postResponseStimulusMs));
-    if (!parsed.rtTask.responseTerminatesTrial && postResponseMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                if (feedback.enabled && parsed.rtTask.feedbackPhase === "post_response") {
-                    drawFeedback(canvas, parsed, layout, feedback, feedbackView);
-                    return;
-                }
-                if (parsed.rtTask.postResponseContent === "blank") {
-                    drawBlank(canvas, parsed, layout);
-                    return;
-                }
-                drawStimulus(canvas, parsed, layout, trial);
-            },
-            canvas_size: [layout.totalHeightPx, parsed.display.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: postResponseMs,
-            data: {
-                phase: "post_response",
-                blockIndex,
-                trialIndex: trial.trialIndex,
-                blockId: block.id,
-                trialId: trial.id,
-            },
-        });
-    }
-    if (feedback.enabled &&
-        feedback.durationMs > 0 &&
-        !(parsed.rtTask.feedbackPhase === "post_response" && !parsed.rtTask.responseTerminatesTrial)) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawFeedback(canvas, parsed, layout, feedback, feedbackView);
-            },
-            canvas_size: [layout.totalHeightPx, parsed.display.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: Math.max(0, feedback.durationMs),
-            data: {
-                phase: "feedback",
-                blockIndex,
-                trialIndex: trial.trialIndex,
-                blockId: block.id,
-                trialId: trial.id,
-            },
-        });
+    for (const node of nodes) {
+        timeline.push(node);
     }
 }
 function drawFixation(canvas, parsed, layout) {

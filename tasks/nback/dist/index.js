@@ -169,6 +169,21 @@ function resolveNbackDrtConfig(base, overrideRaw) {
     return coerceScopedDrtConfig(base, overrideRaw);
 }
 const NBACK_IMAGE_CACHE = new Map();
+function appendNbackPhase(context, durationMs, phaseName, flags) {
+    if (durationMs <= 0)
+        return;
+    context.timeline.push({
+        type: CanvasKeyboardResponsePlugin,
+        stimulus: (canvas) => {
+            drawNbackPhase(canvas, context.layout, context.parsed, context.preloaded, context.trial, flags);
+        },
+        canvas_size: [context.layout.totalHeightPx, context.layout.aperturePx],
+        choices: "NO_KEYS",
+        response_ends_trial: false,
+        trial_duration: durationMs,
+        data: { ...context.baseData, phase: phaseName },
+    });
+}
 async function prepareNbackRuntime(context) {
     const config = context.taskConfig;
     const resolvedInlinePools = asObject(context.resolver.resolveInValue(config.stimuli));
@@ -203,125 +218,28 @@ async function prepareNbackRuntime(context) {
         variantId: context.selection.variantId,
     };
 }
-function appendJsPsychNbackTrial(args) {
-    const { timeline, parsed, block, trial, resolvedStimulus, runtime, preloaded, eventLogger } = args;
-    const { timing } = parsed;
-    const layout = computeCanvasFrameLayout({
-        aperturePx: parsed.display.aperturePx,
-        paddingYPx: parsed.display.paddingYPx,
-        cueHeightPx: parsed.display.cueHeightPx,
-        cueMarginBottomPx: parsed.display.cueMarginBottomPx,
-    });
-    const jsPsychAllowedKeys = toJsPsychChoices(resolveAllowedKeysForNback(parsed.responseSemantics, block));
-    const rtTiming = block.rtTask.enabled
-        ? block.rtTask.timing
-        : {
-            trialDurationMs: timing.trialDurationMs,
-            fixationOnsetMs: 0,
-            fixationDurationMs: timing.fixationDurationMs,
-            stimulusOnsetMs: timing.stimulusOnsetMs,
-            stimulusDurationMs: timing.trialDurationMs - timing.stimulusOnsetMs,
-            responseWindowStartMs: timing.responseWindowStartMs,
-            responseWindowEndMs: timing.responseWindowEndMs,
-        };
-    const phaseTiming = computeRtPhaseDurations(rtTiming, {
-        responseTerminatesTrial: block.rtTask.enabled ? block.rtTask.responseTerminatesTrial : false,
-    });
-    const preFixationBlankMs = Math.max(0, Math.round(phaseTiming.preFixationBlankMs));
-    const fixationMs = Math.max(0, Math.round(phaseTiming.fixationMs));
-    const blankMs = Math.max(0, Math.round(phaseTiming.blankMs));
-    const preResponseMs = Math.max(0, Math.round(phaseTiming.preResponseStimulusMs));
-    const responseMs = Math.max(0, Math.round(phaseTiming.responseMs));
-    const responsePreStimBlankMs = Math.max(0, Math.round(phaseTiming.responsePreStimulusBlankMs));
-    const responseStimulusMs = Math.max(0, Math.round(phaseTiming.responseStimulusMs));
-    const responsePostStimBlankMs = Math.max(0, Math.round(phaseTiming.responsePostStimulusBlankMs));
-    const postResponseStimulusMs = Math.max(0, Math.round(phaseTiming.postResponseStimulusMs));
-    const postResponseBlankMs = Math.max(0, Math.round(phaseTiming.postResponseBlankMs));
-    let feedbackView = null;
-    const capture = {
-        responseWindowRow: null,
-    };
-    const baseData = {
-        participantId: runtime.participantId,
-        variantId: runtime.variantId,
-        blockLabel: block.label,
-        blockIndex: block.blockIndex,
-        blockType: block.blockType,
-        nLevel: block.nLevel,
-        trialIndex: trial.trialIndex,
-        trialType: trial.trialType,
-        item: trial.item,
-        stimulusPath: resolvedStimulus,
-        sourceCategory: trial.sourceCategory,
-        itemCategory: trial.itemCategory,
-        correctResponse: trial.correctResponse,
-    };
-    if (preFixationBlankMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: false });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: preFixationBlankMs,
-            data: { ...baseData, phase: "nback_pre_fixation_blank" },
-        });
-    }
-    if (fixationMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: true, showStimulus: false });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: fixationMs,
-            data: { ...baseData, phase: "nback_fixation" },
-        });
-    }
-    if (blankMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: false });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: blankMs,
-            data: { ...baseData, phase: "nback_blank" },
-        });
-    }
-    if (preResponseMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: true });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: preResponseMs,
-            data: { ...baseData, phase: "nback_stimulus_pre_response" },
-        });
-    }
+function appendNbackPreparationPhases(context, timing) {
+    appendNbackPhase(context, timing.preFixationBlankMs, "nback_pre_fixation_blank", { showFixation: false, showStimulus: false });
+    appendNbackPhase(context, timing.fixationMs, "nback_fixation", { showFixation: true, showStimulus: false });
+    appendNbackPhase(context, timing.blankMs, "nback_blank", { showFixation: false, showStimulus: false });
+    appendNbackPhase(context, timing.preResponseMs, "nback_stimulus_pre_response", { showFixation: false, showStimulus: true });
+}
+function appendNbackResponsePhases(context, timing, runtime, eventLogger, capture) {
+    const { block, trial, parsed } = context;
     const responseSegments = [];
     if (!block.rtTask.responseTerminatesTrial && block.rtTask.enabled) {
-        if (responsePreStimBlankMs > 0) {
-            responseSegments.push({ phase: "nback_response_window_pre_stim_blank", durationMs: responsePreStimBlankMs, showStimulus: false, isFinal: false });
+        if (timing.responsePreStimBlankMs > 0) {
+            responseSegments.push({ phase: "nback_response_window_pre_stim_blank", durationMs: timing.responsePreStimBlankMs, showStimulus: false, isFinal: false });
         }
-        if (responseStimulusMs > 0) {
-            responseSegments.push({ phase: "nback_response_window_stimulus", durationMs: responseStimulusMs, showStimulus: true, isFinal: false });
+        if (timing.responseStimulusMs > 0) {
+            responseSegments.push({ phase: "nback_response_window_stimulus", durationMs: timing.responseStimulusMs, showStimulus: true, isFinal: false });
         }
-        if (responsePostStimBlankMs > 0) {
-            responseSegments.push({ phase: "nback_response_window_post_stim_blank", durationMs: responsePostStimBlankMs, showStimulus: false, isFinal: false });
+        if (timing.responsePostStimBlankMs > 0) {
+            responseSegments.push({ phase: "nback_response_window_post_stim_blank", durationMs: timing.responsePostStimBlankMs, showStimulus: false, isFinal: false });
         }
     }
     if (responseSegments.length === 0) {
-        responseSegments.push({ phase: "nback_response_window", durationMs: responseMs, showStimulus: true, isFinal: true });
+        responseSegments.push({ phase: "nback_response_window", durationMs: timing.responseMs, showStimulus: true, isFinal: true });
     }
     else {
         responseSegments[responseSegments.length - 1].phase = "nback_response_window";
@@ -331,16 +249,18 @@ function appendJsPsychNbackTrial(args) {
     let capturedRt = null;
     let captured = false;
     for (const segment of responseSegments) {
-        timeline.push({
+        if (segment.durationMs <= 0)
+            continue;
+        context.timeline.push({
             type: CanvasKeyboardResponsePlugin,
             stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: segment.showStimulus });
+                drawNbackPhase(canvas, context.layout, parsed, context.preloaded, trial, { showFixation: false, showStimulus: segment.showStimulus });
             },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: segment.durationMs > 0 ? jsPsychAllowedKeys : "NO_KEYS",
+            canvas_size: [context.layout.totalHeightPx, context.layout.aperturePx],
+            choices: segment.durationMs > 0 ? context.jsPsychAllowedKeys : "NO_KEYS",
             response_ends_trial: block.rtTask.responseTerminatesTrial,
             trial_duration: segment.durationMs,
-            data: { ...baseData, phase: segment.phase },
+            data: { ...context.baseData, phase: segment.phase },
             on_finish: (data) => {
                 if (!captured) {
                     const key = typeof data.response === "string" ? normalizeKey(data.response) : null;
@@ -355,7 +275,7 @@ function appendJsPsychNbackTrial(args) {
                     return;
                 const evaluated = evaluateNbackOutcome(parsed, block, trial, capturedKey, capturedRt);
                 const clockTimeUnixMs = Date.now();
-                feedbackView = resolveTrialFeedbackView({
+                context.feedbackState.view = resolveTrialFeedbackView({
                     feedback: block.feedback,
                     responseCategory: evaluated.responseCategory,
                     correct: evaluated.correct,
@@ -395,48 +315,96 @@ function appendJsPsychNbackTrial(args) {
             },
         });
     }
-    if (postResponseStimulusMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: true });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: postResponseStimulusMs,
-            data: { ...baseData, phase: "nback_post_response" },
-        });
-    }
-    if (postResponseBlankMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                drawNbackPhase(canvas, layout, parsed, preloaded, trial, { showFixation: false, showStimulus: false });
-            },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: postResponseBlankMs,
-            data: { ...baseData, phase: "nback_post_response_blank" },
-        });
-    }
-    if (block.feedback.enabled && block.feedback.durationMs > 0) {
-        timeline.push({
+}
+function appendNbackPostResponsePhases(context, timing) {
+    appendNbackPhase(context, timing.postResponseStimulusMs, "nback_post_response", { showFixation: false, showStimulus: true });
+    appendNbackPhase(context, timing.postResponseBlankMs, "nback_post_response_blank", { showFixation: false, showStimulus: false });
+}
+function appendNbackFeedbackPhase(context) {
+    if (context.block.feedback.enabled && context.block.feedback.durationMs > 0) {
+        context.timeline.push({
             type: CanvasKeyboardResponsePlugin,
             stimulus: (canvas) => {
                 const ctx = canvas.getContext("2d");
                 if (!ctx)
                     return;
-                drawTrialFeedbackOnCanvas(ctx, layout, block.feedback, feedbackView);
+                drawTrialFeedbackOnCanvas(ctx, context.layout, context.block.feedback, context.feedbackState.view);
             },
-            canvas_size: [layout.totalHeightPx, layout.aperturePx],
+            canvas_size: [context.layout.totalHeightPx, context.layout.aperturePx],
             choices: "NO_KEYS",
             response_ends_trial: false,
-            trial_duration: block.feedback.durationMs,
-            data: { ...baseData, phase: "nback_feedback" },
+            trial_duration: context.block.feedback.durationMs,
+            data: { ...context.baseData, phase: "nback_feedback" },
         });
     }
+}
+function appendJsPsychNbackTrial(args) {
+    const { timeline, parsed, block, trial, resolvedStimulus, runtime, preloaded, eventLogger } = args;
+    const { timing } = parsed;
+    const layout = computeCanvasFrameLayout({
+        aperturePx: parsed.display.aperturePx,
+        paddingYPx: parsed.display.paddingYPx,
+        cueHeightPx: parsed.display.cueHeightPx,
+        cueMarginBottomPx: parsed.display.cueMarginBottomPx,
+    });
+    const jsPsychAllowedKeys = toJsPsychChoices(resolveAllowedKeysForNback(parsed.responseSemantics, block));
+    const rtTiming = block.rtTask.enabled
+        ? block.rtTask.timing
+        : {
+            trialDurationMs: timing.trialDurationMs,
+            fixationOnsetMs: 0,
+            fixationDurationMs: timing.fixationDurationMs,
+            stimulusOnsetMs: timing.stimulusOnsetMs,
+            stimulusDurationMs: timing.trialDurationMs - timing.stimulusOnsetMs,
+            responseWindowStartMs: timing.responseWindowStartMs,
+            responseWindowEndMs: timing.responseWindowEndMs,
+        };
+    const phaseTiming = computeRtPhaseDurations(rtTiming, {
+        responseTerminatesTrial: block.rtTask.enabled ? block.rtTask.responseTerminatesTrial : false,
+    });
+    const preFixationBlankMs = Math.max(0, Math.round(phaseTiming.preFixationBlankMs));
+    const fixationMs = Math.max(0, Math.round(phaseTiming.fixationMs));
+    const blankMs = Math.max(0, Math.round(phaseTiming.blankMs));
+    const preResponseMs = Math.max(0, Math.round(phaseTiming.preResponseStimulusMs));
+    const responseMs = Math.max(0, Math.round(phaseTiming.responseMs));
+    const responsePreStimBlankMs = Math.max(0, Math.round(phaseTiming.responsePreStimulusBlankMs));
+    const responseStimulusMs = Math.max(0, Math.round(phaseTiming.responseStimulusMs));
+    const responsePostStimBlankMs = Math.max(0, Math.round(phaseTiming.responsePostStimulusBlankMs));
+    const postResponseStimulusMs = Math.max(0, Math.round(phaseTiming.postResponseStimulusMs));
+    const postResponseBlankMs = Math.max(0, Math.round(phaseTiming.postResponseBlankMs));
+    const capture = {
+        responseWindowRow: null,
+    };
+    const baseData = {
+        participantId: runtime.participantId,
+        variantId: runtime.variantId,
+        blockLabel: block.label,
+        blockIndex: block.blockIndex,
+        blockType: block.blockType,
+        nLevel: block.nLevel,
+        trialIndex: trial.trialIndex,
+        trialType: trial.trialType,
+        item: trial.item,
+        stimulusPath: resolvedStimulus,
+        sourceCategory: trial.sourceCategory,
+        itemCategory: trial.itemCategory,
+        correctResponse: trial.correctResponse,
+    };
+    const phaseContext = {
+        timeline,
+        layout,
+        parsed,
+        preloaded,
+        trial,
+        baseData,
+        jsPsychAllowedKeys,
+        block,
+        feedbackState: { view: null },
+    };
+    appendNbackPreparationPhases(phaseContext, { preFixationBlankMs, fixationMs, blankMs, preResponseMs });
+    appendNbackResponsePhases(phaseContext, { responseMs, responsePreStimBlankMs, responseStimulusMs, responsePostStimBlankMs }, runtime, eventLogger, capture);
+    appendNbackPostResponsePhases(phaseContext, { postResponseStimulusMs, postResponseBlankMs });
+    appendNbackFeedbackPhase(phaseContext);
     return capture;
 }
 function drawNbackPhase(canvas, layout, parsed, preloaded, trial, flags) {
@@ -493,14 +461,14 @@ function evaluateNbackOutcome(parsed, _block, trial, responseKey, rtMs) {
     };
 }
 function resolveAllowedKeysForNback(semantics, block) {
-    const allowedKeys = new Set(semantics.allowedKeys(["target", "non_target"]));
+    const keys = new Set(semantics.allowedKeys(["target", "non_target"]));
     for (const trial of block.trials) {
         const key = normalizeKey(trial.correctResponse);
         if (key.length > 0 && key !== "timeout") {
-            allowedKeys.add(key);
+            keys.add(key);
         }
     }
-    return Array.from(allowedKeys);
+    return Array.from(keys);
 }
 function collectNbackRecords(rows, participantId, variantId) {
     const output = [];

@@ -1,9 +1,32 @@
+import { loadImageIfLikelyVisualStimulus } from "../stimuli/stimulus";
+const imageCache = new Map();
 export class SceneRenderer {
     canvas;
     ctx;
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d");
+    }
+    /**
+     * Pre-load string-sourced images so they render synchronously.
+     * Call before the first render pass to avoid blank frames.
+     */
+    async preloadImages(scene) {
+        const urls = [];
+        for (const item of scene.items) {
+            if (!item.features)
+                continue;
+            const f = item.features;
+            const src = f.image ?? f.src ?? f.url;
+            if (typeof src === "string" && !imageCache.has(src)) {
+                urls.push(src);
+            }
+        }
+        await Promise.all(urls.map((url) => loadImageIfLikelyVisualStimulus(url).then((img) => {
+            if (img && img.complete && img.naturalWidth > 0) {
+                imageCache.set(url, img);
+            }
+        }).catch(() => { })));
     }
     /**
      * Renders the scene into the provided slots.
@@ -24,7 +47,37 @@ export class SceneRenderer {
         if (item.category === "shape") {
             this.renderShape(item, pos);
         }
-        // TODO: Support image rendering if item has image features
+        else if (item.features && ("src" in item.features || "url" in item.features || "image" in item.features)) {
+            this.renderImage(item, pos);
+        }
+    }
+    renderImage(item, pos) {
+        const features = item.features;
+        const source = features.image ?? features.src ?? features.url;
+        if (!source)
+            return;
+        const width = features.width ?? features.size ?? 50;
+        const height = features.height ?? features.size ?? 50;
+        if (source instanceof HTMLImageElement) {
+            if (source.complete && source.naturalWidth > 0) {
+                this.ctx.drawImage(source, pos.x - width / 2, pos.y - height / 2, width, height);
+            }
+            return;
+        }
+        if (typeof source === "string") {
+            const cached = imageCache.get(source);
+            if (cached && cached.complete && cached.naturalWidth > 0) {
+                this.ctx.drawImage(cached, pos.x - width / 2, pos.y - height / 2, width, height);
+            }
+            else {
+                // Kick off background load so the image is available on next render
+                loadImageIfLikelyVisualStimulus(source).then((img) => {
+                    if (img && img.complete && img.naturalWidth > 0) {
+                        imageCache.set(source, img);
+                    }
+                }).catch(() => { });
+            }
+        }
     }
     renderShape(item, pos) {
         const { type, color = "black", size = 10 } = item.features;

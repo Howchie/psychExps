@@ -63,9 +63,8 @@
   },
   "instructions": {
     "pages": [
-      "Hi Annika, this is your experiment!",
-      "In this experiment you will be presented with a series of words that progress automatically.\nYou will need to remember the sequence.\nOn each trial, decide whether the word is the same as the one two (2) words ago (M) or not (Z).",
-      "Let's have a short practice. Each trial will present one word.\nYou must decide whether the word matches the one presented two (2) trials ago.\n\nIf the word matches, press the 'm' key.\nIf the word does not match, press the 'z' key.\n\nYou will receive feedback after the block is finished.\nWords can repeat, so try to remember the sequence not just recognise words."
+      "Welcome to the experiment.\n\nIn this experiment you will be presented with a series of words that progress automatically.\nYou will need to remember the sequence of words to complete a '2-back' task.\nOn each trial, you need to decide whether the word is the same as the one two (2) words ago (M) or not (Z).",
+      "Let's have a short practice. Each trial will present one word.\nYou must decide whether the word matches the one presented two (2) trials ago.\n\nIf the word matches, press the 'm' key.\nIf the word does not match, press the 'z' key.\n\n`2-back' means the word before the previous word.\nE.g. In the sequence is 'honey', 'jelly', 'honey', the second 'honey' is a 2-back target.\n\nYou will receive feedback after the block is finished.\nWords can repeat, so try to remember the sequence not just recognise words."
     ],
     "showTaskTitleCard": false,
     "blockIntroTemplate": "$var.blockIntro",
@@ -131,7 +130,7 @@
         "isPractice": true
       }
     },
-    "endPages": "That concludes the experiment.\nThank you very much for participating.\n\nPlease read the debrief form on the next screen, then click Continue and Done so your completion can be finalized."
+    "endPages": "DO NOT CLOSE THIS WINDOW!\nThat concludes the experiment. \nThank you very much for participating.\n\nPlease read the debrief form on the next screen, then click Continue.\nThe experiment will redirect to SONA and automatically apply your credits.\n\nDo not close the window until you see a message from SONA that your credits have been awarded!"
   },
   "stimuliCsv": {
     "basePath": "{runtime.assetsBase}/pm-words",

@@ -2,11 +2,38 @@ import type { SceneStimulus, SceneItem } from "./scene";
 import type { Point } from "../infrastructure/spatial";
 import { loadImageIfLikelyVisualStimulus } from "../stimuli/stimulus";
 
+const imageCache = new Map<string, HTMLImageElement>();
+
 export class SceneRenderer {
   private ctx: CanvasRenderingContext2D;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
+  }
+
+  /**
+   * Pre-load string-sourced images so they render synchronously.
+   * Call before the first render pass to avoid blank frames.
+   */
+  async preloadImages(scene: SceneStimulus): Promise<void> {
+    const urls: string[] = [];
+    for (const item of scene.items) {
+      if (!item.features) continue;
+      const f = item.features as Record<string, unknown>;
+      const src = f.image ?? f.src ?? f.url;
+      if (typeof src === "string" && !imageCache.has(src)) {
+        urls.push(src);
+      }
+    }
+    await Promise.all(
+      urls.map((url) =>
+        loadImageIfLikelyVisualStimulus(url).then((img) => {
+          if (img && img.complete && img.naturalWidth > 0) {
+            imageCache.set(url, img);
+          }
+        }).catch(() => {})
+      ),
+    );
   }
 
   /**
@@ -58,13 +85,17 @@ export class SceneRenderer {
     }
 
     if (typeof source === "string") {
-      loadImageIfLikelyVisualStimulus(source).then((img) => {
-        if (img && img.complete && img.naturalWidth > 0) {
-          this.ctx.drawImage(img, pos.x - width / 2, pos.y - height / 2, width, height);
-        }
-      }).catch(() => {
-        // Ignore load errors silently
-      });
+      const cached = imageCache.get(source);
+      if (cached && cached.complete && cached.naturalWidth > 0) {
+        this.ctx.drawImage(cached, pos.x - width / 2, pos.y - height / 2, width, height);
+      } else {
+        // Kick off background load so the image is available on next render
+        loadImageIfLikelyVisualStimulus(source).then((img) => {
+          if (img && img.complete && img.naturalWidth > 0) {
+            imageCache.set(source, img);
+          }
+        }).catch(() => {});
+      }
     }
   }
 

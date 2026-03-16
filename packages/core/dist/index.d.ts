@@ -13,6 +13,7 @@ export * from "./engines/conditions";
 export * from "./engines/tracking";
 export * from "./engines/scene";
 export * from "./engines/sceneRenderer";
+export * from "./engines/jspsychRtTask";
 export * from "./infrastructure/config";
 export * from "./infrastructure/deepMerge";
 export * from "./infrastructure/events";

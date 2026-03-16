@@ -1,4 +1,4 @@
-import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, TaskEnvironmentGuard, pushJsPsychContinueScreen, applyTaskInstructionConfig, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, computeAccuracy, computeRtPhaseDurations, toJsPsychChoices, buildTaskInstructionConfig, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, maybeExportStimulusRows, collectSurveyEntries, createInstructionRenderer, parseSurveyDefinitions, runSurveySequence, createResponseSemantics, coerceBlockSummaryConfig, TaskOrchestrator, createTaskAdapter, shouldHideCursorForPhase, } from "@experiments/core";
+import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, TaskEnvironmentGuard, pushJsPsychContinueScreen, applyTaskInstructionConfig, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, computeAccuracy, computeRtPhaseDurations, toJsPsychChoices, buildTaskInstructionConfig, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, maybeExportStimulusRows, collectSurveyEntries, createInstructionRenderer, parseSurveyDefinitions, runSurveySequence, createResponseSemantics, coerceBlockSummaryConfig, TaskOrchestrator, createTaskAdapter, buildJsPsychRtTimelineNodes, shouldHideCursorForPhase, } from "@experiments/core";
 import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
@@ -376,13 +376,13 @@ function appendDotTrialTimeline(args) {
         : fallbackFixationMs;
     const blankMs = config.rtTask.enabled ? Math.max(0, Math.round(rtPhases?.blankMs ?? 0)) : fallbackBlankMs;
     const responseWindowMs = config.rtTask.enabled ? Math.max(0, Math.round(rtPhases?.responseMs ?? 0)) : fallbackResponseMs;
-    const responsePreStimBlankMs = config.rtTask.enabled
+    const responsePreStimulusBlankMs = config.rtTask.enabled
         ? Math.max(0, Math.round(rtPhases?.responsePreStimulusBlankMs ?? 0))
         : 0;
     const responseStimulusMs = config.rtTask.enabled
         ? Math.max(0, Math.round(rtPhases?.responseStimulusMs ?? 0))
         : responseWindowMs;
-    const responsePostStimBlankMs = config.rtTask.enabled
+    const responsePostStimulusBlankMs = config.rtTask.enabled
         ? Math.max(0, Math.round(rtPhases?.responsePostStimulusBlankMs ?? 0))
         : 0;
     const postResponseStimulusMs = responseTerminatesTrial
@@ -398,165 +398,53 @@ function appendDotTrialTimeline(args) {
     const baseData = dataContext ?? {};
     const layout = computeCanvasLayout(config);
     const jsPsychAllowedKeys = toJsPsychChoices(allowedKeys);
-    if (preFixationBlankMs > 0) {
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                const trial = trialProvider();
-                drawBlankPhase(canvas, config, trial);
-            },
-            canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-            choices: "NO_KEYS",
-            response_ends_trial: false,
-            trial_duration: preFixationBlankMs,
-            data: { ...baseData, phase: `${phasePrefix}_pre_fixation_blank` },
-        });
-    }
-    timeline.push({
-        type: CanvasKeyboardResponsePlugin,
-        stimulus: (canvas) => {
-            const trial = trialProvider();
-            drawFixationPhase(canvas, config, trial);
+    const durations = {
+        preFixationBlankMs,
+        fixationMs,
+        blankMs,
+        responseMs: responseWindowMs,
+        responsePreStimulusBlankMs,
+        responseStimulusMs,
+        responsePostStimulusBlankMs,
+        postResponseStimulusMs,
+        postResponseBlankMs,
+    };
+    const nodes = buildJsPsychRtTimelineNodes({
+        phasePrefix,
+        responseTerminatesTrial,
+        durations,
+        canvasSize: [layout.totalHeightPx, config.display.aperturePx],
+        allowedKeys: jsPsychAllowedKeys,
+        baseData,
+        renderFixation: (canvas) => {
+            drawFixationPhase(canvas, config, trialProvider());
         },
-        canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-        choices: "NO_KEYS",
-        response_ends_trial: false,
-        trial_duration: fixationMs,
-        data: { ...baseData, phase: `${phasePrefix}_fixation` },
-    });
-    timeline.push({
-        type: CanvasKeyboardResponsePlugin,
-        stimulus: (canvas) => {
-            const trial = trialProvider();
-            drawBlankPhase(canvas, config, trial);
+        renderBlank: (canvas) => {
+            drawBlankPhase(canvas, config, trialProvider());
         },
-        canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-        choices: "NO_KEYS",
-        response_ends_trial: false,
-        trial_duration: blankMs,
-        data: { ...baseData, phase: `${phasePrefix}_blank` },
-    });
-    const responseSegments = [];
-    if (!responseTerminatesTrial && config.rtTask.enabled) {
-        if (responsePreStimBlankMs > 0) {
-            responseSegments.push({
-                phase: `${phasePrefix}_response_window_pre_stim_blank`,
-                durationMs: responsePreStimBlankMs,
-                showStimulus: false,
-            });
-        }
-        if (responseStimulusMs > 0) {
-            responseSegments.push({
-                phase: `${phasePrefix}_response_window_stimulus`,
-                durationMs: responseStimulusMs,
-                showStimulus: true,
-            });
-        }
-        if (responsePostStimBlankMs > 0) {
-            responseSegments.push({
-                phase: `${phasePrefix}_response_window_post_stim_blank`,
-                durationMs: responsePostStimBlankMs,
-                showStimulus: false,
-            });
-        }
-    }
-    if (responseSegments.length === 0) {
-        responseSegments.push({
-            phase: `${phasePrefix}_response_window`,
-            durationMs: responseWindowMs,
-            showStimulus: true,
-        });
-    }
-    let capturedResponse = { key: null, rtMs: null };
-    let responseSeen = false;
-    responseSegments.forEach((segment, segmentIndex) => {
-        const isLast = segmentIndex === responseSegments.length - 1;
-        timeline.push({
-            type: CanvasKeyboardResponsePlugin,
-            stimulus: (canvas) => {
-                const trial = trialProvider();
-                if (segment.showStimulus) {
-                    drawStimulusPhase(canvas, config, trial);
-                }
-                else {
-                    drawBlankPhase(canvas, config, trial);
-                }
-            },
-            canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-            choices: jsPsychAllowedKeys,
-            response_ends_trial: responseTerminatesTrial,
-            trial_duration: segment.durationMs,
-            data: { ...baseData, phase: segment.phase },
-            on_finish: (data) => {
-                if (!responseSeen) {
-                    const response = extractTrialResponse(data);
-                    if (response.key || response.rtMs != null) {
-                        capturedResponse = response;
-                        responseSeen = true;
-                    }
-                }
-                if (isLast) {
-                    onResponse(capturedResponse, trialProvider(), data);
-                }
-            },
-        });
-    });
-    if (!responseTerminatesTrial) {
-        if (feedback?.enabled && feedback.phaseMode === "post_response" && feedback.config.durationMs > 0) {
-            timeline.push({
-                type: CanvasKeyboardResponsePlugin,
-                stimulus: (canvas) => {
-                    drawFeedbackPhase(canvas, config, feedback.config, feedback.viewProvider());
-                },
-                canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-                choices: "NO_KEYS",
-                response_ends_trial: false,
-                trial_duration: Math.max(0, feedback.config.durationMs),
-                data: { ...baseData, phase: `${phasePrefix}_post_response_feedback` },
-            });
-        }
-        else {
-            const postStimMs = config.rtTask.enabled && config.rtTask.postResponseContent === "blank" ? 0 : postResponseStimulusMs;
-            const postBlankMs = config.rtTask.enabled && config.rtTask.postResponseContent === "blank"
-                ? postResponseStimulusMs + postResponseBlankMs
-                : postResponseBlankMs;
-            if (postStimMs > 0) {
-                timeline.push({
-                    type: CanvasKeyboardResponsePlugin,
-                    stimulus: (canvas) => {
-                        const trial = trialProvider();
-                        drawStimulusPhase(canvas, config, trial);
-                    },
-                    canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-                    choices: "NO_KEYS",
-                    response_ends_trial: false,
-                    trial_duration: postStimMs,
-                    data: { ...baseData, phase: `${phasePrefix}_post_response_stimulus` },
-                });
+        renderStimulus: (canvas) => {
+            drawStimulusPhase(canvas, config, trialProvider());
+        },
+        renderFeedback: feedback
+            ? (canvas) => {
+                drawFeedbackPhase(canvas, config, feedback.config, feedback.viewProvider());
             }
-            if (postBlankMs > 0) {
-                timeline.push({
-                    type: CanvasKeyboardResponsePlugin,
-                    stimulus: (canvas) => {
-                        const trial = trialProvider();
-                        drawBlankPhase(canvas, config, trial);
-                    },
-                    canvas_size: [layout.totalHeightPx, config.display.aperturePx],
-                    choices: "NO_KEYS",
-                    response_ends_trial: false,
-                    trial_duration: postBlankMs,
-                    data: { ...baseData, phase: `${phasePrefix}_post_response_blank` },
-                });
+            : undefined,
+        feedback: feedback
+            ? {
+                enabled: feedback.enabled,
+                durationMs: feedback.config.durationMs,
+                phaseMode: feedback.phaseMode,
             }
-        }
+            : undefined,
+        postResponseContent: config.rtTask.enabled ? config.rtTask.postResponseContent : "stimulus",
+        onResponse: (response, data) => {
+            onResponse(response, trialProvider(), data);
+        },
+    });
+    for (const node of nodes) {
+        timeline.push(node);
     }
-}
-function extractTrialResponse(data) {
-    const rawKey = data.response;
-    const rawRt = data.rt;
-    const key = typeof rawKey === "string" ? normalizeKey(rawKey) : null;
-    const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
-    return { key, rtMs };
 }
 function applyGlobalSalience(config, salience) {
     config.salience = { ...salience };

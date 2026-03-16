@@ -16,12 +16,18 @@ function shuffleInPlace(items, rng) {
     return items;
 }
 function computeQuotaCounts(weights, totalCount) {
-    const sum = weights.reduce((acc, value) => acc + value, 0);
+    let sum = 0;
+    for (let i = 0; i < weights.length; i += 1) {
+        sum += weights[i];
+    }
     if (!(sum > 0) || totalCount <= 0)
         return weights.map(() => 0);
     const raw = weights.map((weight) => (weight / sum) * totalCount);
     const base = raw.map((value) => Math.floor(value));
-    let assigned = base.reduce((acc, value) => acc + value, 0);
+    let assigned = 0;
+    for (let i = 0; i < base.length; i += 1) {
+        assigned += base[i];
+    }
     if (assigned < totalCount) {
         const ranked = raw
             .map((value, index) => ({ index, remainder: value - base[index] }))
@@ -139,7 +145,13 @@ export function buildConditionSequence(args) {
             const idx = pool.findIndex((cell) => !violatesAdjacency(sequence, cell, args.adjacency));
             if (idx < 0)
                 break;
-            const [picked] = pool.splice(idx, 1);
+            // ⚡ Bolt: O(1) swap-and-pop technique instead of O(N) Array.prototype.splice
+            // Since `pool` is a shuffled bag of items, order doesn't matter.
+            // We can safely move the last item to the current index and pop the array,
+            // avoiding the expensive memory shift of all subsequent elements.
+            const picked = pool[idx];
+            pool[idx] = pool[pool.length - 1];
+            pool.pop();
             if (picked)
                 sequence.push(picked);
         }

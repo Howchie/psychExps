@@ -16,6 +16,7 @@ export * from "./engines/conditions";
 export * from "./engines/tracking";
 export * from "./engines/scene";
 export * from "./engines/sceneRenderer";
+export * from "./engines/jspsychRtTask";
 
 // Infrastructure
 export * from "./infrastructure/config";
@@ -73,4 +74,3 @@ export * from "./web/stimulusExport";
 export * from "./utils/coerce";
 export * from "./utils/validation";
 export * from "./utils/colors";
-export * from "./engines/jspsychRtTask";

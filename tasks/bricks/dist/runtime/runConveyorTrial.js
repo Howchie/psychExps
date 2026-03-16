@@ -416,8 +416,9 @@ export async function runConveyorTrial(args) {
             gameState.step(dt);
             if (autoEnabled && trialStarted) {
                 if (gameState.elapsed >= nextAutoActionAt) {
-                    const candidate = gameState.bricks.values().next().value;
-                    if (candidate) {
+                    const activeBricks = gameState.activeBricks;
+                    if (activeBricks.length > 0) {
+                        const candidate = activeBricks[Math.floor(Math.random() * activeBricks.length)] ?? activeBricks[0];
                         const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
                         const point = candidate?.sprite ?? { x: 0, y: 0 };
                         gameState.handleBrickHold(String(candidate.id), holdDurationMs, gameState.elapsed, {
@@ -436,7 +437,7 @@ export async function runConveyorTrial(args) {
             renderer.queueDropEffects(gameState.consumeDroppedVisuals());
             renderer.updateEffects(dt);
             const focusState = gameState.getFocusState();
-            renderer.syncBricks(gameState.activeBricks, resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
+            renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
             const remainingMs = maxDuration !== null ? Math.max(0, maxDuration - gameState.elapsed) : null;
             const hudStats = gameState.getHUDStats();
             const hudDisplayStats = {

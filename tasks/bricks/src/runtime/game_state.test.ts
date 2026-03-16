@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, expect, it } from 'vitest';
 import { GameState } from './game_state.js';
 import { getBrickVisibleWidth } from './brick_logic.js';

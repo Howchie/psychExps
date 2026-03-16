@@ -41,7 +41,13 @@ export class ProspectiveMemoryModule {
     getModularSemantics(config) {
         if (!config.enabled)
             return {};
-        const keys = Array.from(new Set(config.rules.map((r) => r.responseKey))).filter(Boolean);
+        const keys = [];
+        for (let i = 0; i < config.rules.length; i++) {
+            const key = config.rules[i].responseKey;
+            if (key && !keys.includes(key)) {
+                keys.push(key);
+            }
+        }
         if (keys.length === 0)
             return {};
         return { pm: keys };

@@ -368,11 +368,21 @@ export interface DrtPresentationBridge {
   hideAll: () => void;
 }
 
+function expandStimMode(stimMode: string | undefined): Set<DrtStimMode> {
+  const mode = String(stimMode ?? "visual").toLowerCase();
+  if (mode === "audiovisual") return new Set(["visual", "auditory"]);
+  if (mode === "visual_border") return new Set(["visual", "border"]);
+  if (mode === "auditory_border") return new Set(["auditory", "border"]);
+  if (mode === "all") return new Set(["visual", "auditory", "border"]);
+  if (mode === "visual" || mode === "auditory" || mode === "border") return new Set([mode]);
+  return new Set(["visual"]);
+}
+
 function hasMode(config: ScopedDrtConfig | DrtControllerConfig, mode: "visual" | "auditory" | "border"): boolean {
   if (Array.isArray(config.stimModes) && config.stimModes.length > 0) {
     return config.stimModes.includes(mode);
   }
-  return config.stimMode === mode;
+  return expandStimMode(config.stimMode).has(mode);
 }
 
 export function createDrtPresentationBridge(
