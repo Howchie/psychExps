@@ -161,6 +161,17 @@ describe('jatos infrastructure', () => {
       expect(await submitToJatos({})).toBe(false);
       expect(consoleErrorSpy).toHaveBeenCalledWith('JATOS submit failed', error);
     });
+
+    it('gracefully catches synchronous errors, logs them, and returns false without crashing', async () => {
+      const error = new Error('Sync error');
+      const submitMock = vi.fn().mockImplementation(() => {
+        throw error;
+      });
+      vi.stubGlobal('window', { jatos: { submitResultData: submitMock } });
+
+      expect(await submitToJatos({})).toBe(false);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('JATOS submit failed', error);
+    });
   });
 
   describe('appendToJatos', () => {
