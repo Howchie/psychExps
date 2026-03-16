@@ -1,4 +1,4 @@
-import { SeededRandom, asObject, asArray } from "@experiments/core";
+import { SeededRandom, asObject, asArray, buildScheduledItems } from "@experiments/core";
 
 export interface TrialPlanItem {
   isChange: boolean;
@@ -18,25 +18,26 @@ export function buildTrialPlan(config: any, rng: SeededRandom): TrialPlanItem[] 
     const changeProb = Number(b.changeProbability) ?? 0.5;
     const setSizes = asArray(b.setSizes).map(Number);
 
-    const changeCount = Math.round(nTrials * changeProb);
-    const noChangeCount = nTrials - changeCount;
+    const trialTypes = buildScheduledItems({
+      items: [true, false],
+      count: nTrials,
+      schedule: { mode: "quota_shuffle" },
+      weights: [changeProb, 1 - changeProb],
+      rng: { next: () => rng.next() },
+    });
 
-    const trialTypes = [
-      ...Array(changeCount).fill(true),
-      ...Array(noChangeCount).fill(false),
-    ];
-
-    // Shuffle trial types
-    for (let i = trialTypes.length - 1; i > 0; i--) {
-      const j = Math.floor(rng.next() * (i + 1));
-      [trialTypes[i], trialTypes[j]] = [trialTypes[j], trialTypes[i]];
-    }
+    const setSizesArray = buildScheduledItems({
+      items: setSizes,
+      count: nTrials,
+      schedule: { mode: "quota_shuffle" },
+      weights: setSizes.map(() => 1),
+      rng: { next: () => rng.next() },
+    });
 
     for (let trialIndex = 0; trialIndex < nTrials; trialIndex++) {
-      const setSize = setSizes[Math.floor(rng.next() * setSizes.length)];
       plan.push({
         isChange: trialTypes[trialIndex],
-        setSize,
+        setSize: setSizesArray[trialIndex],
         blockIndex,
         trialIndex,
       });
