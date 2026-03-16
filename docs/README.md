@@ -13,6 +13,7 @@ This documentation is implementation-first and tracks current behavior in this r
 - [**Task: Stroop**](./TASK_STROOP.md): Implementation and config details for the Stroop task.
 - [**Task: Tracking**](./TASK_TRACKING.md): Implementation and config details for the continuous tracking task.
 - [**Task: Change Detection**](./TASK_CHANGE_DETECTION.md): Implementation and config details for the Change Detection task.
+- [**Task: Flanker**](./TASK_FLANKER.md): Implementation and config details for the Eriksen Flanker task.
 - [**Bricks runtime config schema**](./bricks-runtime-config-schema.md): Runtime-facing schema for conveyor internals.
 
 ## Most common recipes
@@ -24,6 +25,7 @@ This documentation is implementation-first and tracks current behavior in this r
 - Run Stroop default: `http://localhost:5173/?task=stroop&variant=default`
 - Run Tracking default: `http://localhost:5173/?task=tracking&variant=default`
 - Run Change Detection default: `http://localhost:5173/?task=change_detection&variant=default`
+- Run Flanker default: `http://localhost:5173/?task=flanker&variant=default`
 - Run any task with auto-responder: append `&auto=true`
 - Run with explicit config path: `http://localhost:5173/?task=sft&variant=default&config=sft/staircase_example`
 - Run with JSON override: `?task=pm&variant=modern&overrides=%7B%22mapping%22%3A%7B%22targetKey%22%3A%22x%22%7D%7D`
