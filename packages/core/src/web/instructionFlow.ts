@@ -59,7 +59,7 @@ export function resolveInstructionFlowPages(config: InstructionFlowConfig): Inst
 }
 
 export function renderInstructionScreenHtml(ctx: InstructionScreenRenderContext): string {
-  const headerText = ctx.pageTitle ?? ctx.blockLabel ?? ctx.title;
+  const headerText = ctx.pageTitle;
   if (ctx.pageHtml) {
     if (!headerText) return ctx.pageHtml;
     return `<h3>${escapeHtml(headerText)}</h3>${ctx.pageHtml}`;

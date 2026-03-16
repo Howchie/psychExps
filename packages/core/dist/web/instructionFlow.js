@@ -19,7 +19,7 @@ export function resolveInstructionFlowPages(config) {
     };
 }
 export function renderInstructionScreenHtml(ctx) {
-    const headerText = ctx.pageTitle ?? ctx.blockLabel ?? ctx.title;
+    const headerText = ctx.pageTitle;
     if (ctx.pageHtml) {
         if (!headerText)
             return ctx.pageHtml;
