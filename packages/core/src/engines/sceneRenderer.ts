@@ -1,5 +1,6 @@
 import type { SceneStimulus, SceneItem } from "./scene";
 import type { Point } from "../infrastructure/spatial";
+import { loadImageIfLikelyVisualStimulus } from "../stimuli/stimulus";
 
 export class SceneRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -28,8 +29,43 @@ export class SceneRenderer {
   private renderItem(item: SceneItem, pos: Point): void {
     if (item.category === "shape") {
       this.renderShape(item, pos);
+    } else if (item.features && ("src" in item.features || "url" in item.features || "image" in item.features)) {
+      this.renderImage(item, pos);
     }
-    // TODO: Support image rendering if item has image features
+  }
+
+  private renderImage(item: SceneItem, pos: Point): void {
+    const features = item.features as {
+      src?: string | HTMLImageElement;
+      url?: string | HTMLImageElement;
+      image?: string | HTMLImageElement;
+      width?: number;
+      height?: number;
+      size?: number;
+    };
+
+    const source = features.image ?? features.src ?? features.url;
+    if (!source) return;
+
+    const width = features.width ?? features.size ?? 50;
+    const height = features.height ?? features.size ?? 50;
+
+    if (source instanceof HTMLImageElement) {
+      if (source.complete && source.naturalWidth > 0) {
+        this.ctx.drawImage(source, pos.x - width / 2, pos.y - height / 2, width, height);
+      }
+      return;
+    }
+
+    if (typeof source === "string") {
+      loadImageIfLikelyVisualStimulus(source).then((img) => {
+        if (img && img.complete && img.naturalWidth > 0) {
+          this.ctx.drawImage(img, pos.x - width / 2, pos.y - height / 2, width, height);
+        }
+      }).catch(() => {
+        // Ignore load errors silently
+      });
+    }
   }
 
   private renderShape(item: SceneItem, pos: Point): void {

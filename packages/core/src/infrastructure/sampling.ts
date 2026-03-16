@@ -144,7 +144,10 @@ const sampleGamma = (shape: number, scale: number, rng: SamplerRng): number => {
 };
 
 const pickWeightedIndex = (weights: number[], rng: SamplerRng): number => {
-  const total = weights.reduce((acc, value) => acc + value, 0);
+  let total = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    total += weights[i];
+  }
   if (!(total > 0)) {
     return Math.floor(nextRange(rng, 0, weights.length));
   }
@@ -181,7 +184,10 @@ const parseListWeights = (weightsSpec: unknown, itemCount: number): number[] | n
     return numeric;
   });
 
-  const sum = weights.reduce((acc, value) => acc + value, 0);
+  let sum = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    sum += weights[i];
+  }
   if (sum <= 0) {
     throw new Error('List sampler "weights" must include at least one value > 0.');
   }
@@ -369,11 +375,15 @@ export function createSampler(
           const remainingItems = items.slice();
           const remainingWeights = weights.slice();
           pool = [];
+          let totalWeight = 0;
+          for (let i = 0; i < remainingWeights.length; i += 1) {
+            totalWeight += remainingWeights[i];
+          }
+
           while (remainingItems.length > 0) {
-            const total = remainingWeights.reduce((acc, value) => acc + value, 0);
             let pickIndex = 0;
-            if (total > 0) {
-              let threshold = nextRange(rng, 0, total);
+            if (totalWeight > 0) {
+              let threshold = nextRange(rng, 0, totalWeight);
               for (let i = 0; i < remainingWeights.length; i += 1) {
                 threshold -= remainingWeights[i];
                 if (threshold <= 0 || i === remainingWeights.length - 1) {
@@ -385,8 +395,16 @@ export function createSampler(
               pickIndex = Math.floor(nextRange(rng, 0, remainingItems.length));
             }
             pool.push(remainingItems[pickIndex]);
-            remainingItems.splice(pickIndex, 1);
-            remainingWeights.splice(pickIndex, 1);
+
+            const lastIndex = remainingItems.length - 1;
+            totalWeight -= remainingWeights[pickIndex];
+
+            if (pickIndex !== lastIndex) {
+              remainingItems[pickIndex] = remainingItems[lastIndex];
+              remainingWeights[pickIndex] = remainingWeights[lastIndex];
+            }
+            remainingItems.pop();
+            remainingWeights.pop();
           }
         } else {
           pool = items.slice();

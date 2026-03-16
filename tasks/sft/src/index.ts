@@ -1064,12 +1064,16 @@ function buildBlockPlan(config: SftParsedConfig, rng: () => number): PlannedBloc
       },
     }) as Variant[];
 
-    const uniqueVariants = Array.from(new Set(variantSchedule));
+    const variantCounts = new Map<Variant, number>();
+    for (let i = 0; i < variantSchedule.length; i++) {
+      const variant = variantSchedule[i];
+      variantCounts.set(variant, (variantCounts.get(variant) ?? 0) + 1);
+    }
+
     const plannedStimuli = new Map<Variant, string[]>();
     const plannedStimulusIndex = new Map<Variant, number>();
-    for (const variant of uniqueVariants) {
+    for (const [variant, countForVariant] of variantCounts) {
       const pool = variant.trialPool.length > 0 ? variant.trialPool : config.conditionCodes;
-      const countForVariant = variantSchedule.filter((entry) => entry === variant).length;
       const schedule = buildScheduledItems({
         items: pool,
         count: countForVariant,
@@ -1100,11 +1104,11 @@ function buildBlockPlan(config: SftParsedConfig, rng: () => number): PlannedBloc
       };
     });
 
-    const rules = Array.from(new Set(trials.map((t) => t.rule)));
+    const rule = trials.length > 0 && trials.every((t) => t.rule === trials[0].rule) ? trials[0].rule : "MIXED";
     return {
       id: block.id,
       label: block.label,
-      rule: rules.length === 1 ? rules[0] : "MIXED",
+      rule,
       trials,
       feedback: block.feedback,
       beforeBlockScreens: block.beforeBlockScreens,

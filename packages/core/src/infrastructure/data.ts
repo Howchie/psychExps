@@ -39,12 +39,36 @@ export function csvCell(value: unknown): string {
 
 export function recordsToCsv<T extends object>(records: T[]): string {
   if (records.length === 0) return "";
-  const columns = Object.keys(records[0] as Record<string, unknown>) as Array<keyof T>;
+
+  const columnSet = new Set<string>();
+  const scanLimit = Math.min(records.length, 100);
+  for (let i = 0; i < scanLimit; i++) {
+    for (const key of Object.keys(records[i] as Record<string, unknown>)) {
+      columnSet.add(key);
+    }
+  }
+
+  const columns: string[] = [];
+  for (const col of columnSet) {
+    columns.push(col);
+  }
+
   const header = columns.join(",");
-  const rows = records.map((record) =>
-    columns.map((column) => csvCell((record as Record<string, unknown>)[String(column)])).join(","),
-  );
-  return [header, ...rows].join("\n");
+  const len = records.length;
+  const colLen = columns.length;
+  const rows = new Array<string>(len + 1);
+  rows[0] = header;
+
+  for (let i = 0; i < len; i++) {
+    const record = records[i] as Record<string, unknown>;
+    const row = new Array<string>(colLen);
+    for (let j = 0; j < colLen; j++) {
+      row[j] = csvCell(record[columns[j]]);
+    }
+    rows[i + 1] = row.join(",");
+  }
+
+  return rows.join("\n");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

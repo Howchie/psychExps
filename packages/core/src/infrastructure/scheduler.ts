@@ -25,7 +25,10 @@ export interface BuildScheduledItemsArgs<TItem> {
 }
 
 function pickWeightedIndex(weights: number[], rng: RNG): number {
-  const total = weights.reduce((acc, value) => acc + value, 0);
+  let total = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    total += weights[i];
+  }
   if (!(total > 0)) {
     return Math.floor(rng.next() * weights.length);
   }
@@ -46,12 +49,18 @@ function shuffleInPlace<T>(items: T[], rng: RNG): T[] {
 }
 
 function computeQuotaCounts(weights: number[], totalCount: number): number[] {
-  const sum = weights.reduce((acc, value) => acc + value, 0);
+  let sum = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    sum += weights[i];
+  }
   if (!(sum > 0) || totalCount <= 0) return weights.map(() => 0);
 
   const raw = weights.map((weight) => (weight / sum) * totalCount);
   const base = raw.map((value) => Math.floor(value));
-  let assigned = base.reduce((acc, value) => acc + value, 0);
+  let assigned = 0;
+  for (let i = 0; i < base.length; i += 1) {
+    assigned += base[i];
+  }
 
   if (assigned < totalCount) {
     const ranked = raw
@@ -83,11 +92,37 @@ function buildWeightedPermutation<T>(items: T[], weights: number[], rng: RNG): T
   const remainingItems = items.slice();
   const remainingWeights = weights.slice();
   const output: T[] = [];
+  let totalWeight = 0;
+  for (let i = 0; i < remainingWeights.length; i += 1) {
+    totalWeight += remainingWeights[i];
+  }
+
   while (remainingItems.length > 0) {
-    const index = pickWeightedIndex(remainingWeights, rng);
+    let index = 0;
+    if (totalWeight > 0) {
+      let threshold = rng.next() * totalWeight;
+      for (let i = 0; i < remainingWeights.length; i += 1) {
+        threshold -= remainingWeights[i];
+        if (threshold <= 0 || i === remainingWeights.length - 1) {
+          index = i;
+          break;
+        }
+      }
+    } else {
+      index = Math.floor(rng.next() * remainingItems.length);
+    }
+
     output.push(remainingItems[index]);
-    remainingItems.splice(index, 1);
-    remainingWeights.splice(index, 1);
+
+    const lastIndex = remainingItems.length - 1;
+    totalWeight -= remainingWeights[index];
+
+    if (index !== lastIndex) {
+      remainingItems[index] = remainingItems[lastIndex];
+      remainingWeights[index] = remainingWeights[lastIndex];
+    }
+    remainingItems.pop();
+    remainingWeights.pop();
   }
   return output;
 }

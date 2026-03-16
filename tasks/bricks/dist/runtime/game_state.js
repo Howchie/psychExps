@@ -13,6 +13,7 @@ const BRICK_STATUS = {
  * via the public methods exposed here.
  */
 export class GameState {
+    activeBricks;
     constructor(config, { onEvent, seed } = {}) {
         this.config = config;
         this.onEvent = typeof onEvent === 'function' ? onEvent : () => { };
@@ -28,6 +29,7 @@ export class GameState {
             points: 0
         };
         this.bricks = new Map();
+        this.activeBricks = [];
         this.conveyors = [];
         this.conveyorsById = new Map();
         this.spawnControllers = [];
@@ -747,6 +749,7 @@ export class GameState {
             label: resolvedTraits.label ?? metadata?.label ?? null
         };
         this.bricks.set(id, brick);
+        this.activeBricks.push(brick);
         conveyor.activeIds.push(id);
         this.stats.spawned += 1;
         this._log('brick_spawned', {
@@ -829,6 +832,10 @@ export class GameState {
             conveyor.activeIds = conveyor.activeIds.filter((id) => id !== brick.id);
         }
         this.bricks.delete(brick.id);
+        const idx = this.activeBricks.findIndex((b) => b.id === brick.id);
+        if (idx !== -1) {
+            this.activeBricks.splice(idx, 1);
+        }
         const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
         if (status === BRICK_STATUS.CLEARED) {
             this.stats.cleared += 1;
