@@ -46,12 +46,18 @@ function shuffleInPlace<T>(items: T[], rng: RNG): T[] {
 }
 
 function computeQuotaCounts(weights: number[], totalCount: number): number[] {
-  const sum = weights.reduce((acc, value) => acc + value, 0);
+  let sum = 0;
+  for (let i = 0; i < weights.length; i += 1) {
+    sum += weights[i];
+  }
   if (!(sum > 0) || totalCount <= 0) return weights.map(() => 0);
 
   const raw = weights.map((weight) => (weight / sum) * totalCount);
   const base = raw.map((value) => Math.floor(value));
-  let assigned = base.reduce((acc, value) => acc + value, 0);
+  let assigned = 0;
+  for (let i = 0; i < base.length; i += 1) {
+    assigned += base[i];
+  }
 
   if (assigned < totalCount) {
     const ranked = raw
