@@ -118,7 +118,7 @@ describe('NbackTaskAdapter', () => {
       } as any,
     });
 
-    const responseWindow = timeline.find((entry) => entry.data?.phase === 'nback_response_window');
+    const responseWindow = timeline.find((entry) => entry.data?.phase?.startsWith('nback_response_window'));
     expect(responseWindow).toBeTruthy();
 
     responseWindow.on_finish({
@@ -131,7 +131,7 @@ describe('NbackTaskAdapter', () => {
       expect.objectContaining({
         blockIndex: 0,
         trialIndex: 3,
-        phase: 'nback_response_window',
+        phase: 'nback_response_window_stimulus',
         responseKey: 'm',
         responseCorrect: 1,
       }),
