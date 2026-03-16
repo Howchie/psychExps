@@ -843,14 +843,14 @@ function evaluateNbackOutcome(
 }
 
 function resolveAllowedKeysForNback(semantics: ResponseSemantics, block: PlannedBlock): string[] {
-  const allowedKeys = new Set(semantics.allowedKeys(["target", "non_target"]));
+  const keys = new Set(semantics.allowedKeys(["target", "non_target"]));
   for (const trial of block.trials) {
     const key = normalizeKey(trial.correctResponse);
     if (key.length > 0 && key !== "timeout") {
-      allowedKeys.add(key);
+      keys.add(key);
     }
   }
-  return Array.from(allowedKeys);
+  return Array.from(keys);
 }
 
 function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId: string, variantId: string): TrialRecord[] {

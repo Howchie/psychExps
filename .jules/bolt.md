@@ -1,3 +1,6 @@
+## 2024-05-18 - [Optimizing Array allocations]
+**Learning:** Found and replaced an `Array.from(new Set([...array1, ...array2]))` operation. Building sets dynamically inside a `for` loop prevents O(N) array allocation operations and improves array manipulations in TS significantly in NodeJS environments, going from ~3812ns -> ~1304ns locally (~3x improvement).
+**Action:** Prefer `for...of` loops over intermediate array allocations like `[...array]`, `map` and `filter` when constructing Sets from elements in arrays.
 ## 2024-03-24 - [Avoid swap-and-pop if sequence relies on array element relative order]
 **Learning:** Using swap-and-pop to remove an element in O(1) time destroys the array's relative ordering. If subsequent operations rely on searching the array sequentially from the start (e.g., `findIndex`), swapping the last element into the deleted position will alter which elements are found first in later iterations, breaking determinism.
 **Action:** When evaluating O(N) array deletions in loops like `splice()`, check if the relative ordering matters for the algorithm's correctness before switching to swap-and-pop.
