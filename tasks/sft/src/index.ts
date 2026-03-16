@@ -3,7 +3,6 @@ import {
   buildLinearRange,
   buildScheduledItems,
   createMulberry32,
-  createEventLogger,
   dbToLuminance,
   drawTrialFeedbackOnCanvas,
   escapeHtml,
@@ -21,7 +20,6 @@ import {
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
-  setCursorHidden,
   computeAccuracy,
   computeRtPhaseDurations,
   toJsPsychChoices,
@@ -52,6 +50,7 @@ import {
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
   resolveRtTaskConfig,
+  initStandardJsPsych,
   type ResolvedRtTaskConfig,
   type BlockSummaryConfig,
   type ResponseSemantics,
@@ -61,10 +60,9 @@ import {
   type JSONObject,
   type TaskAdapterContext,
   type StandardTaskInstructionConfig,
-  shouldHideCursorForPhase,
   extractJsPsychTrialResponse,
+  type EventLogger,
 } from "@experiments/core";
-import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
@@ -266,12 +264,6 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       show_rule_cue: trial.showRuleCue,
     })),
   );
-  const stimulusExport = await maybeExportStimulusRows({
-    context,
-    rows,
-    suffix: "sft_stimulus_list",
-  });
-  if (stimulusExport) return stimulusExport;
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -279,12 +271,12 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   ensureJsPsychCanvasCentered(root);
 
   const staircaseRecords: StaircaseRecord[] = [];
-  const eventLogger = createEventLogger(context.selection);
+  const eventLogger = context.eventLogger;
   const allowedKeys = allKeys(parsed.responseSemantics);
   sftEnvironment.installKeyScrollBlocker(allowedKeys);
   applyGlobalSalience(parsed, parsed.salience);
 
-  let jsPsych: ReturnType<typeof initJsPsych> | null = null;
+  let jsPsych: ReturnType<typeof initStandardJsPsych> | null = null;
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
   applyTaskInstructionConfig(context.taskConfig, {
     ...parsed.instructions,
@@ -295,6 +287,10 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   });
   return orchestrator.run({
     buttonIdPrefix: "sft-continue",
+    stimulusExport: {
+      rows,
+      suffix: "sft_stimulus_list",
+    },
     getBlocks: () => plan,
     getTrials: ({ block }) => block.trials,
     runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
@@ -440,16 +436,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       return record;
     },
     onTaskStart: () => {
-      jsPsych = initJsPsych({
-        display_element: root,
-        on_trial_start: (trial: Record<string, unknown>) => {
-          const data = asObject(trial?.data);
-          setCursorHidden(shouldHideCursorForPhase(data?.phase));
-        },
-        on_finish: () => {
-          setCursorHidden(false);
-        },
-      });
+      jsPsych = initStandardJsPsych({ displayElement: root });
       eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
     },
     staircase: {
@@ -477,13 +464,9 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       const accuracy = computeAccuracy(correct, trialResults.length);
       eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
     },
-    onTaskEnd: () => {
-      setCursorHidden(false);
-    },
     csvOptions: {
       suffix: "sft_trials",
     },
-    getEvents: () => eventLogger.events,
     getTaskMetadata: (sessionResult) => {
       const records = sessionResult.blocks.flatMap((b: any) => b.trialResults) as TrialRecord[];
       eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
@@ -509,7 +492,7 @@ function appendStaircaseTimeline(args: {
   rng: () => number;
   allowedKeys: string[];
   staircaseRecords: StaircaseRecord[];
-  eventLogger: ReturnType<typeof createEventLogger>;
+  eventLogger: EventLogger;
 }): void {
   const { timeline, container, config, rng, allowedKeys, staircaseRecords, eventLogger } = args;
   const staircase = config.staircase;

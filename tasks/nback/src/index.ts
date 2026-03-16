@@ -1,7 +1,6 @@
 import {
   SeededRandom,
   OnlineParameterTransformRunner,
-  createEventLogger,
   drawTrialFeedbackOnCanvas,
   escapeHtml,
   evaluateTrialOutcome,
@@ -15,9 +14,7 @@ import {
   resolveJsPsychContentHost,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
-  setCursorHidden,
   computeAccuracy,
-  shouldHideCursorForPhase,
   toJsPsychChoices,
   waitForContinue,
   resolveTemplate,
@@ -69,8 +66,9 @@ import {
   TaskOrchestrator,
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
+  initStandardJsPsych,
+  type EventLogger,
 } from "@experiments/core";
-import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
@@ -84,8 +82,6 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
   if (!runtime) {
     throw new Error("NBack runtime not initialized");
   }
-  const stimulusExport = await exportNbackStimulusList(context, runtime);
-  if (stimulusExport) return stimulusExport;
 
     const { parsed, eventLogger } = runtime;
     applyTaskInstructionConfig(context.taskConfig, {
@@ -96,12 +92,16 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       },
     });
     const root = context.container;
-    let jsPsych: ReturnType<typeof initJsPsych> | null = null;
+    let jsPsych: ReturnType<typeof initStandardJsPsych> | null = null;
 
     const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
 
     return orchestrator.run({
       buttonIdPrefix: "nback",
+      stimulusExport: {
+        rows: computeNbackExportRows(runtime),
+        suffix: "nback_stimulus_list",
+      },
       resolveUiContainer: () => resolveJsPsychContentHost(root),
       getBlocks: () => runtime.plan.map((block) => ({
         ...block,
@@ -120,22 +120,16 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       getTaskMetadata: () => ({
         jsPsychData: jsPsych?.data.get().values() ?? [],
       }),
-      getEvents: () => eventLogger.events,
       onTaskStart: () => {
         nbackEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
         nbackEnvironment.installPageScrollLock();
         nbackRootPresentationState = applyNbackRootPresentation(root);
         
-        jsPsych = initJsPsych({
-          display_element: root,
-          on_trial_start: (trial: Record<string, unknown>) => {
+        jsPsych = initStandardJsPsych({
+          displayElement: root,
+          onTrialStart: (trial: Record<string, unknown>) => {
             window.scrollTo(0, 0);
             root.scrollTop = 0;
-            const data = asObject(trial?.data);
-            setCursorHidden(shouldHideCursorForPhase(data?.phase));
-          },
-          on_finish: () => {
-            setCursorHidden(false);
           },
         });
 
@@ -215,13 +209,13 @@ export const nbackAdapter = createTaskAdapter({
   },
 });
 
-async function exportNbackStimulusList(context: TaskAdapterContext, runtime: NbackRuntimeState): Promise<unknown> {
+function computeNbackExportRows(runtime: NbackRuntimeState): any[] {
   const exportBlockType = (block: PlannedBlock): string => {
     if (block.isPractice) return "practice";
     const hasPmTrials = block.trials.some((trial) => trial.trialType === "PM");
     return hasPmTrials ? "pm" : "control";
   };
-  const rows = runtime.plan.flatMap((block) =>
+  return runtime.plan.flatMap((block) =>
     block.trials.map((trial) => ({
       block_label: block.label,
       block_index: block.blockIndex,
@@ -236,11 +230,6 @@ async function exportNbackStimulusList(context: TaskAdapterContext, runtime: Nba
       correct_response: trial.correctResponse,
     })),
   );
-  return maybeExportStimulusRows({
-    context,
-    rows,
-    suffix: "nback_stimulus_list",
-  });
 }
 
 
@@ -412,7 +401,7 @@ interface NbackRuntimeState {
   variableResolver: VariableResolver;
   moduleRunner: TaskModuleRunner;
   moduleConfigs: Record<string, any>;
-  eventLogger: ReturnType<typeof createEventLogger>;
+  eventLogger: EventLogger;
   participantId: string;
   variantId: string;
 }
@@ -467,7 +456,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
   }
   let plan = buildExperimentPlan(parsed, rng, context.moduleRunner, moduleConfigs, context.resolver);
 
-  const eventLogger = createEventLogger(context.selection);
+  const eventLogger = context.eventLogger;
   return {
     parsed,
     plan,
@@ -488,7 +477,7 @@ function appendJsPsychNbackTrial(args: {
   resolvedStimulus: string;
   runtime: NbackRuntimeState;
   preloaded: PreloadedStimulus;
-  eventLogger: ReturnType<typeof createEventLogger>;
+  eventLogger: EventLogger;
 }): NbackTrialCapture {
   const { timeline, parsed, block, trial, resolvedStimulus, runtime, preloaded, eventLogger } = args;
   const layout = computeCanvasFrameLayout({

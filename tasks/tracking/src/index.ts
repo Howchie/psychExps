@@ -6,7 +6,6 @@ import {
   asString,
   coerceScopedDrtConfig,
   computeTrackingDistance,
-  createEventLogger,
   createMulberry32,
   createManipulationOverrideMap,
   createManipulationPoolAllocator,
@@ -48,9 +47,7 @@ export const trackingAdapter = createTaskAdapter({
     ],
   },
   run: (context) => runTrackingTask(context),
-  terminate: async () => {
-    setCursorHidden(false);
-  },
+  terminate: async () => {},
 });
 
 type TrackingShape = "circle" | "square";
@@ -220,15 +217,9 @@ type TrackingTrialRuntimeResult = PursuitTrialRuntimeResult | MotTrialRuntimeRes
 async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
   const runner = context.moduleRunner;
   const parsed = parseTrackingConfig(context.taskConfig, context.selection);
-  const stimulusExport = await maybeExportStimulusRows({
-    context,
-    rows: buildTrackingStimulusRows(parsed),
-    suffix: "tracking_stimulus_list",
-  });
-  if (stimulusExport) return stimulusExport;
   const participantId = context.selection.participant.participantId;
   const variantId = context.selection.variantId;
-  const eventLogger = createEventLogger(context.selection);
+  const eventLogger = context.eventLogger;
   const seed = hashSeed(participantId, context.selection.participant.sessionId, variantId, "tracking");
   const rng = createMulberry32(seed);
 
@@ -272,9 +263,12 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
 
   const orchestrator = new TaskOrchestrator<ParsedTrackingBlock, number, TrackingTrialRuntimeResult>(context);
   applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
-  try {
-    return await orchestrator.run({
+  return await orchestrator.run({
       buttonIdPrefix: "tracking-continue",
+      stimulusExport: {
+        rows: buildTrackingStimulusRows(parsed),
+        suffix: "tracking_stimulus_list",
+      },
       getBlocks: () =>
         parsed.blocks.map((block) => ({
           ...block,
@@ -449,7 +443,6 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
         suffix: "tracking_trials",
         getRecords: () => trialRecords,
       },
-      getEvents: () => eventLogger.events,
       getTaskMetadata: () => ({
         config: parsed,
         records: trialRecords,
@@ -469,9 +462,6 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
         eventLog: eventLogger.events,
       }),
     });
-  } finally {
-    setCursorHidden(false);
-  }
 }
 
 function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<string, string | number | boolean | null>> {
@@ -502,7 +492,6 @@ function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<s
 }
 
 async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrialRuntimeResult> {
-  setCursorHidden(false);
   args.stageHost.innerHTML = "";
 
   const frame = createDisplayFrame(args.stageHost, args.display);
@@ -629,7 +618,6 @@ async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrial
 }
 
 async function runMotTrial(args: TrackingRunTrialArgs): Promise<MotTrialRuntimeResult> {
-  setCursorHidden(false);
   args.stageHost.innerHTML = "";
 
   const frame = createDisplayFrame(args.stageHost, args.display);

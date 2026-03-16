@@ -1,4 +1,5 @@
 import { ConfigurationManager } from "../infrastructure/config";
+import { createEventLogger } from "../infrastructure/events";
 import { createVariableResolver } from "../infrastructure/variables";
 import { TaskModuleRunner } from "./taskModule";
 import { DrtModule } from "../engines/drt";
@@ -84,7 +85,7 @@ export class LifecycleManager {
    * Executes the full task lifecycle: initialize, execute, terminate.
    * If the adapter only has the legacy 'launch' method, it will use that.
    */
-  async run(context: Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner">): Promise<unknown> {
+  async run(context: Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner" | "eventLogger">): Promise<unknown> {
     // Standardize VariableResolver instantiation using SelectionContext
     const taskConfig = context.taskConfig ?? {};
     const taskVariables = (taskConfig.task as JSONObject)?.variables as JSONObject;
@@ -131,12 +132,15 @@ export class LifecycleManager {
       new StimulusInjectorModule(),
     ]);
 
+    const eventLogger = createEventLogger(context.selection);
+
     const resolvedContext: TaskAdapterContext = {
       ...context,
       taskConfig: resolvedConfig,
       rawTaskConfig: taskConfig,
       resolver: taskResolver,
       moduleRunner,
+      eventLogger,
     };
 
     moduleRunner.initialize();
@@ -161,6 +165,11 @@ export class LifecycleManager {
       moduleRunner.terminate();
       if (this.adapter.terminate) {
         await this.adapter.terminate();
+      }
+
+      // Centralized cursor restoration for all tasks
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.remove("exp-cursor-hidden");
       }
     }
   }

@@ -18,6 +18,7 @@ import { createDefaultTaskDataSink, type TaskDataSink } from "../infrastructure/
 import { buildBlockSummaryModel, coerceBlockSummaryConfig, mergeBlockSummaryConfig } from "./blockSummary";
 import { coerceBlockRepeatUntilConfig, evaluateBlockRepeatUntil } from "./blockRepeat";
 import { deepClone, deepMerge } from "../infrastructure/deepMerge";
+import { maybeExportStimulusRows } from "./stimulusExport";
 
 export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   getBlocks: (taskConfig: JSONObject) => TBlock[];
@@ -100,6 +101,10 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
     preBlockBeforeIntro?: boolean;
   };
   dataSink?: TaskDataSink<TBlock, TTrial, TTrialResult>;
+  stimulusExport?: {
+    rows: any[];
+    suffix: string;
+  };
   getBlockUi?: (ctx: { block: TBlock; blockIndex: number; blockAttempt?: number }) => {
     introText?: string | null;
     preBlockPages?: unknown;
@@ -115,6 +120,16 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
 
   async run(args: TaskOrchestratorArgs<TBlock, TTrial, TTrialResult>): Promise<unknown> {
     const { context } = this;
+
+    if (args.stimulusExport) {
+      const exportResult = await maybeExportStimulusRows({
+        context,
+        rows: args.stimulusExport.rows,
+        suffix: args.stimulusExport.suffix,
+      });
+      if (exportResult) return exportResult;
+    }
+
     const { taskConfig, rawTaskConfig, moduleRunner, container, selection } = context;
     const taskModules = asObject(asObject(rawTaskConfig.task)?.modules) ?? {};
     const toModuleMap = (value: unknown): Record<string, unknown> => asObject(value) ?? {};
@@ -675,7 +690,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       : sessionResult.blocks.flatMap(b => b.trialResults);
 
     const taskMetadata = args.getTaskMetadata ? args.getTaskMetadata(sessionResult) : {};
-    const taskEvents = args.getEvents ? args.getEvents(sessionResult) : [];
+    const taskEvents = args.getEvents ? args.getEvents(sessionResult) : this.context?.eventLogger?.events ?? [];
 
     const payload = {
       selection,

@@ -113,6 +113,7 @@ export interface TaskRegistry {
   tasks: TaskManifest[];
 }
 
+import type { EventLogger } from "../infrastructure/events";
 import type { VariableResolver } from "../infrastructure/variables";
 import type { TaskModuleRunner } from "./taskModule";
 
@@ -124,4 +125,5 @@ export interface TaskAdapterContext {
   rawTaskConfig: JSONObject;
   resolver: VariableResolver;
   moduleRunner: TaskModuleRunner;
+  eventLogger: EventLogger;
 }

@@ -1,5 +1,7 @@
+import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
-import { extractJsPsychTrialResponse } from "../web/ui";
+import { extractJsPsychTrialResponse, setCursorHidden, shouldHideCursorForPhase } from "../web/ui";
+import { asObject } from "../utils/coerce";
 
 export interface JsPsychRtTimelinePhaseDurations {
   preFixationBlankMs: number;
@@ -31,6 +33,25 @@ export interface JsPsychRtTimelineConfig {
   };
   postResponseContent?: "blank" | "stimulus";
   onResponse?: (response: { key: string | null; rtMs: number | null }, data: Record<string, unknown>) => void;
+}
+
+export function initStandardJsPsych(args: {
+  displayElement: HTMLElement;
+  onTrialStart?: (trial: Record<string, unknown>) => void;
+  onFinish?: () => void;
+}): ReturnType<typeof initJsPsych> {
+  return initJsPsych({
+    display_element: args.displayElement,
+    on_trial_start: (trial: any) => {
+      const data = asObject(trial?.data);
+      setCursorHidden(shouldHideCursorForPhase(data?.phase));
+      if (args.onTrialStart) args.onTrialStart(trial);
+    },
+    on_finish: () => {
+      setCursorHidden(false);
+      if (args.onFinish) args.onFinish();
+    },
+  });
 }
 
 export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): any[] {

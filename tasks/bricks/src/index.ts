@@ -2,7 +2,6 @@ import {
   buildScheduledItems,
   createAtwitSurvey,
   createMulberry32,
-  createEventLogger,
   collectSurveyEntries,
   createInstructionRenderer,
   deepClone,
@@ -80,14 +79,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
   const statsPresentation = resolveBricksStatsPresentation(taskConfig);
   const statsAccumulator = createBricksStatsAccumulator();
 
-  const stimulusExport = await maybeExportStimulusRows({
-    context,
-    rows: buildBricksStimulusRows(blockPlan),
-    suffix: "bricks_stimulus_list",
-  });
-  if (stimulusExport) return stimulusExport;
-
-  const eventLogger = createEventLogger(selection);
+  const eventLogger = context.eventLogger;
   const activeDrtScopes = new Map<string, ActiveBricksDrtScope>();
   const blockDrtPreviousStats = new Map<number, Record<string, number>>();
 
@@ -123,6 +115,10 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
 
   return await orchestrator.run({
     buttonIdPrefix: "bricks",
+    stimulusExport: {
+      rows: buildBricksStimulusRows(blockPlan),
+      suffix: "bricks_stimulus_list",
+    },
     resolveModuleContext: ({ scope, blockIndex, trialIndex }) => {
       const scopeId =
         scope === "trial"
@@ -135,7 +131,6 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
     },
     getBlocks: () => blockPlan,
     getTrials: ({ block }) => block.trialConfigs,
-    getEvents: () => eventLogger.events,
     onTaskStart: () => {
       eventLogger.emit("task_start", { task: "bricks" });
     },
