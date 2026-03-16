@@ -179,7 +179,15 @@ export function buildConditionSequence(args: BuildConditionSequenceArgs): Condit
     while (pool.length > 0) {
       const idx = pool.findIndex((cell) => !violatesAdjacency(sequence, cell, args.adjacency));
       if (idx < 0) break;
-      const [picked] = pool.splice(idx, 1);
+
+      // ⚡ Bolt: O(1) swap-and-pop technique instead of O(N) Array.prototype.splice
+      // Since `pool` is a shuffled bag of items, order doesn't matter.
+      // We can safely move the last item to the current index and pop the array,
+      // avoiding the expensive memory shift of all subsequent elements.
+      const picked = pool[idx];
+      pool[idx] = pool[pool.length - 1];
+      pool.pop();
+
       if (picked) sequence.push(picked);
     }
     if (sequence.length === trialCount) return sequence;

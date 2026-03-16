@@ -493,11 +493,14 @@ function evaluateNbackOutcome(parsed, _block, trial, responseKey, rtMs) {
     };
 }
 function resolveAllowedKeysForNback(semantics, block) {
-    const base = semantics.allowedKeys(["target", "non_target"]);
-    const injectedKeys = block.trials
-        .map((trial) => normalizeKey(trial.correctResponse))
-        .filter((key) => key.length > 0 && key !== "timeout");
-    return Array.from(new Set([...base, ...injectedKeys]));
+    const allowedKeys = new Set(semantics.allowedKeys(["target", "non_target"]));
+    for (const trial of block.trials) {
+        const key = normalizeKey(trial.correctResponse);
+        if (key.length > 0 && key !== "timeout") {
+            allowedKeys.add(key);
+        }
+    }
+    return Array.from(allowedKeys);
 }
 function collectNbackRecords(rows, participantId, variantId) {
     const output = [];
