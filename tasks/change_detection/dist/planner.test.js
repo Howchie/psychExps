@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
 import { buildTrialPlan } from "./planner";
 import { SeededRandom, hashSeed } from "@experiments/core";
