@@ -12,7 +12,7 @@ Config objects are merged in the following order (higher items overwrite lower i
 4. **Runtime overrides:** `selection.overrides` (JATOS overrides if present, else URL `overrides`).
 
 Current repository state:
-- `taskDefaults` is currently empty for all active tasks (`sft`, `nback`, `bricks`, `stroop`, `tracking`, `change_detection`).
+- `taskDefaults` is currently empty for all active tasks (`sft`, `nback`, `bricks`, `stroop`, `tracking`, `change_detection`, `flanker`).
 - Effective baseline behavior therefore comes from the selected variant config JSON.
 
 ### Merger Behavior: `buildMergedConfig`
@@ -207,7 +207,7 @@ The framework supports dynamic redirect URLs upon completion. These are configur
 
 ## 6. Instruction Slots (Shared Pattern)
 
-For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`, `bricks`, `sft`, `stroop`, `change_detection`), `instructions` supports:
+For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`, `bricks`, `sft`, `stroop`, `change_detection`, `flanker`), `instructions` supports:
 
 - `pages` (preferred intro pages): string, object, or array
   - aliases: `introPages`, `intro`, `screens`
@@ -472,6 +472,7 @@ Supported tasks:
 - `stroop`
 - `tracking`
 - `change_detection`
+  - `flanker`
 
 Behavior:
 - Task runtime builds planned blocks/trials but skips trial execution.
