@@ -1,5 +1,6 @@
 import type { SceneStimulus, SceneItem } from "./scene";
 import type { Point } from "../infrastructure/spatial";
+import { loadImageIfLikelyVisualStimulus } from "../stimuli/stimulus";
 
 export class SceneRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -28,29 +29,42 @@ export class SceneRenderer {
   private renderItem(item: SceneItem, pos: Point): void {
     if (item.category === "shape") {
       this.renderShape(item, pos);
-    } else if (item.category === "image") {
+    } else if (item.features && ("src" in item.features || "url" in item.features || "image" in item.features)) {
       this.renderImage(item, pos);
     }
   }
 
   private renderImage(item: SceneItem, pos: Point): void {
-    const { image, width, height, size } = item.features as {
-      image: CanvasImageSource;
+    const features = item.features as {
+      src?: string | HTMLImageElement;
+      url?: string | HTMLImageElement;
+      image?: string | HTMLImageElement;
       width?: number;
       height?: number;
       size?: number;
     };
 
-    if (!image) return;
+    const source = features.image ?? features.src ?? features.url;
+    if (!source) return;
 
-    // Use explicit width/height, falling back to size, or intrinsic image dimensions.
-    const w = width ?? size ?? (image as any).width;
-    const h = height ?? size ?? (image as any).height;
+    const width = features.width ?? features.size ?? 50;
+    const height = features.height ?? features.size ?? 50;
 
-    if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
-      this.ctx.drawImage(image, pos.x - w / 2, pos.y - h / 2, w, h);
-    } else {
-      this.ctx.drawImage(image, pos.x, pos.y);
+    if (source instanceof HTMLImageElement) {
+      if (source.complete && source.naturalWidth > 0) {
+        this.ctx.drawImage(source, pos.x - width / 2, pos.y - height / 2, width, height);
+      }
+      return;
+    }
+
+    if (typeof source === "string") {
+      loadImageIfLikelyVisualStimulus(source).then((img) => {
+        if (img && img.complete && img.naturalWidth > 0) {
+          this.ctx.drawImage(img, pos.x - width / 2, pos.y - height / 2, width, height);
+        }
+      }).catch(() => {
+        // Ignore load errors silently
+      });
     }
   }
 

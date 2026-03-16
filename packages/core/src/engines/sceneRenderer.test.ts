@@ -55,25 +55,24 @@ describe("SceneRenderer", () => {
     };
     const renderer = new SceneRenderer(canvas);
 
-    const mockImage = {} as CanvasImageSource;
+    const img = new Image();
+    // jsdom doesn't set naturalWidth/complete immediately without mock
+    Object.defineProperty(img, "complete", { value: true });
+    Object.defineProperty(img, "naturalWidth", { value: 100 });
+
     const scene: SceneStimulus = {
       items: [
-        { id: "1", category: "image", features: { image: mockImage, size: 50 } },
-        { id: "2", category: "image", features: { image: mockImage, width: 100, height: 60 } },
+        { id: "1", category: "image", features: { src: img, width: 40, height: 40 } },
       ]
     };
 
     const slots: Point[] = [
       { x: 100, y: 100 },
-      { x: 250, y: 250 },
     ];
 
     renderer.render(scene, slots);
 
-    expect(ctx.drawImage).toHaveBeenCalledTimes(2);
-    // Centering: 100 - 50/2 = 75, 100 - 50/2 = 75
-    expect(ctx.drawImage).toHaveBeenCalledWith(mockImage, 75, 75, 50, 50);
-    // Centering: 250 - 100/2 = 200, 250 - 60/2 = 220
-    expect(ctx.drawImage).toHaveBeenCalledWith(mockImage, 200, 220, 100, 60);
+    expect(ctx.clearRect).toHaveBeenCalled();
+    expect(ctx.drawImage).toHaveBeenCalledWith(img, 80, 80, 40, 40);
   });
 });
