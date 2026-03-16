@@ -51,8 +51,9 @@ import {
   TaskOrchestrator,
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
+  resolveRtTaskConfig,
+  type ResolvedRtTaskConfig,
   type BlockSummaryConfig,
-  type RtTiming,
   type ResponseSemantics,
   type SurveyDefinition,
   type SurveyRunResult,
@@ -131,15 +132,12 @@ interface SftParsedConfig {
   blocks: RawBlock[];
   staircase?: StaircaseSpec | null;
   feedbackDefaults: TrialFeedbackConfig;
-  rtTask: {
-    enabled: boolean;
-    timing: RtTiming;
+  rtTask: ResolvedRtTaskConfig & {
     fixationJitter: {
       enabled: boolean;
       minMs: number;
       maxMs: number;
     };
-    responseTerminatesTrial: boolean;
     postResponseContent: "stimulus" | "blank";
     feedbackPhase: "separate" | "post_response";
   };
@@ -809,7 +807,46 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     responseDeadlineMs: toPositiveNumber(asObject(config.timing)?.response_deadline_ms, 3000),
     responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
   };
-  const rtTask = parseSftRtTaskConfig(config, legacyTiming);
+
+  const taskRaw = asObject(config.task);
+  const rtRaw = asObject(taskRaw?.rtTask);
+  const jitterRaw = asObject(rtRaw?.fixationJitter);
+  const defaultJitterMin = Math.max(0, Math.round(legacyTiming.fixationMs * 0.5));
+  const defaultJitterMax = Math.max(defaultJitterMin + 1, Math.round(legacyTiming.fixationMs * 1.5));
+  const jitterMin = toNonNegativeNumber(jitterRaw?.minMs, defaultJitterMin);
+  const jitterMax = Math.max(jitterMin, toNonNegativeNumber(jitterRaw?.maxMs, defaultJitterMax));
+  const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "").toLowerCase();
+  const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "").toLowerCase();
+
+  const rtTask = {
+    ...resolveRtTaskConfig({
+      baseTiming: {
+        trialDurationMs: Math.max(
+          1,
+          legacyTiming.fixationMs +
+            legacyTiming.blankMs +
+            legacyTiming.responseDeadlineMs +
+            (legacyTiming.responseTerminatesTrial ? 0 : legacyTiming.stimulusMs)
+        ),
+        fixationOnsetMs: 0,
+        fixationDurationMs: legacyTiming.fixationMs,
+        stimulusOnsetMs: legacyTiming.fixationMs + legacyTiming.blankMs,
+        stimulusDurationMs: legacyTiming.stimulusMs,
+        responseWindowStartMs: legacyTiming.fixationMs + legacyTiming.blankMs,
+        responseWindowEndMs: legacyTiming.fixationMs + legacyTiming.blankMs + legacyTiming.responseDeadlineMs,
+      },
+      override: rtRaw,
+      defaultEnabled: false,
+      defaultResponseTerminatesTrial: legacyTiming.responseTerminatesTrial,
+    }),
+    fixationJitter: {
+      enabled: jitterRaw ? jitterRaw.enabled !== false : false,
+      minMs: jitterMin,
+      maxMs: jitterMax,
+    },
+    postResponseContent: (postResponseContentRaw === "blank" ? "blank" : "stimulus") as "stimulus" | "blank",
+    feedbackPhase: (feedbackPhaseRaw === "post_response" ? "post_response" : "separate") as "separate" | "post_response",
+  };
   const blockSummary = coerceBlockSummaryConfig(asObject(asObject(config.instructions)?.blockSummary)) ??
     coerceBlockSummaryConfig({
       enabled: true,
@@ -902,71 +939,6 @@ function parseBetweenTrialSurveys(config: JSONObject): SurveyDefinition[] {
     singletonKey: "",
   });
   return parseSurveyDefinitions(betweenTrial);
-}
-
-function parseSftRtTaskConfig(
-  config: JSONObject,
-  legacyTiming: {
-    fixationMs: number;
-    blankMs: number;
-    stimulusMs: number;
-    responseDeadlineMs: number;
-    responseTerminatesTrial: boolean;
-  },
-): SftParsedConfig["rtTask"] {
-  const taskRaw = asObject(config.task);
-  const rtRaw = asObject(taskRaw?.rtTask);
-  const enabled = rtRaw ? rtRaw.enabled !== false : false;
-
-  const legacyTrialDuration = Math.max(
-    1,
-    legacyTiming.fixationMs +
-      legacyTiming.blankMs +
-      legacyTiming.responseDeadlineMs +
-      (legacyTiming.responseTerminatesTrial ? 0 : legacyTiming.stimulusMs),
-  );
-  const timingRaw = asObject(rtRaw?.timing);
-  const timing: RtTiming = {
-    trialDurationMs: toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration),
-    fixationOnsetMs: toNonNegativeNumber(timingRaw?.fixationOnsetMs, 0),
-    fixationDurationMs: toNonNegativeNumber(timingRaw?.fixationDurationMs, legacyTiming.fixationMs),
-    stimulusOnsetMs: toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs),
-    stimulusDurationMs: toNonNegativeNumber(
-      timingRaw?.stimulusDurationMs,
-      Math.max(0, toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration) - toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs)),
-    ),
-    responseWindowStartMs: toNonNegativeNumber(
-      timingRaw?.responseWindowStartMs,
-      legacyTiming.fixationMs + legacyTiming.blankMs,
-    ),
-    responseWindowEndMs: toNonNegativeNumber(
-      timingRaw?.responseWindowEndMs,
-      legacyTiming.fixationMs + legacyTiming.blankMs + legacyTiming.responseDeadlineMs,
-    ),
-  };
-
-  const jitterRaw = asObject(rtRaw?.fixationJitter);
-  const defaultJitterMin = Math.max(0, Math.round(legacyTiming.fixationMs * 0.5));
-  const defaultJitterMax = Math.max(defaultJitterMin + 1, Math.round(legacyTiming.fixationMs * 1.5));
-  const jitterMin = toNonNegativeNumber(jitterRaw?.minMs, defaultJitterMin);
-  const jitterMax = Math.max(jitterMin, toNonNegativeNumber(jitterRaw?.maxMs, defaultJitterMax));
-
-  const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "").toLowerCase();
-  const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "").toLowerCase();
-  return {
-    enabled,
-    timing,
-    fixationJitter: {
-      enabled: jitterRaw ? jitterRaw.enabled !== false : false,
-      minMs: jitterMin,
-      maxMs: jitterMax,
-    },
-    responseTerminatesTrial: rtRaw
-      ? rtRaw.responseTerminatesTrial !== false
-      : legacyTiming.responseTerminatesTrial,
-    postResponseContent: postResponseContentRaw === "blank" ? "blank" : "stimulus",
-    feedbackPhase: feedbackPhaseRaw === "post_response" ? "post_response" : "separate",
-  };
 }
 
 function parseStaircase(config: JSONObject): StaircaseSpec | null {

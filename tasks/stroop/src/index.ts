@@ -41,6 +41,8 @@ import {
   applyTaskInstructionConfig,
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
+  resolveRtTaskConfig,
+  type ResolvedRtTaskConfig,
   type JSONObject,
   type RtTiming,
   type TaskAdapterContext,
@@ -65,9 +67,7 @@ interface ParsedStroopConfig {
   responseSemantics: ResponseSemantics;
   allowedKeys: string[];
   responseColorTokens: string[];
-  rtTask: {
-    timing: RtTiming;
-    responseTerminatesTrial: boolean;
+  rtTask: ResolvedRtTaskConfig & {
     postResponseContent: "stimulus" | "blank";
     feedbackPhase: "separate" | "post_response";
   };
@@ -542,6 +542,7 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
 
   const defaultTiming: RtTiming = {
     trialDurationMs: 2000,
+    fixationOnsetMs: 0,
     fixationDurationMs: 500,
     stimulusOnsetMs: 700,
     responseWindowStartMs: 700,
@@ -550,6 +551,7 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
   const legacyTimingRaw = asObject(config.timing);
   if (legacyTimingRaw) {
     defaultTiming.trialDurationMs = toPositiveNumber(legacyTimingRaw.trialDurationMs, defaultTiming.trialDurationMs);
+    defaultTiming.fixationOnsetMs = toNonNegativeNumber(legacyTimingRaw.fixationOnsetMs, defaultTiming.fixationOnsetMs ?? 0);
     defaultTiming.fixationDurationMs = toNonNegativeNumber(legacyTimingRaw.fixationDurationMs, defaultTiming.fixationDurationMs);
     defaultTiming.stimulusOnsetMs = toNonNegativeNumber(legacyTimingRaw.stimulusOnsetMs, defaultTiming.stimulusOnsetMs);
     defaultTiming.responseWindowStartMs = toNonNegativeNumber(legacyTimingRaw.responseWindowStartMs, defaultTiming.responseWindowStartMs);
@@ -557,14 +559,13 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
   }
 
   const rtRaw = asObject(taskRaw?.rtTask);
-  const rtTimingRaw = asObject(rtRaw?.timing);
-  const rtTiming: RtTiming = {
-    trialDurationMs: toPositiveNumber(rtTimingRaw?.trialDurationMs, defaultTiming.trialDurationMs),
-    fixationDurationMs: toNonNegativeNumber(rtTimingRaw?.fixationDurationMs, defaultTiming.fixationDurationMs),
-    stimulusOnsetMs: toNonNegativeNumber(rtTimingRaw?.stimulusOnsetMs, defaultTiming.stimulusOnsetMs),
-    responseWindowStartMs: toNonNegativeNumber(rtTimingRaw?.responseWindowStartMs, defaultTiming.responseWindowStartMs),
-    responseWindowEndMs: toNonNegativeNumber(rtTimingRaw?.responseWindowEndMs, defaultTiming.responseWindowEndMs),
-  };
+  const rtTask = resolveRtTaskConfig({
+    baseTiming: defaultTiming,
+    override: rtRaw,
+    defaultEnabled: false,
+    defaultResponseTerminatesTrial: false,
+  });
+
   const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "stimulus").toLowerCase();
   const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "separate").toLowerCase();
 
@@ -630,8 +631,7 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
     allowedKeys: responseSemantics.allowedKeys(["red", "green"]),
     responseColorTokens: normalizedResponseColors,
     rtTask: {
-      timing: rtTiming,
-      responseTerminatesTrial: rtRaw?.responseTerminatesTrial === true,
+      ...rtTask,
       postResponseContent: postResponseContentRaw === "blank" ? "blank" : "stimulus",
       feedbackPhase: feedbackPhaseRaw === "post_response" ? "post_response" : "separate",
     },
