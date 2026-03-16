@@ -1,4 +1,5 @@
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
+import { extractJsPsychTrialResponse } from "../web/ui";
 
 export interface JsPsychRtTimelinePhaseDurations {
   preFixationBlankMs: number;
@@ -50,6 +51,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
   } = config;
 
   const timeline: any[] = [];
+  const phaseName = (suffix: string) => (phasePrefix ? `${phasePrefix}_${suffix}` : suffix);
 
   if (durations.preFixationBlankMs > 0) {
     timeline.push({
@@ -59,7 +61,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
       choices: "NO_KEYS",
       response_ends_trial: false,
       trial_duration: Math.max(0, Math.round(durations.preFixationBlankMs)),
-      data: { ...baseData, phase: `${phasePrefix}_pre_fixation_blank` },
+      data: { ...baseData, phase: phaseName("pre_fixation_blank") },
     });
   }
 
@@ -71,7 +73,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
       choices: "NO_KEYS",
       response_ends_trial: false,
       trial_duration: Math.max(0, Math.round(durations.fixationMs)),
-      data: { ...baseData, phase: `${phasePrefix}_fixation` },
+      data: { ...baseData, phase: phaseName("fixation") },
     });
   }
 
@@ -83,7 +85,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
       choices: "NO_KEYS",
       response_ends_trial: false,
       trial_duration: Math.max(0, Math.round(durations.blankMs)),
-      data: { ...baseData, phase: `${phasePrefix}_blank` },
+      data: { ...baseData, phase: phaseName("blank") },
     });
   }
 
@@ -91,21 +93,21 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
   if (!responseTerminatesTrial) {
     if (durations.responsePreStimulusBlankMs > 0) {
       responseSegments.push({
-        phase: `${phasePrefix}_response_window_pre_stim_blank`,
+        phase: phaseName("response_window_pre_stim_blank"),
         durationMs: durations.responsePreStimulusBlankMs,
         showStimulus: false,
       });
     }
     if (durations.responseStimulusMs > 0) {
       responseSegments.push({
-        phase: `${phasePrefix}_response_window_stimulus`,
+        phase: phaseName("response_window_stimulus"),
         durationMs: durations.responseStimulusMs,
         showStimulus: true,
       });
     }
     if (durations.responsePostStimulusBlankMs > 0) {
       responseSegments.push({
-        phase: `${phasePrefix}_response_window_post_stim_blank`,
+        phase: phaseName("response_window_post_stim_blank"),
         durationMs: durations.responsePostStimulusBlankMs,
         showStimulus: false,
       });
@@ -113,7 +115,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
   }
   if (responseSegments.length === 0 && durations.responseMs > 0) {
     responseSegments.push({
-      phase: `${phasePrefix}_response_window`,
+      phase: phaseName("response_window"),
       durationMs: durations.responseMs,
       showStimulus: true,
     });
@@ -134,12 +136,9 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
       data: { ...baseData, phase: segment.phase },
       on_finish: (data: Record<string, unknown>) => {
         if (!responseSeen) {
-          const rawKey = data.response;
-          const rawRt = data.rt;
-          const key = typeof rawKey === "string" ? rawKey.toLowerCase() : null;
-          const rtMs = typeof rawRt === "number" && Number.isFinite(rawRt) ? rawRt : null;
-          if (key || rtMs != null) {
-            capturedResponse = { key, rtMs };
+          const response = extractJsPsychTrialResponse(data);
+          if (response.key || response.rtMs != null) {
+            capturedResponse = response;
             responseSeen = true;
           }
         }
@@ -159,7 +158,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
         choices: "NO_KEYS",
         response_ends_trial: false,
         trial_duration: Math.max(0, Math.round(feedback.durationMs)),
-        data: { ...baseData, phase: `${phasePrefix}_post_response_feedback` },
+        data: { ...baseData, phase: phaseName("post_response_feedback") },
       });
     } else {
       const postStimMs = postResponseContent === "blank" ? 0 : durations.postResponseStimulusMs;
@@ -176,7 +175,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
           choices: "NO_KEYS",
           response_ends_trial: false,
           trial_duration: Math.max(0, Math.round(postStimMs)),
-          data: { ...baseData, phase: `${phasePrefix}_post_response_stimulus` },
+          data: { ...baseData, phase: phaseName("post_response_stimulus") },
         });
       }
       if (postBlankMs > 0) {
@@ -187,7 +186,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
           choices: "NO_KEYS",
           response_ends_trial: false,
           trial_duration: Math.max(0, Math.round(postBlankMs)),
-          data: { ...baseData, phase: `${phasePrefix}_post_response_blank` },
+          data: { ...baseData, phase: phaseName("post_response_blank") },
         });
       }
     }
@@ -202,7 +201,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
         choices: "NO_KEYS",
         response_ends_trial: false,
         trial_duration: Math.max(0, Math.round(feedback.durationMs)),
-        data: { ...baseData, phase: `${phasePrefix}_feedback` },
+        data: { ...baseData, phase: phaseName("feedback") },
       });
     }
   }

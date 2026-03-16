@@ -406,9 +406,6 @@ function appendStroopTrialTimeline(args: {
   });
 
   for (const node of nodes) {
-    if (node.data.phase && node.data.phase.startsWith("_")) {
-      node.data.phase = node.data.phase.substring(1);
-    }
     timeline.push(node);
   }
 }

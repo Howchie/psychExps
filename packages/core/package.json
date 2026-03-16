@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@jspsych/plugin-canvas-keyboard-response": "^2.1.0",
     "jsquest-plus": "^2.1.0"
   },
   "devDependencies": {
