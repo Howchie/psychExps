@@ -3591,6 +3591,7 @@ export class ConveyorRenderer {
       this.spotlightGraphics.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
       this.spotlightGraphics.endHole();
     } else {
+      // Basic 4-rect fallback for environments without beginHole()
       this.spotlightGraphics.drawRect(0, 0, canvasW, Math.max(0, holeY));
       this.spotlightGraphics.drawRect(0, Math.max(0, holeY + holeH), canvasW, Math.max(0, canvasH - (holeY + holeH)));
       this.spotlightGraphics.drawRect(0, Math.max(0, holeY), Math.max(0, holeX), Math.max(0, holeH));
