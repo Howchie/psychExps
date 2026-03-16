@@ -39,10 +39,19 @@ export function csvCell(value: unknown): string {
 
 export function recordsToCsv<T extends object>(records: T[]): string {
   if (records.length === 0) return "";
-  const columns = Object.keys(records[0] as Record<string, unknown>) as Array<keyof T>;
+
+  const columnSet = new Set<string>();
+  const scanLimit = Math.min(records.length, 100);
+  for (let i = 0; i < scanLimit; i++) {
+    for (const key of Object.keys(records[i] as Record<string, unknown>)) {
+      columnSet.add(key);
+    }
+  }
+
+  const columns = Array.from(columnSet);
   const header = columns.join(",");
   const rows = records.map((record) =>
-    columns.map((column) => csvCell((record as Record<string, unknown>)[String(column)])).join(","),
+    columns.map((column) => csvCell((record as Record<string, unknown>)[column])).join(","),
   );
   return [header, ...rows].join("\n");
 }

@@ -130,6 +130,13 @@ export declare class ConveyorRenderer {
     _drawBrickGraphics(sprite: any, brick: any, completionMode: any): void;
     _updateBrickProgressVisual(sprite: any, brick: any, completionMode: any): void;
     _resolveBrickTextureOverlayConfig(brick: any): any;
+    _drawTextureLabelPatch(target: any, w: any, h: any, inset: any, alphaBase: any, cfg: any): void;
+    _drawTextureBandAndPlate(target: any, w: any, h: any, inset: any, alphaBase: any, cfg: any): void;
+    _drawTexturePizza(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, idNum: any, cfg: any): void;
+    _drawTextureGiftWrap(target: any, w: any, h: any, inset: any, alphaBase: any, seamColor: any, seamWidth: any, cfg: any): void;
+    _drawTextureCheckerboard(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, topSheenAlpha: any, highlightColor: any, radius: any, cfg: any): void;
+    _drawTextureCardboardBlock(target: any, w: any, h: any, inset: any, alphaBase: any, idNum: any, cfg: any): void;
+    _drawTextureWoodPlanks(target: any, w: any, h: any, inset: any, alphaBase: any, phase: any, topSheenAlpha: any, highlightColor: any, radius: any, seamColor: any, seamWidth: any, plankCount: any, grainCount: any, nailRadius: any, cfg: any): void;
     _drawBrickTextureOverlay(target: any, brick: any, shape: any, width: any, height: any, cornerRadius: any, fillAlpha?: number): void;
     _drawBrickPrimitive(sprite: any, shape: any, width: any, height: any, cornerRadius: any): void;
     _buildBrickHitArea(shape: any, width: any, height: any): PIXI.Rectangle | PIXI.Ellipse | PIXI.Polygon;
