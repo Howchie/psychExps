@@ -528,6 +528,178 @@ function normalizeControllerConfig(config: DrtControllerConfig): NormalizedContr
   };
 }
 
+
+export class DrtPresenter {
+  private visualElement: HTMLDivElement | null = null;
+  private borderOverlayElement: HTMLDivElement | null = null;
+  private audioContext: AudioContext | null = null;
+
+  constructor(
+    private readonly config: NormalizedControllerConfig,
+    private readonly displayElement: HTMLElement | null,
+    private readonly borderTargetElement: HTMLElement | null,
+    private readonly borderTargetRect: (() => DOMRect | null) | null,
+  ) {}
+
+  showPresentation(activePresentation: ActivePresentation | null): void {
+    if (!activePresentation?.visible) return;
+    if (this.config.modes.has("visual")) this.showVisual();
+    if (this.config.modes.has("border")) this.showBorder();
+    if (this.config.modes.has("auditory")) this.playTone();
+  }
+
+  hidePresentation(activePresentation: ActivePresentation | null): void {
+    if (!activePresentation || !activePresentation.visible) return;
+    activePresentation.visible = false;
+    this.hideVisual();
+    this.hideBorder();
+  }
+
+  private ensureVisualElement(): HTMLDivElement | null {
+    if (this.visualElement) return this.visualElement;
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.style.position = "fixed";
+    element.style.pointerEvents = "none";
+    element.style.display = "none";
+    element.style.zIndex = String(this.config.visual.zIndex);
+    element.style.width = `${this.config.visual.sizePx}px`;
+    element.style.height = `${this.config.visual.sizePx}px`;
+    element.style.background = this.config.visual.color;
+    element.style.top = `${this.config.visual.topPx}px`;
+    if (typeof this.config.visual.leftPx === "number") {
+      element.style.left = `${this.config.visual.leftPx}px`;
+      element.style.transform = "";
+    } else {
+      element.style.left = "50%";
+      element.style.transform = "translateX(-50%)";
+    }
+    element.style.borderRadius = this.config.visual.shape === "circle" ? "999px" : "0";
+    document.body.appendChild(element);
+    this.visualElement = element;
+    return element;
+  }
+
+  private showVisual(): void {
+    const element = this.ensureVisualElement();
+    if (!element) return;
+    const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
+    if (typeof this.config.visual.leftPx === "number") {
+      const leftPx = rect ? rect.left + this.config.visual.leftPx : this.config.visual.leftPx;
+      element.style.left = `${Math.round(leftPx)}px`;
+      element.style.transform = "";
+    } else {
+      if (rect && rect.width > 0) {
+        element.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+      } else {
+        element.style.left = "50%";
+      }
+      element.style.transform = "translateX(-50%)";
+    }
+    if (rect && rect.height > 0) {
+      element.style.top = `${Math.round(rect.top + this.config.visual.topPx)}px`;
+    } else {
+      element.style.top = `${this.config.visual.topPx}px`;
+    }
+    element.style.display = "block";
+  }
+
+  private hideVisual(): void {
+    if (!this.visualElement) return;
+    this.visualElement.style.display = "none";
+  }
+
+  private resolveBorderTarget(): HTMLElement | null {
+    if (this.config.border.target === "viewport") {
+      if (typeof document === "undefined") return null;
+      return document.documentElement;
+    }
+    return this.borderTargetElement;
+  }
+
+  private ensureBorderOverlayElement(): HTMLDivElement | null {
+    if (this.borderOverlayElement) return this.borderOverlayElement;
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.style.position = "fixed";
+    element.style.pointerEvents = "none";
+    element.style.display = "none";
+    element.style.zIndex = String(Math.max(this.config.visual.zIndex, 999999));
+    element.style.boxSizing = "border-box";
+    document.body.appendChild(element);
+    this.borderOverlayElement = element;
+    return element;
+  }
+
+  private showBorder(): void {
+    const overlay = this.ensureBorderOverlayElement();
+    if (!overlay) return;
+
+    if (this.config.border.target === "viewport") {
+      overlay.style.left = "0px";
+      overlay.style.top = "0px";
+      overlay.style.width = "100vw";
+      overlay.style.height = "100vh";
+    } else {
+      const rect = this.borderTargetRect?.() ?? this.resolveBorderTarget()?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        overlay.style.display = "none";
+        return;
+      } else {
+        overlay.style.left = `${Math.round(rect.left)}px`;
+        overlay.style.top = `${Math.round(rect.top)}px`;
+        overlay.style.width = `${Math.round(rect.width)}px`;
+        overlay.style.height = `${Math.round(rect.height)}px`;
+      }
+    }
+
+    overlay.style.border = `${this.config.border.widthPx}px solid ${this.config.border.color}`;
+    overlay.style.borderRadius = `${this.config.border.radiusPx}px`;
+    overlay.style.display = "block";
+  }
+
+  private hideBorder(): void {
+    if (!this.borderOverlayElement) return;
+    this.borderOverlayElement.style.display = "none";
+  }
+
+  private playTone(): void {
+    if (typeof window === "undefined") return;
+    if (typeof AudioContext === "undefined" && typeof (window as any).webkitAudioContext === "undefined") {
+      return;
+    }
+    const AudioCtor = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+    if (!AudioCtor) return;
+    this.audioContext ??= new AudioCtor();
+    const ctx = this.audioContext;
+    if (!ctx) return;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = this.config.audio.waveform;
+    oscillator.frequency.value = this.config.audio.frequencyHz;
+    gain.gain.value = this.config.audio.volume;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    const durationSec = this.config.audio.durationMs / 1000;
+    oscillator.start(now);
+    oscillator.stop(now + durationSec);
+  }
+
+  dispose(): void {
+    this.hideVisual();
+    this.hideBorder();
+    if (this.visualElement) {
+      this.visualElement.remove();
+      this.visualElement = null;
+    }
+    if (this.borderOverlayElement) {
+      this.borderOverlayElement.remove();
+      this.borderOverlayElement = null;
+    }
+  }
+}
+
 export class DrtController {
   readonly enabled: boolean;
 
@@ -540,14 +712,12 @@ export class DrtController {
   private readonly borderTargetRect: (() => DOMRect | null) | null;
   private readonly transformRunner: OnlineParameterTransformRunner | null;
   private readonly responseRows: DrtResponseTransformRow[] = [];
+  private readonly presenter: DrtPresenter;
 
   private rafId: number | null = null;
   private started = false;
   private epochMs = 0;
   private activePresentation: ActivePresentation | null = null;
-  private visualElement: HTMLDivElement | null = null;
-  private borderOverlayElement: HTMLDivElement | null = null;
-  private audioContext: AudioContext | null = null;
 
   private readonly onKeyDownBound = (event: KeyboardEvent) => {
     if (!this.started || !this.enabled) return;
@@ -574,6 +744,7 @@ export class DrtController {
     this.transformRunner = options.transformRunner ?? (Array.isArray(config.parameterTransforms) && config.parameterTransforms.length > 0
       ? new OnlineParameterTransformRunner(config.parameterTransforms)
       : null);
+    this.presenter = new DrtPresenter(this.config, this.displayElement, this.borderTargetElement, this.borderTargetRect);
     this.engine = new DrtEngine(engineConfig, { onEvent: (event) => this.handleEngineEvent(event) });
     this.enabled = this.engine.enabled;
   }
@@ -598,7 +769,7 @@ export class DrtController {
     this.started = false;
     this.engine.forceEnd(this.elapsedNowMs(), { onStimEnd: (stimulus) => this.handleStimEnd(stimulus) });
     this.hidePresentation();
-    this.disposePresenters();
+    this.presenter.dispose();
     if (typeof window !== "undefined") {
       window.removeEventListener("keydown", this.onKeyDownBound, { capture: true });
     }
@@ -789,7 +960,7 @@ export class DrtController {
       visible: true,
       hideAtMs: stimulus.start + this.config.displayDurationMs,
     };
-    this.showPresentation();
+    this.presenter.showPresentation(this.activePresentation);
     this.hooks.onStimStart?.(stimulus);
     this.hooks.onStimulusShown?.(stimulus);
   }
@@ -799,6 +970,13 @@ export class DrtController {
     this.hooks.onStimEnd?.(stimulus);
   }
 
+  private hidePresentation(): void {
+    const active = this.activePresentation;
+    if (!active || !active.visible) return;
+    this.presenter.hidePresentation(active);
+    this.hooks.onStimulusHidden?.(active.stim);
+  }
+
   private tickPresentationTimeout(): void {
     const active = this.activePresentation;
     if (!active || !active.visible) return;
@@ -806,167 +984,7 @@ export class DrtController {
     this.hidePresentation();
   }
 
-  private showPresentation(): void {
-    if (!this.activePresentation?.visible) return;
-    if (this.config.modes.has("visual")) this.showVisual();
-    if (this.config.modes.has("border")) this.showBorder();
-    if (this.config.modes.has("auditory")) this.playTone();
-  }
 
-  private hidePresentation(): void {
-    const active = this.activePresentation;
-    if (!active || !active.visible) return;
-    active.visible = false;
-    this.hideVisual();
-    this.hideBorder();
-    this.hooks.onStimulusHidden?.(active.stim);
-  }
-
-  private ensureVisualElement(): HTMLDivElement | null {
-    if (this.visualElement) return this.visualElement;
-    if (typeof document === "undefined") return null;
-    const element = document.createElement("div");
-    element.style.position = "fixed";
-    element.style.pointerEvents = "none";
-    element.style.display = "none";
-    element.style.zIndex = String(this.config.visual.zIndex);
-    element.style.width = `${this.config.visual.sizePx}px`;
-    element.style.height = `${this.config.visual.sizePx}px`;
-    element.style.background = this.config.visual.color;
-    element.style.top = `${this.config.visual.topPx}px`;
-    if (typeof this.config.visual.leftPx === "number") {
-      element.style.left = `${this.config.visual.leftPx}px`;
-      element.style.transform = "";
-    } else {
-      element.style.left = "50%";
-      element.style.transform = "translateX(-50%)";
-    }
-    element.style.borderRadius = this.config.visual.shape === "circle" ? "999px" : "0";
-    document.body.appendChild(element);
-    this.visualElement = element;
-    return element;
-  }
-
-  private showVisual(): void {
-    const element = this.ensureVisualElement();
-    if (!element) return;
-    if (typeof this.config.visual.leftPx === "number") {
-      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
-      const leftPx = rect ? rect.left + this.config.visual.leftPx : this.config.visual.leftPx;
-      element.style.left = `${Math.round(leftPx)}px`;
-      element.style.transform = "";
-    } else {
-      const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
-      if (rect && rect.width > 0) {
-        element.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
-      } else {
-        element.style.left = "50%";
-      }
-      element.style.transform = "translateX(-50%)";
-    }
-    const rect = this.borderTargetRect?.() ?? this.displayElement?.getBoundingClientRect();
-    if (rect && rect.height > 0) {
-      element.style.top = `${Math.round(rect.top + this.config.visual.topPx)}px`;
-    } else {
-      element.style.top = `${this.config.visual.topPx}px`;
-    }
-    element.style.display = "block";
-  }
-
-  private hideVisual(): void {
-    if (!this.visualElement) return;
-    this.visualElement.style.display = "none";
-  }
-
-  private resolveBorderTarget(): HTMLElement | null {
-    if (this.config.border.target === "viewport") {
-      if (typeof document === "undefined") return null;
-      return document.documentElement;
-    }
-    return this.borderTargetElement;
-  }
-
-  private ensureBorderOverlayElement(): HTMLDivElement | null {
-    if (this.borderOverlayElement) return this.borderOverlayElement;
-    if (typeof document === "undefined") return null;
-    const element = document.createElement("div");
-    element.style.position = "fixed";
-    element.style.pointerEvents = "none";
-    element.style.display = "none";
-    element.style.zIndex = String(Math.max(this.config.visual.zIndex, 999999));
-    element.style.boxSizing = "border-box";
-    document.body.appendChild(element);
-    this.borderOverlayElement = element;
-    return element;
-  }
-
-  private showBorder(): void {
-    const overlay = this.ensureBorderOverlayElement();
-    if (!overlay) return;
-
-    if (this.config.border.target === "viewport") {
-      overlay.style.left = "0px";
-      overlay.style.top = "0px";
-      overlay.style.width = "100vw";
-      overlay.style.height = "100vh";
-    } else {
-      const rect = this.borderTargetRect?.() ?? this.resolveBorderTarget()?.getBoundingClientRect();
-      if (!rect || rect.width <= 0 || rect.height <= 0) {
-        overlay.style.display = "none";
-        return;
-      } else {
-        overlay.style.left = `${Math.round(rect.left)}px`;
-        overlay.style.top = `${Math.round(rect.top)}px`;
-        overlay.style.width = `${Math.round(rect.width)}px`;
-        overlay.style.height = `${Math.round(rect.height)}px`;
-      }
-    }
-
-    overlay.style.border = `${this.config.border.widthPx}px solid ${this.config.border.color}`;
-    overlay.style.borderRadius = `${this.config.border.radiusPx}px`;
-    overlay.style.display = "block";
-  }
-
-  private hideBorder(): void {
-    if (!this.borderOverlayElement) return;
-    this.borderOverlayElement.style.display = "none";
-  }
-
-  private playTone(): void {
-    if (typeof window === "undefined") return;
-    if (typeof AudioContext === "undefined" && typeof (window as any).webkitAudioContext === "undefined") {
-      return;
-    }
-    const AudioCtor = (window as any).AudioContext ?? (window as any).webkitAudioContext;
-    if (!AudioCtor) return;
-    this.audioContext ??= new AudioCtor();
-    const ctx = this.audioContext;
-    if (!ctx) return;
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    oscillator.type = this.config.audio.waveform;
-    oscillator.frequency.value = this.config.audio.frequencyHz;
-    gain.gain.value = this.config.audio.volume;
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-    const now = ctx.currentTime;
-    const durationSec = this.config.audio.durationMs / 1000;
-    oscillator.start(now);
-    oscillator.stop(now + durationSec);
-  }
-
-  private disposePresenters(): void {
-    this.hideVisual();
-    this.hideBorder();
-    if (this.visualElement) {
-      this.visualElement.remove();
-      this.visualElement = null;
-    }
-    if (this.borderOverlayElement) {
-      this.borderOverlayElement.remove();
-      this.borderOverlayElement = null;
-    }
-  }
 }
 
 /**

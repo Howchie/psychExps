@@ -15,6 +15,8 @@ const BRICK_STATUS = {
  * via the public methods exposed here.
  */
 export class GameState {
+  public activeBricks: any[];
+
   constructor(config, { onEvent, seed } = {}) {
     this.config = config;
     this.onEvent = typeof onEvent === 'function' ? onEvent : () => {};
@@ -32,6 +34,7 @@ export class GameState {
     };
 
     this.bricks = new Map();
+    this.activeBricks = [];
     this.conveyors = [];
     this.conveyorsById = new Map();
     this.spawnControllers = [];
@@ -539,14 +542,15 @@ export class GameState {
       if (!catTraits || typeof catTraits !== 'object') {
         return;
       }
-      Object.entries(catTraits).forEach(([key, value]) => {
+      for (const key in catTraits) {
+        const value = catTraits[key];
         if (value === null || value === undefined) {
-          return;
+          continue;
         }
         if (categoryTraits[key] === undefined) {
           categoryTraits[key] = value;
         }
-      });
+      }
     });
     return {
       categories: resolvedCategories,
@@ -724,9 +728,8 @@ export class GameState {
     const width = Number.isFinite(widthRaw) ? Math.max(8, widthRaw) : Math.max(8, Number(cfg.display.brickWidth) || 80);
     const minSpacing = cfg.bricks.spawn.minSpacingPx ?? 0;
     const maxActive = cfg.bricks.spawn.maxActivePerConveyor ?? Infinity;
-    const activeBricks = conveyor.activeIds.map((id) => this.bricks.get(id)).filter(Boolean);
 
-    if (activeBricks.length >= maxActive) {
+    if (conveyor.activeIds.length >= maxActive) {
       return false;
     }
     const id = `b${++this.nextBrickId}`;
@@ -738,7 +741,8 @@ export class GameState {
     const buffer = Math.max(0, minSpacing);
     const newStart = x;
     const newEnd = x + width;
-    const overlaps = !bypassSpacing && activeBricks.some((existing) => {
+    const overlaps = !bypassSpacing && this.activeBricks.some((existing) => {
+      if (existing.conveyorId !== conveyor.id) return false;
       const existingStart = existing.x;
       const existingEnd = existing.x + existing.width;
       return newStart < existingEnd + buffer && newEnd + buffer > existingStart;
@@ -795,6 +799,7 @@ export class GameState {
       label: resolvedTraits.label ?? metadata?.label ?? null
     };
     this.bricks.set(id, brick);
+    this.activeBricks.push(brick);
     conveyor.activeIds.push(id);
     this.stats.spawned += 1;
     this._log('brick_spawned', {
@@ -879,6 +884,14 @@ export class GameState {
       conveyor.activeIds = conveyor.activeIds.filter((id) => id !== brick.id);
     }
     this.bricks.delete(brick.id);
+    const idx = this.activeBricks.findIndex((b) => b.id === brick.id);
+    if (idx !== -1) {
+      const lastIdx = this.activeBricks.length - 1;
+      if (idx !== lastIdx) {
+        this.activeBricks[idx] = this.activeBricks[lastIdx];
+      }
+      this.activeBricks.pop();
+    }
     const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
     if (status === BRICK_STATUS.CLEARED) {
       this.stats.cleared += 1;
