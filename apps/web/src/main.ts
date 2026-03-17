@@ -24,6 +24,7 @@ import { bricksAdapter } from "@experiments/task-bricks";
 import { stroopAdapter } from "@experiments/task-stroop";
 import { trackingAdapter } from "@experiments/task-tracking";
 import { changeDetectionAdapter } from "@experiments/task-change-detection";
+import { flankerAdapter } from "@experiments/task-flanker";
 
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
@@ -42,6 +43,7 @@ async function bootstrap(): Promise<void> {
     stroopAdapter,
     trackingAdapter,
     changeDetectionAdapter,
+    flankerAdapter,
   ];
   const adapterMap = buildTaskMap(adapters);
 
