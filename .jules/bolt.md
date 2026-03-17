@@ -11,7 +11,3 @@
 ## 2025-03-16 - O(1) Array Removal in buildConditionSequence
 **Learning:** Found a performance bottleneck in `packages/core/src/engines/conditions.ts` where `Array.prototype.splice` was used in a loop to remove an element from a random pool of items (`buildCandidatePool`). For large trial counts or multiple condition factors, `splice` runs in O(n) time and shifts elements array memory, leading to slower execution times. This is especially problematic if trials count goes up.
 **Action:** Replace `splice` with an O(1) swap-and-pop technique for arrays where order doesn't matter (since items are drawn randomly from the `pool`). This can reduce trial sequence generation from ~425ms to ~25ms in benchmarks.
-
-## 2025-03-16 - O(1) Index Cursor over Array Mutation in Loops
-**Learning:** Found a bottleneck in `buildScheduledItems` within `packages/core/src/infrastructure/scheduler.ts` where `pool.shift()` was used inside a loop to draw items for a schedule. Since `shift()` modifies the array and requires O(N) memory shifts for every drawn element, it caused significant slowdowns as the loop scaled.
-**Action:** Replace destructive array modifications (`shift()`) with an O(1) index cursor variable when iterating over an array pool multiple times. This optimization avoids all intermediate array memory allocations and shifting, improving the execution speed of `buildScheduledItems` by ~30-45%.
