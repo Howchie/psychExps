@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@jspsych/plugin-canvas-keyboard-response": "^2.1.0",
+    "jspsych": "^8.2.3",
     "jsquest-plus": "^2.1.0"
   },
   "devDependencies": {

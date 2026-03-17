@@ -7,7 +7,6 @@ import {
   computeRtPhaseDurations,
   createColorRegistry,
   createConditionCellId,
-  createEventLogger,
   createMulberry32,
   createSemanticResolver,
   createResponseSemantics,
@@ -25,8 +24,6 @@ import {
   buildTaskInstructionConfig,
   resolveTrialFeedbackView,
   runJsPsychTimeline,
-  setCursorHidden,
-  shouldHideCursorForPhase,
   extractJsPsychTrialResponse,
   computeAccuracy,
   TaskOrchestrator,
@@ -42,14 +39,15 @@ import {
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
   resolveRtTaskConfig,
+  initStandardJsPsych,
   type ResolvedRtTaskConfig,
   type JSONObject,
   type RtTiming,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
   type ResponseSemantics,
+  type EventLogger,
 } from "@experiments/core";
-import { initJsPsych } from "jspsych";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 
@@ -176,7 +174,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.variantId, "stroop"));
   const records: TrialRecord[] = [];
   const root = context.container;
-  const eventLogger = createEventLogger(selection);
+  const eventLogger = context.eventLogger;
   const plannedBlocks = buildStroopPlan(parsed, baseRng);
 
   const rows = plannedBlocks.flatMap((block, blockIndex) =>
@@ -193,12 +191,6 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
       correct_response: trial.correctResponse,
     })),
   );
-  const stimulusExport = await maybeExportStimulusRows({
-    context,
-    rows,
-    suffix: "stroop_stimulus_list",
-  });
-  if (stimulusExport) return stimulusExport;
 
   root.style.maxWidth = "980px";
   root.style.margin = "0 auto";
@@ -207,7 +199,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
 
   stroopEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
 
-  let jsPsych: ReturnType<typeof initJsPsych> | null = null;
+  let jsPsych: ReturnType<typeof initStandardJsPsych> | null = null;
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
   applyTaskInstructionConfig(context.taskConfig, {
     ...parsed.instructions,
@@ -218,6 +210,10 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   });
   const payload = await orchestrator.run({
     buttonIdPrefix: "stroop-continue",
+    stimulusExport: {
+      rows,
+      suffix: "stroop_stimulus_list",
+    },
     getBlocks: () => plannedBlocks,
     getTrials: ({ block }) => block.trials,
     runTrial: async ({ block, blockIndex, trial }) => {
@@ -240,16 +236,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
       return record;
     },
     onTaskStart: () => {
-      jsPsych = initJsPsych({
-        display_element: root,
-        on_trial_start: (trial: Record<string, unknown>) => {
-          const data = asObject(trial?.data);
-          setCursorHidden(shouldHideCursorForPhase(data?.phase));
-        },
-        on_finish: () => {
-          setCursorHidden(false);
-        },
-      });
+      jsPsych = initStandardJsPsych({ displayElement: root });
       eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
     },
     onBlockStart: ({ block, blockIndex }) => {
@@ -267,13 +254,11 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
         mode: parsed.mode,
         trials: records.length,
       });
-      setCursorHidden(false);
     },
     csvOptions: {
       suffix: "stroop_trials",
       getRecords: () => records,
     },
-    getEvents: () => eventLogger.events,
     getTaskMetadata: () => ({
       runner: "jspsych",
       mode: parsed.mode,
@@ -298,7 +283,7 @@ function appendStroopTrialTimeline(args: {
   participantId: string;
   variantId: string;
   records: TrialRecord[];
-  eventLogger: ReturnType<typeof createEventLogger>;
+  eventLogger: EventLogger;
 }): void {
   const { timeline, parsed, block, blockIndex, trial, participantId, variantId, records, eventLogger } = args;
   const layout = computeCanvasFrameLayout({
