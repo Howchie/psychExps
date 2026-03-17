@@ -335,7 +335,7 @@ export async function waitForContinue(container, html, options = {}) {
     const buttonId = options.buttonId ?? "exp-continue-btn";
     const buttonLabel = options.buttonLabel ?? "Continue";
     const autoResponderEnabled = isAutoResponderEnabled();
-    container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:900px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
+    container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body card" style="max-width:900px;padding:24px 32px;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:2rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
     const btn = container.querySelector(`#${buttonId}`);
     if (!(btn instanceof HTMLButtonElement))
         return;
@@ -394,7 +394,7 @@ export async function waitForContinueChoice(container, html, options) {
     const buttonsHtml = buttons
         .map((button) => `<button id="${escapeHtml(button.id)}" class="exp-continue-btn" type="button" data-action="${escapeHtml(button.action)}">${escapeHtml(button.label)}</button>`)
         .join(" ");
-    container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body" style="max-width:980px;padding:0 1rem;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:1rem;">${buttonsHtml}</p></div></div>`;
+    container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body card" style="max-width:980px;padding:24px 32px;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:2rem;">${buttonsHtml}</p></div></div>`;
     for (const button of buttons) {
         const node = container.querySelector(`#${button.id}`);
         if (node instanceof HTMLButtonElement) {
@@ -531,7 +531,7 @@ export function renderCenteredMessageFrame(options) {
 export function renderCenteredNotice(options) {
     const title = escapeHtml(options.title);
     const message = options.message ? `<p>${escapeHtml(options.message)}</p>` : "";
-    return `<div style="width:100%;min-height:50vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div><h2>${title}</h2>${message}</div></div>`;
+    return `<div style="width:100%;min-height:50vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="card" style="padding:24px 32px;max-width:800px;margin:0 auto;"><h2>${title}</h2>${message}</div></div>`;
 }
 function parseBorder(value) {
     const text = String(value || "").trim();

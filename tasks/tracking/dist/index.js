@@ -1,4 +1,4 @@
-import { TrackingBinSummarizer, TrackingMotionController, asArray, asObject, asString, coerceScopedDrtConfig, computeTrackingDistance, createEventLogger, createMulberry32, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, hashSeed, normalizeKey, buildTaskInstructionConfig, applyTaskInstructionConfig, resolveScopedModuleConfig, TaskOrchestrator, runTrialWithEnvelope, setCursorHidden, sleep, toNonNegativeNumber, toPositiveNumber, toStringScreens, maybeExportStimulusRows, createTaskAdapter, } from "@experiments/core";
+import { TrackingBinSummarizer, TrackingMotionController, asArray, asObject, asString, coerceScopedDrtConfig, computeTrackingDistance, createMulberry32, createManipulationOverrideMap, createManipulationPoolAllocator, resolveBlockManipulationIds, applyManipulationOverridesToBlock, hashSeed, normalizeKey, buildTaskInstructionConfig, applyTaskInstructionConfig, resolveScopedModuleConfig, TaskOrchestrator, runTrialWithEnvelope, sleep, toNonNegativeNumber, toPositiveNumber, toStringScreens, createTaskAdapter, } from "@experiments/core";
 import { createTrackingRenderer } from "./renderer";
 export const trackingAdapter = createTaskAdapter({
     manifest: {
@@ -11,23 +11,14 @@ export const trackingAdapter = createTaskAdapter({
         ],
     },
     run: (context) => runTrackingTask(context),
-    terminate: async () => {
-        setCursorHidden(false);
-    },
+    terminate: async () => { },
 });
 async function runTrackingTask(context) {
     const runner = context.moduleRunner;
     const parsed = parseTrackingConfig(context.taskConfig, context.selection);
-    const stimulusExport = await maybeExportStimulusRows({
-        context,
-        rows: buildTrackingStimulusRows(parsed),
-        suffix: "tracking_stimulus_list",
-    });
-    if (stimulusExport)
-        return stimulusExport;
     const participantId = context.selection.participant.participantId;
     const variantId = context.selection.variantId;
-    const eventLogger = createEventLogger(context.selection);
+    const eventLogger = context.eventLogger;
     const seed = hashSeed(participantId, context.selection.participant.sessionId, variantId, "tracking");
     const rng = createMulberry32(seed);
     const root = context.container;
@@ -63,184 +54,182 @@ async function runTrackingTask(context) {
     });
     const orchestrator = new TaskOrchestrator(context);
     applyTaskInstructionConfig(context.taskConfig, parsed.instructions);
-    try {
-        return await orchestrator.run({
-            buttonIdPrefix: "tracking-continue",
-            getBlocks: () => parsed.blocks.map((block) => ({
-                ...block,
-                modules: {
-                    drt: block.drt,
-                },
-            })),
-            resolveModuleContext: () => ({
-                displayElement: stageShell,
-                borderTargetElement: stageShell,
-                borderTargetRect: resolveTrackingDisplayFrameRect,
-            }),
-            getTrials: ({ block }) => Array.from({ length: block.trials }, (_, trialIndex) => trialIndex),
-            runTrial: async ({ block, blockIndex, trial, trialIndex }) => runTrialWithEnvelope({
-                context: { block, blockIndex, trial, trialIndex },
-                before: ({ block, blockIndex, trialIndex }) => {
-                    eventLogger.emit("trial_start", { label: block.label, phase: block.phase, mode: block.trialTemplate.mode }, { blockIndex, trialIndex });
-                },
-                execute: ({ block, blockIndex, trialIndex }) => block.trialTemplate.mode === "mot"
-                    ? runMotTrial({
+    return await orchestrator.run({
+        buttonIdPrefix: "tracking-continue",
+        stimulusExport: {
+            rows: buildTrackingStimulusRows(parsed),
+            suffix: "tracking_stimulus_list",
+        },
+        getBlocks: () => parsed.blocks.map((block) => ({
+            ...block,
+            modules: {
+                drt: block.drt,
+            },
+        })),
+        resolveModuleContext: () => ({
+            displayElement: stageShell,
+            borderTargetElement: stageShell,
+            borderTargetRect: resolveTrackingDisplayFrameRect,
+        }),
+        getTrials: ({ block }) => Array.from({ length: block.trials }, (_, trialIndex) => trialIndex),
+        runTrial: async ({ block, blockIndex, trial, trialIndex }) => runTrialWithEnvelope({
+            context: { block, blockIndex, trial, trialIndex },
+            before: ({ block, blockIndex, trialIndex }) => {
+                eventLogger.emit("trial_start", { label: block.label, phase: block.phase, mode: block.trialTemplate.mode }, { blockIndex, trialIndex });
+            },
+            execute: ({ block, blockIndex, trialIndex }) => block.trialTemplate.mode === "mot"
+                ? runMotTrial({
+                    blockIndex,
+                    trialIndex,
+                    blockLabel: block.label,
+                    stageHost: stageShell,
+                    display: parsed.display,
+                    trialTemplate: block.trialTemplate,
+                    rng,
+                })
+                : runPursuitTrial({
+                    blockIndex,
+                    trialIndex,
+                    blockLabel: block.label,
+                    stageHost: stageShell,
+                    display: parsed.display,
+                    trialTemplate: block.trialTemplate,
+                    rng,
+                }),
+            after: async ({ block, blockIndex, trialIndex }, result) => {
+                if (result.kind === "pursuit") {
+                    trialRecords.push({
+                        participantId,
+                        variantId,
                         blockIndex,
-                        trialIndex,
                         blockLabel: block.label,
-                        stageHost: stageShell,
-                        display: parsed.display,
-                        trialTemplate: block.trialTemplate,
-                        rng,
-                    })
-                    : runPursuitTrial({
+                        manipulationId: block.manipulationId,
+                        trialIndex,
+                        phase: block.phase,
+                        trialMode: "pursuit",
+                        durationMs: result.elapsedMs,
+                        sampleCount: result.sampleCount,
+                        insideCount: result.insideCount,
+                        outsideCount: result.outsideCount,
+                        distanceSampleCount: result.distanceSampleCount,
+                        meanBoundaryDistancePx: result.meanBoundaryDistancePx,
+                        targetShape: block.trialTemplate.target.shape,
+                        targetSizePx: block.trialTemplate.target.sizePx,
+                        motionMode: block.trialTemplate.motion.mode,
+                        motionSpeedPxPerSec: Number(block.trialTemplate.motion.speedPxPerSec),
+                        motObjectCount: null,
+                        motTargetCount: null,
+                        motHits: null,
+                        motMisses: null,
+                        motFalseAlarms: null,
+                        motCorrectRejections: null,
+                        motAccuracy: null,
+                        motTargetIndices: null,
+                        motSelectedIndices: null,
+                    });
+                    trialBins.push(...result.bins);
+                    if (block.trialTemplate.storeRawSamples) {
+                        rawSamples.push(...result.rawSamples);
+                    }
+                }
+                else {
+                    trialRecords.push({
+                        participantId,
+                        variantId,
                         blockIndex,
-                        trialIndex,
                         blockLabel: block.label,
-                        stageHost: stageShell,
-                        display: parsed.display,
-                        trialTemplate: block.trialTemplate,
-                        rng,
-                    }),
-                after: async ({ block, blockIndex, trialIndex }, result) => {
-                    if (result.kind === "pursuit") {
-                        trialRecords.push({
-                            participantId,
-                            variantId,
-                            blockIndex,
-                            blockLabel: block.label,
-                            manipulationId: block.manipulationId,
-                            trialIndex,
-                            phase: block.phase,
-                            trialMode: "pursuit",
-                            durationMs: result.elapsedMs,
+                        manipulationId: block.manipulationId,
+                        trialIndex,
+                        phase: block.phase,
+                        trialMode: "mot",
+                        durationMs: result.elapsedMs,
+                        sampleCount: null,
+                        insideCount: null,
+                        outsideCount: null,
+                        distanceSampleCount: null,
+                        meanBoundaryDistancePx: null,
+                        targetShape: null,
+                        targetSizePx: null,
+                        motionMode: block.trialTemplate.motion.mode,
+                        motionSpeedPxPerSec: Number(block.trialTemplate.motion.speedPxPerSec),
+                        motObjectCount: result.objectCount,
+                        motTargetCount: result.targetCount,
+                        motHits: result.hits,
+                        motMisses: result.misses,
+                        motFalseAlarms: result.falseAlarms,
+                        motCorrectRejections: result.correctRejections,
+                        motAccuracy: result.accuracy,
+                        motTargetIndices: JSON.stringify(result.targetIndices),
+                        motSelectedIndices: JSON.stringify(result.selectedIndices),
+                    });
+                }
+                eventLogger.emit("trial_end", {
+                    durationMs: result.elapsedMs,
+                    mode: result.kind,
+                    ...(result.kind === "pursuit"
+                        ? {
                             sampleCount: result.sampleCount,
                             insideCount: result.insideCount,
                             outsideCount: result.outsideCount,
-                            distanceSampleCount: result.distanceSampleCount,
                             meanBoundaryDistancePx: result.meanBoundaryDistancePx,
-                            targetShape: block.trialTemplate.target.shape,
-                            targetSizePx: block.trialTemplate.target.sizePx,
-                            motionMode: block.trialTemplate.motion.mode,
-                            motionSpeedPxPerSec: Number(block.trialTemplate.motion.speedPxPerSec),
-                            motObjectCount: null,
-                            motTargetCount: null,
-                            motHits: null,
-                            motMisses: null,
-                            motFalseAlarms: null,
-                            motCorrectRejections: null,
-                            motAccuracy: null,
-                            motTargetIndices: null,
-                            motSelectedIndices: null,
-                        });
-                        trialBins.push(...result.bins);
-                        if (block.trialTemplate.storeRawSamples) {
-                            rawSamples.push(...result.rawSamples);
                         }
-                    }
-                    else {
-                        trialRecords.push({
-                            participantId,
-                            variantId,
-                            blockIndex,
-                            blockLabel: block.label,
-                            manipulationId: block.manipulationId,
-                            trialIndex,
-                            phase: block.phase,
-                            trialMode: "mot",
-                            durationMs: result.elapsedMs,
-                            sampleCount: null,
-                            insideCount: null,
-                            outsideCount: null,
-                            distanceSampleCount: null,
-                            meanBoundaryDistancePx: null,
-                            targetShape: null,
-                            targetSizePx: null,
-                            motionMode: block.trialTemplate.motion.mode,
-                            motionSpeedPxPerSec: Number(block.trialTemplate.motion.speedPxPerSec),
-                            motObjectCount: result.objectCount,
-                            motTargetCount: result.targetCount,
-                            motHits: result.hits,
-                            motMisses: result.misses,
-                            motFalseAlarms: result.falseAlarms,
-                            motCorrectRejections: result.correctRejections,
-                            motAccuracy: result.accuracy,
-                            motTargetIndices: JSON.stringify(result.targetIndices),
-                            motSelectedIndices: JSON.stringify(result.selectedIndices),
-                        });
-                    }
-                    eventLogger.emit("trial_end", {
-                        durationMs: result.elapsedMs,
-                        mode: result.kind,
-                        ...(result.kind === "pursuit"
-                            ? {
-                                sampleCount: result.sampleCount,
-                                insideCount: result.insideCount,
-                                outsideCount: result.outsideCount,
-                                meanBoundaryDistancePx: result.meanBoundaryDistancePx,
-                            }
-                            : {
-                                hits: result.hits,
-                                misses: result.misses,
-                                falseAlarms: result.falseAlarms,
-                                correctRejections: result.correctRejections,
-                                accuracy: result.accuracy,
-                            }),
-                    }, { blockIndex, trialIndex });
-                    if (parsed.interTrialIntervalMs > 0 && trialIndex < block.trials - 1) {
-                        await sleep(parsed.interTrialIntervalMs);
-                    }
-                },
-            }),
-            onTaskStart: () => {
-                eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
+                        : {
+                            hits: result.hits,
+                            misses: result.misses,
+                            falseAlarms: result.falseAlarms,
+                            correctRejections: result.correctRejections,
+                            accuracy: result.accuracy,
+                        }),
+                }, { blockIndex, trialIndex });
+                if (parsed.interTrialIntervalMs > 0 && trialIndex < block.trials - 1) {
+                    await sleep(parsed.interTrialIntervalMs);
+                }
             },
-            onBlockStart: async ({ block, blockIndex }) => {
-                root.innerHTML = "";
-                root.appendChild(stageShell);
-                eventLogger.emit("block_start", { label: block.label, phase: block.phase, trials: block.trials, manipulationId: block.manipulationId }, { blockIndex });
+        }),
+        onTaskStart: () => {
+            eventLogger.emit("task_start", { task: "tracking", runner: "native_tracking" });
+        },
+        onBlockStart: async ({ block, blockIndex }) => {
+            root.innerHTML = "";
+            root.appendChild(stageShell);
+            eventLogger.emit("block_start", { label: block.label, phase: block.phase, trials: block.trials, manipulationId: block.manipulationId }, { blockIndex });
+        },
+        onBlockEnd: async ({ block, blockIndex }) => {
+            eventLogger.emit("block_end", {
+                label: block.label,
+                phase: block.phase,
+                manipulationId: block.manipulationId,
+                meanInsideRate: computeBlockInsideRate(trialRecords, blockIndex),
+            }, { blockIndex });
+            root.innerHTML = "";
+            root.appendChild(stageShell);
+        },
+        onTaskEnd: () => {
+            eventLogger.emit("task_complete", { task: "tracking", nTrials: trialRecords.length });
+        },
+        csvOptions: {
+            suffix: "tracking_trials",
+            getRecords: () => trialRecords,
+        },
+        getTaskMetadata: () => ({
+            config: parsed,
+            records: trialRecords,
+            trialBins,
+            rawSamples,
+            drt: {
+                scopeRecords: runner.getResults().map((res) => ({
+                    address: res.address ?? { scope: res.scope, blockIndex: res.blockIndex, trialIndex: res.trialIndex },
+                    data: res.data,
+                    transforms: res.data?.transforms,
+                    responseRows: res.data?.responseRows,
+                })),
             },
-            onBlockEnd: async ({ block, blockIndex }) => {
-                eventLogger.emit("block_end", {
-                    label: block.label,
-                    phase: block.phase,
-                    manipulationId: block.manipulationId,
-                    meanInsideRate: computeBlockInsideRate(trialRecords, blockIndex),
-                }, { blockIndex });
-                root.innerHTML = "";
-                root.appendChild(stageShell);
-            },
-            onTaskEnd: () => {
-                eventLogger.emit("task_complete", { task: "tracking", nTrials: trialRecords.length });
-            },
-            csvOptions: {
-                suffix: "tracking_trials",
-                getRecords: () => trialRecords,
-            },
-            getEvents: () => eventLogger.events,
-            getTaskMetadata: () => ({
-                config: parsed,
-                records: trialRecords,
-                trialBins,
-                rawSamples,
-                drt: {
-                    scopeRecords: runner.getResults().map((res) => ({
-                        address: res.address ?? { scope: res.scope, blockIndex: res.blockIndex, trialIndex: res.trialIndex },
-                        data: res.data,
-                        transforms: res.data?.transforms,
-                        responseRows: res.data?.responseRows,
-                    })),
-                },
-                drtTransformEstimates: eventLogger.events
-                    .filter((entry) => entry.eventType === "drt_transform_estimate")
-                    .map((entry) => entry.eventData),
-                eventLog: eventLogger.events,
-            }),
-        });
-    }
-    finally {
-        setCursorHidden(false);
-    }
+            drtTransformEstimates: eventLogger.events
+                .filter((entry) => entry.eventType === "drt_transform_estimate")
+                .map((entry) => entry.eventData),
+            eventLog: eventLogger.events,
+        }),
+    });
 }
 function buildTrackingStimulusRows(parsed) {
     const rows = [];
@@ -269,7 +258,6 @@ function buildTrackingStimulusRows(parsed) {
     return rows;
 }
 async function runPursuitTrial(args) {
-    setCursorHidden(false);
     args.stageHost.innerHTML = "";
     const frame = createDisplayFrame(args.stageHost, args.display);
     const renderer = await createTrackingRenderer(frame, {
@@ -379,7 +367,6 @@ async function runPursuitTrial(args) {
     };
 }
 async function runMotTrial(args) {
-    setCursorHidden(false);
     args.stageHost.innerHTML = "";
     const frame = createDisplayFrame(args.stageHost, args.display);
     const renderer = await createTrackingRenderer(frame, {

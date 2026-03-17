@@ -1,5 +1,4 @@
-import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, createEventLogger, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, TaskEnvironmentGuard, pushJsPsychContinueScreen, applyTaskInstructionConfig, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, computeAccuracy, computeRtPhaseDurations, toJsPsychChoices, buildTaskInstructionConfig, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, maybeExportStimulusRows, collectSurveyEntries, createInstructionRenderer, parseSurveyDefinitions, runSurveySequence, createResponseSemantics, coerceBlockSummaryConfig, TaskOrchestrator, createTaskAdapter, buildJsPsychRtTimelineNodes, shouldHideCursorForPhase, } from "@experiments/core";
-import { initJsPsych } from "jspsych";
+import { QuestBinaryStaircase, buildLinearRange, buildScheduledItems, createMulberry32, dbToLuminance, drawTrialFeedbackOnCanvas, escapeHtml, parseTrialFeedbackConfig, hashSeed, normalizeKey, evaluateTrialOutcome, computeCanvasFrameLayout, drawCanvasFramedScene, drawCanvasCenteredText, ensureJsPsychCanvasCentered, TaskEnvironmentGuard, pushJsPsychContinueScreen, applyTaskInstructionConfig, resolveJsPsychContentHost, resolveTrialFeedbackView, runJsPsychTimeline, computeAccuracy, computeRtPhaseDurations, toJsPsychChoices, buildTaskInstructionConfig, waitForContinue, createManipulationPoolAllocator, resolveBlockManipulationIds, asObject, asArray, asString, asStringArray, toPositiveNumber, toNonNegativeNumber, toUnitNumber, toFiniteNumber, toNumberArray, toStringScreens, collectSurveyEntries, createInstructionRenderer, parseSurveyDefinitions, runSurveySequence, createResponseSemantics, coerceBlockSummaryConfig, TaskOrchestrator, createTaskAdapter, buildJsPsychRtTimelineNodes, resolveRtTaskConfig, initStandardJsPsych, } from "@experiments/core";
 import CanvasKeyboardResponsePlugin from "@jspsych/plugin-canvas-keyboard-response";
 import CallFunctionPlugin from "@jspsych/plugin-call-function";
 const sftManifest = {
@@ -37,19 +36,12 @@ async function runSftTask(context) {
         stim_category: trial.stimCategory,
         show_rule_cue: trial.showRuleCue,
     })));
-    const stimulusExport = await maybeExportStimulusRows({
-        context,
-        rows,
-        suffix: "sft_stimulus_list",
-    });
-    if (stimulusExport)
-        return stimulusExport;
     root.style.maxWidth = "980px";
     root.style.margin = "0 auto";
     root.style.fontFamily = "system-ui";
     ensureJsPsychCanvasCentered(root);
     const staircaseRecords = [];
-    const eventLogger = createEventLogger(context.selection);
+    const eventLogger = context.eventLogger;
     const allowedKeys = allKeys(parsed.responseSemantics);
     sftEnvironment.installKeyScrollBlocker(allowedKeys);
     applyGlobalSalience(parsed, parsed.salience);
@@ -64,6 +56,10 @@ async function runSftTask(context) {
     });
     return orchestrator.run({
         buttonIdPrefix: "sft-continue",
+        stimulusExport: {
+            rows,
+            suffix: "sft_stimulus_list",
+        },
         getBlocks: () => plan,
         getTrials: ({ block }) => block.trials,
         runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
@@ -191,16 +187,7 @@ async function runSftTask(context) {
             return record;
         },
         onTaskStart: () => {
-            jsPsych = initJsPsych({
-                display_element: root,
-                on_trial_start: (trial) => {
-                    const data = asObject(trial?.data);
-                    setCursorHidden(shouldHideCursorForPhase(data?.phase));
-                },
-                on_finish: () => {
-                    setCursorHidden(false);
-                },
-            });
+            jsPsych = initStandardJsPsych({ displayElement: root });
             eventLogger.emit("task_start", { task: "sft", runner: "jspsych" });
         },
         staircase: {
@@ -229,13 +216,9 @@ async function runSftTask(context) {
             const accuracy = computeAccuracy(correct, trialResults.length);
             eventLogger.emit("block_end", { blockId: block.id, accuracy }, { blockIndex });
         },
-        onTaskEnd: () => {
-            setCursorHidden(false);
-        },
         csvOptions: {
             suffix: "sft_trials",
         },
-        getEvents: () => eventLogger.events,
         getTaskMetadata: (sessionResult) => {
             const records = sessionResult.blocks.flatMap((b) => b.trialResults);
             eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
@@ -506,7 +489,41 @@ function parseSftConfig(config, selection) {
         responseDeadlineMs: toPositiveNumber(asObject(config.timing)?.response_deadline_ms, 3000),
         responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
     };
-    const rtTask = parseSftRtTaskConfig(config, legacyTiming);
+    const taskRaw = asObject(config.task);
+    const rtRaw = asObject(taskRaw?.rtTask);
+    const jitterRaw = asObject(rtRaw?.fixationJitter);
+    const defaultJitterMin = Math.max(0, Math.round(legacyTiming.fixationMs * 0.5));
+    const defaultJitterMax = Math.max(defaultJitterMin + 1, Math.round(legacyTiming.fixationMs * 1.5));
+    const jitterMin = toNonNegativeNumber(jitterRaw?.minMs, defaultJitterMin);
+    const jitterMax = Math.max(jitterMin, toNonNegativeNumber(jitterRaw?.maxMs, defaultJitterMax));
+    const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "").toLowerCase();
+    const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "").toLowerCase();
+    const rtTask = {
+        ...resolveRtTaskConfig({
+            baseTiming: {
+                trialDurationMs: Math.max(1, legacyTiming.fixationMs +
+                    legacyTiming.blankMs +
+                    legacyTiming.responseDeadlineMs +
+                    (legacyTiming.responseTerminatesTrial ? 0 : legacyTiming.stimulusMs)),
+                fixationOnsetMs: 0,
+                fixationDurationMs: legacyTiming.fixationMs,
+                stimulusOnsetMs: legacyTiming.fixationMs + legacyTiming.blankMs,
+                stimulusDurationMs: legacyTiming.stimulusMs,
+                responseWindowStartMs: legacyTiming.fixationMs + legacyTiming.blankMs,
+                responseWindowEndMs: legacyTiming.fixationMs + legacyTiming.blankMs + legacyTiming.responseDeadlineMs,
+            },
+            override: rtRaw,
+            defaultEnabled: false,
+            defaultResponseTerminatesTrial: legacyTiming.responseTerminatesTrial,
+        }),
+        fixationJitter: {
+            enabled: jitterRaw ? jitterRaw.enabled !== false : false,
+            minMs: jitterMin,
+            maxMs: jitterMax,
+        },
+        postResponseContent: (postResponseContentRaw === "blank" ? "blank" : "stimulus"),
+        feedbackPhase: (feedbackPhaseRaw === "post_response" ? "post_response" : "separate"),
+    };
     const blockSummary = coerceBlockSummaryConfig(asObject(asObject(config.instructions)?.blockSummary)) ??
         coerceBlockSummaryConfig({
             enabled: true,
@@ -598,46 +615,6 @@ function parseBetweenTrialSurveys(config) {
         singletonKey: "",
     });
     return parseSurveyDefinitions(betweenTrial);
-}
-function parseSftRtTaskConfig(config, legacyTiming) {
-    const taskRaw = asObject(config.task);
-    const rtRaw = asObject(taskRaw?.rtTask);
-    const enabled = rtRaw ? rtRaw.enabled !== false : false;
-    const legacyTrialDuration = Math.max(1, legacyTiming.fixationMs +
-        legacyTiming.blankMs +
-        legacyTiming.responseDeadlineMs +
-        (legacyTiming.responseTerminatesTrial ? 0 : legacyTiming.stimulusMs));
-    const timingRaw = asObject(rtRaw?.timing);
-    const timing = {
-        trialDurationMs: toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration),
-        fixationOnsetMs: toNonNegativeNumber(timingRaw?.fixationOnsetMs, 0),
-        fixationDurationMs: toNonNegativeNumber(timingRaw?.fixationDurationMs, legacyTiming.fixationMs),
-        stimulusOnsetMs: toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs),
-        stimulusDurationMs: toNonNegativeNumber(timingRaw?.stimulusDurationMs, Math.max(0, toPositiveNumber(timingRaw?.trialDurationMs, legacyTrialDuration) - toNonNegativeNumber(timingRaw?.stimulusOnsetMs, legacyTiming.fixationMs + legacyTiming.blankMs))),
-        responseWindowStartMs: toNonNegativeNumber(timingRaw?.responseWindowStartMs, legacyTiming.fixationMs + legacyTiming.blankMs),
-        responseWindowEndMs: toNonNegativeNumber(timingRaw?.responseWindowEndMs, legacyTiming.fixationMs + legacyTiming.blankMs + legacyTiming.responseDeadlineMs),
-    };
-    const jitterRaw = asObject(rtRaw?.fixationJitter);
-    const defaultJitterMin = Math.max(0, Math.round(legacyTiming.fixationMs * 0.5));
-    const defaultJitterMax = Math.max(defaultJitterMin + 1, Math.round(legacyTiming.fixationMs * 1.5));
-    const jitterMin = toNonNegativeNumber(jitterRaw?.minMs, defaultJitterMin);
-    const jitterMax = Math.max(jitterMin, toNonNegativeNumber(jitterRaw?.maxMs, defaultJitterMax));
-    const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "").toLowerCase();
-    const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "").toLowerCase();
-    return {
-        enabled,
-        timing,
-        fixationJitter: {
-            enabled: jitterRaw ? jitterRaw.enabled !== false : false,
-            minMs: jitterMin,
-            maxMs: jitterMax,
-        },
-        responseTerminatesTrial: rtRaw
-            ? rtRaw.responseTerminatesTrial !== false
-            : legacyTiming.responseTerminatesTrial,
-        postResponseContent: postResponseContentRaw === "blank" ? "blank" : "stimulus",
-        feedbackPhase: feedbackPhaseRaw === "post_response" ? "post_response" : "separate",
-    };
 }
 function parseStaircase(config) {
     const raw = asObject(config.staircase);

@@ -1,11 +1,11 @@
-import { asObject, asString, asArray, asStringArray, toPositiveNumber, toNonNegativeNumber, SeededRandom, hashSeed, SpatialLayoutManager, SceneRenderer, runCustomRtTrial, createScene, diffScenes, parseTrialFeedbackConfig, resolveTrialFeedbackView, drawTrialFeedbackOnCanvas, computeCanvasFrameLayout, sleep, mountCanvasElement, drawCanvasFramedScene, drawCanvasTrialFrame, TaskOrchestrator, buildTaskInstructionConfig, applyTaskInstructionConfig, maybeExportStimulusRows, createTaskAdapter, createEventLogger, computeAccuracy, TaskEnvironmentGuard, } from "@experiments/core";
+import { asObject, asString, asArray, asStringArray, toPositiveNumber, toNonNegativeNumber, SeededRandom, hashSeed, SpatialLayoutManager, SceneRenderer, runCustomRtTrial, createScene, diffScenes, parseTrialFeedbackConfig, resolveTrialFeedbackView, drawTrialFeedbackOnCanvas, computeCanvasFrameLayout, sleep, mountCanvasElement, drawCanvasFramedScene, drawCanvasTrialFrame, TaskOrchestrator, buildTaskInstructionConfig, applyTaskInstructionConfig, createTaskAdapter, computeAccuracy, TaskEnvironmentGuard, } from "@experiments/core";
 import { buildTrialPlan } from "./planner";
 const changeDetectionLayoutManager = new SpatialLayoutManager();
 const changeDetectionEnvironment = new TaskEnvironmentGuard();
 async function runChangeDetectionTask(context) {
     const { container, taskConfig, selection } = context;
     const rng = new SeededRandom(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId, "change_detection"));
-    const eventLogger = createEventLogger(selection);
+    const eventLogger = context.eventLogger;
     const feedbackConfig = parseTrialFeedbackConfig(asObject(taskConfig.feedback), null);
     const instructionsRaw = asObject(taskConfig.instructions) ?? {};
     const instructionConfig = buildTaskInstructionConfig({
@@ -39,13 +39,6 @@ async function runChangeDetectionTask(context) {
             trial_code: trial.isChange ? "change" : "no_change",
         };
     });
-    const stimulusExport = await maybeExportStimulusRows({
-        context,
-        rows,
-        suffix: "change_detection_stimulus_list",
-    });
-    if (stimulusExport)
-        return stimulusExport;
     const { canvas, ctx } = mountCanvasElement({
         container,
         width: layout.aperturePx,
@@ -56,6 +49,10 @@ async function runChangeDetectionTask(context) {
     const orchestrator = new TaskOrchestrator(context);
     return orchestrator.run({
         buttonIdPrefix: "cd",
+        stimulusExport: {
+            rows,
+            suffix: "change_detection_stimulus_list",
+        },
         getBlocks: () => blocks,
         getTrials: ({ blockIndex }) => trialPlan.filter((t) => t.blockIndex === blockIndex),
         runTrial: async ({ trial }) => {
@@ -97,7 +94,6 @@ async function runChangeDetectionTask(context) {
         onTaskEnd: () => {
             eventLogger.emit("task_end", { task: "change_detection" });
         },
-        getEvents: () => eventLogger.events,
         completeTitle: "Change Detection complete",
         csvOptions: {
             suffix: "change_detection_trials",

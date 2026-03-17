@@ -46,5 +46,5 @@ export declare class LifecycleManager {
      * Executes the full task lifecycle: initialize, execute, terminate.
      * If the adapter only has the legacy 'launch' method, it will use that.
      */
-    run(context: Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner">): Promise<unknown>;
+    run(context: Omit<TaskAdapterContext, "resolver" | "rawTaskConfig" | "moduleRunner" | "eventLogger">): Promise<unknown>;
 }

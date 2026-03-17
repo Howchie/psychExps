@@ -1,3 +1,4 @@
+import { initJsPsych } from "jspsych";
 export interface JsPsychRtTimelinePhaseDurations {
     preFixationBlankMs: number;
     fixationMs: number;
@@ -31,4 +32,9 @@ export interface JsPsychRtTimelineConfig {
         rtMs: number | null;
     }, data: Record<string, unknown>) => void;
 }
+export declare function initStandardJsPsych(args: {
+    displayElement: HTMLElement;
+    onTrialStart?: (trial: Record<string, unknown>) => void;
+    onFinish?: () => void;
+}): ReturnType<typeof initJsPsych>;
 export declare function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): any[];

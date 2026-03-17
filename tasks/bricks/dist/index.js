@@ -1,4 +1,4 @@
-import { buildScheduledItems, createAtwitSurvey, createMulberry32, createEventLogger, collectSurveyEntries, createInstructionRenderer, deepClone, deepMerge, findFirstSurveyScore, createManipulationPoolAllocator, resolveBlockManipulationIds, hashSeed, attachSurveyResults, maybeExportStimulusRows, parseSurveyDefinitions, applyTaskInstructionConfig, resolveInstructionScreenSlots, resolveTemplatedString, runSurveySequence, asObject, asString, resolveScopedModuleConfig, TaskOrchestrator, createTaskAdapter, } from '@experiments/core';
+import { buildScheduledItems, createAtwitSurvey, createMulberry32, collectSurveyEntries, createInstructionRenderer, deepClone, deepMerge, findFirstSurveyScore, createManipulationPoolAllocator, resolveBlockManipulationIds, hashSeed, attachSurveyResults, parseSurveyDefinitions, applyTaskInstructionConfig, resolveInstructionScreenSlots, resolveTemplatedString, runSurveySequence, asObject, asString, resolveScopedModuleConfig, TaskOrchestrator, createTaskAdapter, } from '@experiments/core';
 import { resolveBricksDrtConfig } from './runtime/drtConfig.js';
 import { addTrialStatsToAccumulator, applyResetRulesAt, buildHudBaseStats, createBricksStatsAccumulator, resolveBricksStatsPresentation, } from './runtime/statsPresentation.js';
 import { runConveyorTrial, } from './runtime/runConveyorTrial.js';
@@ -16,14 +16,7 @@ async function runBricksTask(context) {
     const preBlockBeforeBlockIntro = instructionsRaw.preBlockBeforeBlockIntro === true;
     const statsPresentation = resolveBricksStatsPresentation(taskConfig);
     const statsAccumulator = createBricksStatsAccumulator();
-    const stimulusExport = await maybeExportStimulusRows({
-        context,
-        rows: buildBricksStimulusRows(blockPlan),
-        suffix: "bricks_stimulus_list",
-    });
-    if (stimulusExport)
-        return stimulusExport;
-    const eventLogger = createEventLogger(selection);
+    const eventLogger = context.eventLogger;
     const activeDrtScopes = new Map();
     const blockDrtPreviousStats = new Map();
     moduleRunner.setOptions({
@@ -54,6 +47,10 @@ async function runBricksTask(context) {
     });
     return await orchestrator.run({
         buttonIdPrefix: "bricks",
+        stimulusExport: {
+            rows: buildBricksStimulusRows(blockPlan),
+            suffix: "bricks_stimulus_list",
+        },
         resolveModuleContext: ({ scope, blockIndex, trialIndex }) => {
             const scopeId = scope === "trial"
                 ? toBricksDrtScopeId(blockIndex, trialIndex)
@@ -65,7 +62,6 @@ async function runBricksTask(context) {
         },
         getBlocks: () => blockPlan,
         getTrials: ({ block }) => block.trialConfigs,
-        getEvents: () => eventLogger.events,
         onTaskStart: () => {
             eventLogger.emit("task_start", { task: "bricks" });
         },

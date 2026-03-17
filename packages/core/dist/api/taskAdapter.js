@@ -1,4 +1,5 @@
 import { ConfigurationManager } from "../infrastructure/config";
+import { createEventLogger } from "../infrastructure/events";
 import { createVariableResolver } from "../infrastructure/variables";
 import { TaskModuleRunner } from "./taskModule";
 import { DrtModule } from "../engines/drt";
@@ -89,12 +90,14 @@ export class LifecycleManager {
             new ProspectiveMemoryModule(),
             new StimulusInjectorModule(),
         ]);
+        const eventLogger = createEventLogger(context.selection);
         const resolvedContext = {
             ...context,
             taskConfig: resolvedConfig,
             rawTaskConfig: taskConfig,
             resolver: taskResolver,
             moduleRunner,
+            eventLogger,
         };
         moduleRunner.initialize();
         try {
@@ -118,6 +121,10 @@ export class LifecycleManager {
             moduleRunner.terminate();
             if (this.adapter.terminate) {
                 await this.adapter.terminate();
+            }
+            // Centralized cursor restoration for all tasks
+            if (typeof document !== "undefined") {
+                document.documentElement.classList.remove("exp-cursor-hidden");
             }
         }
     }

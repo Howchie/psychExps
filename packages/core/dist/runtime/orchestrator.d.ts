@@ -98,6 +98,10 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
         preBlockBeforeIntro?: boolean;
     };
     dataSink?: TaskDataSink<TBlock, TTrial, TTrialResult>;
+    stimulusExport?: {
+        rows: any[];
+        suffix: string;
+    };
     getBlockUi?: (ctx: {
         block: TBlock;
         blockIndex: number;

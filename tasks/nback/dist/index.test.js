@@ -86,7 +86,17 @@ describe('NbackTaskAdapter', () => {
                         canvasBorder: '2px solid #ddd',
                     },
                 },
-                rtTask: { enabled: false, responseTerminatesTrial: false },
+                rtTask: {
+                    enabled: false,
+                    responseTerminatesTrial: false,
+                    timing: {
+                        trialDurationMs: 1000,
+                        fixationDurationMs: 200,
+                        stimulusOnsetMs: 300,
+                        responseWindowStartMs: 300,
+                        responseWindowEndMs: 1000,
+                    }
+                },
                 beforeBlockScreens: [],
                 afterBlockScreens: [],
                 drt: { enabled: false },
@@ -112,7 +122,7 @@ describe('NbackTaskAdapter', () => {
                 emit: vi.fn(),
             },
         });
-        const responseWindow = timeline.find((entry) => entry.data?.phase === 'nback_response_window');
+        const responseWindow = timeline.find((entry) => entry.data?.phase?.startsWith('nback_response_window'));
         expect(responseWindow).toBeTruthy();
         responseWindow.on_finish({
             ...responseWindow.data,
@@ -122,7 +132,7 @@ describe('NbackTaskAdapter', () => {
         expect(__testing__.readNbackTrialResponseRow(capture, 0, 3)).toEqual(expect.objectContaining({
             blockIndex: 0,
             trialIndex: 3,
-            phase: 'nback_response_window',
+            phase: 'nback_response_window_stimulus',
             responseKey: 'm',
             responseCorrect: 1,
         }));

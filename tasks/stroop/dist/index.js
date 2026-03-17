@@ -1,5 +1,4 @@
-import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createEventLogger, createMulberry32, createSemanticResolver, createResponseSemantics, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, hashSeed, TaskEnvironmentGuard, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, buildTaskInstructionConfig, resolveTrialFeedbackView, runJsPsychTimeline, setCursorHidden, shouldHideCursorForPhase, computeAccuracy, TaskOrchestrator, createInstructionRenderer, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, ensureJsPsychCanvasCentered, maybeExportStimulusRows, applyTaskInstructionConfig, createTaskAdapter, buildJsPsychRtTimelineNodes, } from "@experiments/core";
-import { initJsPsych } from "jspsych";
+import { asArray, asObject, asString, buildConditionSequence, computeCanvasFrameLayout, computeRtPhaseDurations, createColorRegistry, createConditionCellId, createMulberry32, createSemanticResolver, createResponseSemantics, drawCanvasCenteredText, drawCanvasFramedScene, drawTrialFeedbackOnCanvas, escapeHtml, evaluateTrialOutcome, hashSeed, TaskEnvironmentGuard, loadCsvDictionary, loadTokenPool, normalizeKey, parseTrialFeedbackConfig, buildTaskInstructionConfig, resolveTrialFeedbackView, runJsPsychTimeline, computeAccuracy, TaskOrchestrator, createInstructionRenderer, toJsPsychChoices, toNonNegativeNumber, toPositiveNumber, toStringScreens, ensureJsPsychCanvasCentered, applyTaskInstructionConfig, createTaskAdapter, buildJsPsychRtTimelineNodes, resolveRtTaskConfig, initStandardJsPsych, } from "@experiments/core";
 const stroopManifest = {
     taskId: "stroop",
     label: "Stroop",
@@ -24,7 +23,7 @@ async function runStroopTask(context) {
     const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.variantId, "stroop"));
     const records = [];
     const root = context.container;
-    const eventLogger = createEventLogger(selection);
+    const eventLogger = context.eventLogger;
     const plannedBlocks = buildStroopPlan(parsed, baseRng);
     const rows = plannedBlocks.flatMap((block, blockIndex) => block.trials.map((trial) => ({
         block_index: blockIndex,
@@ -38,13 +37,6 @@ async function runStroopTask(context) {
         trial_code: trial.conditionLabel,
         correct_response: trial.correctResponse,
     })));
-    const stimulusExport = await maybeExportStimulusRows({
-        context,
-        rows,
-        suffix: "stroop_stimulus_list",
-    });
-    if (stimulusExport)
-        return stimulusExport;
     root.style.maxWidth = "980px";
     root.style.margin = "0 auto";
     root.style.fontFamily = "system-ui";
@@ -61,6 +53,10 @@ async function runStroopTask(context) {
     });
     const payload = await orchestrator.run({
         buttonIdPrefix: "stroop-continue",
+        stimulusExport: {
+            rows,
+            suffix: "stroop_stimulus_list",
+        },
         getBlocks: () => plannedBlocks,
         getTrials: ({ block }) => block.trials,
         runTrial: async ({ block, blockIndex, trial }) => {
@@ -85,16 +81,7 @@ async function runStroopTask(context) {
             return record;
         },
         onTaskStart: () => {
-            jsPsych = initJsPsych({
-                display_element: root,
-                on_trial_start: (trial) => {
-                    const data = asObject(trial?.data);
-                    setCursorHidden(shouldHideCursorForPhase(data?.phase));
-                },
-                on_finish: () => {
-                    setCursorHidden(false);
-                },
-            });
+            jsPsych = initStandardJsPsych({ displayElement: root });
             eventLogger.emit("task_start", { task: "stroop", runner: "jspsych", mode: parsed.mode });
         },
         onBlockStart: ({ block, blockIndex }) => {
@@ -112,13 +99,11 @@ async function runStroopTask(context) {
                 mode: parsed.mode,
                 trials: records.length,
             });
-            setCursorHidden(false);
         },
         csvOptions: {
             suffix: "stroop_trials",
             getRecords: () => records,
         },
-        getEvents: () => eventLogger.events,
         getTaskMetadata: () => ({
             runner: "jspsych",
             mode: parsed.mode,
@@ -329,6 +314,7 @@ async function parseStroopConfig(config) {
     const feedbackDefaults = parseTrialFeedbackConfig(asObject(config.feedback), null);
     const defaultTiming = {
         trialDurationMs: 2000,
+        fixationOnsetMs: 0,
         fixationDurationMs: 500,
         stimulusOnsetMs: 700,
         responseWindowStartMs: 700,
@@ -337,20 +323,19 @@ async function parseStroopConfig(config) {
     const legacyTimingRaw = asObject(config.timing);
     if (legacyTimingRaw) {
         defaultTiming.trialDurationMs = toPositiveNumber(legacyTimingRaw.trialDurationMs, defaultTiming.trialDurationMs);
+        defaultTiming.fixationOnsetMs = toNonNegativeNumber(legacyTimingRaw.fixationOnsetMs, defaultTiming.fixationOnsetMs ?? 0);
         defaultTiming.fixationDurationMs = toNonNegativeNumber(legacyTimingRaw.fixationDurationMs, defaultTiming.fixationDurationMs);
         defaultTiming.stimulusOnsetMs = toNonNegativeNumber(legacyTimingRaw.stimulusOnsetMs, defaultTiming.stimulusOnsetMs);
         defaultTiming.responseWindowStartMs = toNonNegativeNumber(legacyTimingRaw.responseWindowStartMs, defaultTiming.responseWindowStartMs);
         defaultTiming.responseWindowEndMs = toNonNegativeNumber(legacyTimingRaw.responseWindowEndMs, defaultTiming.responseWindowEndMs);
     }
     const rtRaw = asObject(taskRaw?.rtTask);
-    const rtTimingRaw = asObject(rtRaw?.timing);
-    const rtTiming = {
-        trialDurationMs: toPositiveNumber(rtTimingRaw?.trialDurationMs, defaultTiming.trialDurationMs),
-        fixationDurationMs: toNonNegativeNumber(rtTimingRaw?.fixationDurationMs, defaultTiming.fixationDurationMs),
-        stimulusOnsetMs: toNonNegativeNumber(rtTimingRaw?.stimulusOnsetMs, defaultTiming.stimulusOnsetMs),
-        responseWindowStartMs: toNonNegativeNumber(rtTimingRaw?.responseWindowStartMs, defaultTiming.responseWindowStartMs),
-        responseWindowEndMs: toNonNegativeNumber(rtTimingRaw?.responseWindowEndMs, defaultTiming.responseWindowEndMs),
-    };
+    const rtTask = resolveRtTaskConfig({
+        baseTiming: defaultTiming,
+        override: rtRaw,
+        defaultEnabled: false,
+        defaultResponseTerminatesTrial: false,
+    });
     const postResponseContentRaw = (asString(rtRaw?.postResponseContent) || "stimulus").toLowerCase();
     const feedbackPhaseRaw = (asString(rtRaw?.feedbackPhase) || "separate").toLowerCase();
     const blockCount = toPositiveNumber(planRaw?.blockCount, 2);
@@ -409,8 +394,7 @@ async function parseStroopConfig(config) {
         allowedKeys: responseSemantics.allowedKeys(["red", "green"]),
         responseColorTokens: normalizedResponseColors,
         rtTask: {
-            timing: rtTiming,
-            responseTerminatesTrial: rtRaw?.responseTerminatesTrial === true,
+            ...rtTask,
             postResponseContent: postResponseContentRaw === "blank" ? "blank" : "stimulus",
             feedbackPhase: feedbackPhaseRaw === "post_response" ? "post_response" : "separate",
         },

@@ -1,4 +1,4 @@
-import { createEventLogger, TaskModuleRunner, type TrialFeedbackConfig, type ResolvedRtTaskConfig, type DrtControllerConfig, type VariableResolver, type ResponseSemantics, type CsvStimulusConfig, type PoolDrawConfig, StandardTaskInstructionConfig } from "@experiments/core";
+import { TaskModuleRunner, type TrialFeedbackConfig, type ResolvedRtTaskConfig, type DrtControllerConfig, type VariableResolver, type ResponseSemantics, type CsvStimulusConfig, type PoolDrawConfig, StandardTaskInstructionConfig, type EventLogger } from "@experiments/core";
 export declare const nbackAdapter: import("@experiments/core").TaskAdapter;
 interface NbackMapping {
     targetKey: string;
@@ -14,13 +14,6 @@ type NbackDrtConfig = DrtControllerConfig & {
     isiSampler: unknown;
     transformPersistence: "scope" | "session";
 };
-interface NbackTiming {
-    trialDurationMs: number;
-    fixationDurationMs: number;
-    stimulusOnsetMs: number;
-    responseWindowStartMs: number;
-    responseWindowEndMs: number;
-}
 interface NbackBlockConfig {
     label: string;
     isPractice: boolean;
@@ -77,7 +70,6 @@ interface ParsedNbackConfig {
     title: string;
     mapping: NbackMapping;
     responseSemantics: ResponseSemantics;
-    timing: NbackTiming;
     display: {
         aperturePx: number;
         paddingYPx: number;
@@ -125,7 +117,7 @@ interface NbackRuntimeState {
     variableResolver: VariableResolver;
     moduleRunner: TaskModuleRunner;
     moduleConfigs: Record<string, any>;
-    eventLogger: ReturnType<typeof createEventLogger>;
+    eventLogger: EventLogger;
     participantId: string;
     variantId: string;
 }
@@ -147,7 +139,7 @@ declare function appendJsPsychNbackTrial(args: {
     resolvedStimulus: string;
     runtime: NbackRuntimeState;
     preloaded: PreloadedStimulus;
-    eventLogger: ReturnType<typeof createEventLogger>;
+    eventLogger: EventLogger;
 }): NbackTrialCapture;
 declare function readNbackTrialResponseRow(capture: NbackTrialCapture, blockIndex: number, trialIndex: number): Record<string, unknown>;
 declare function applyNbackRootPresentation(root: HTMLElement): RootPresentationState;
