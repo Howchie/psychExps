@@ -59,7 +59,14 @@
     "frameBorder": "2px solid #FF69B4"
   },
   "ui": {
-    "pageBackground": "linear-gradient(180deg, #F8C8DC 0%, #FFC0CB 100%)"
+    "pageBackground": "linear-gradient(180deg, #F8C8DC 0%, #FFC0CB 100%)",
+    "cardWidth": "480px",                                                                                                                                                        
+    "cardMinHeight": "380px",                                                                                                                                                    
+    "cardBackground": "#C0FFF4",                                                                                                                                                 
+    "cardBorder": "1px solid #FF69B4",
+    "cardColor": "#461145",
+    "cardFontSize": "50px",
+    "cardFontFamily": "Georgia, serif"
   },
   "instructions": {
     "pages": [
@@ -89,8 +96,8 @@
         "at": "task_intro_before",
         "pages": [
           {
-            "title": "Participant Information and Consent",
-            "html": "<iframe src=\"assets/pm-words/consent.html\" title=\"Consent form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
+            "title": "",
+            "html": "<iframe src=\"assets/pm-words/consent.html\" title=\"Consent form\" style=\"width:min(980px,96vw);height:90vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
             "actions": [
               { "id": "consent_yes", "label": "I Consent", "action": "continue" },
               { "id": "consent_no", "label": "Disagree (exit study)", "action": "exit" }

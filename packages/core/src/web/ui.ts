@@ -20,6 +20,16 @@ export interface ContinuePromptOptions {
   buttonLabel?: string;
   buttonStyle?: ButtonStyleOverrides;
   autoFocusButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
+  /** When true, card uses auto sizing (no fixed width/min-height) to wrap html content naturally. */
+  htmlContent?: boolean;
 }
 
 export interface ContinueChoiceOption {
@@ -32,6 +42,16 @@ export interface ContinueChoicePromptOptions {
   buttons: ContinueChoiceOption[];
   buttonStyle?: ButtonStyleOverrides;
   autoFocusFirstButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
+  /** When true, card uses auto sizing (no fixed width/min-height) to wrap html content naturally. */
+  htmlContent?: boolean;
 }
 
 export interface ButtonStyleOverrides {
@@ -469,6 +489,28 @@ export function applyButtonStyleOverrides(button: HTMLButtonElement, style: Butt
   if (style.boxShadow !== undefined) button.style.boxShadow = style.boxShadow;
 }
 
+function buildContinueScreenHtml(
+  contentHtml: string,
+  actionsHtml: string,
+  options: { cardWidth?: string; cardMinHeight?: string; cardBackground?: string; cardBorder?: string; cardBorderRadius?: string; cardColor?: string; cardFontSize?: string; cardFontFamily?: string; htmlContent?: boolean },
+): string {
+  if (options.htmlContent) {
+    const screenStyle = "width:100%;padding:24px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;text-align:center;";
+    return `<div class="exp-continue-screen" style="${screenStyle}"><div class="exp-continue-body" style="display:flex;flex-direction:column;align-items:center;"><div class="exp-continue-content">${contentHtml}</div><p class="exp-continue-actions" style="margin-top:1.5rem;margin-bottom:0;">${actionsHtml}</p></div></div>`;
+  }
+  const width = options.cardWidth ?? "860px";
+  const minHeight = options.cardMinHeight ?? "420px";
+  const bgOverride = options.cardBackground ? `background:${options.cardBackground};` : "";
+  const borderOverride = options.cardBorder ? `border:${options.cardBorder};` : "";
+  const radiusOverride = options.cardBorderRadius ? `border-radius:${options.cardBorderRadius};` : "";
+  const colorOverride = options.cardColor ? `color:${options.cardColor};` : "";
+  const fontSizeOverride = options.cardFontSize ? `font-size:${options.cardFontSize};` : "";
+  const fontFamilyOverride = options.cardFontFamily ? `font-family:${options.cardFontFamily};` : "";
+  const cardStyle = `width:${width};max-width:calc(100% - 48px);min-height:${minHeight};padding:24px 32px;display:flex;flex-direction:column;${bgOverride}${borderOverride}${radiusOverride}${colorOverride}${fontSizeOverride}${fontFamilyOverride}`;
+  const screenStyle = "width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;";
+  return `<div class="exp-continue-screen" style="${screenStyle}"><div class="exp-continue-body card" style="${cardStyle}"><div class="exp-continue-content" style="white-space:pre-line;flex:1;">${contentHtml}</div><p class="exp-continue-actions" style="margin-top:auto;padding-top:1.5rem;margin-bottom:0;">${actionsHtml}</p></div></div>`;
+}
+
 export async function waitForContinue(
   container: HTMLElement,
   html: string,
@@ -477,7 +519,8 @@ export async function waitForContinue(
   const buttonId = options.buttonId ?? "exp-continue-btn";
   const buttonLabel = options.buttonLabel ?? "Continue";
   const autoResponderEnabled = isAutoResponderEnabled();
-  container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body card" style="max-width:900px;padding:24px 32px;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:2rem;"><button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button></p></div></div>`;
+  const buttonHtml = `<button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button>`;
+  container.innerHTML = buildContinueScreenHtml(html, buttonHtml, options);
   const btn = container.querySelector(`#${buttonId}`);
   if (!(btn instanceof HTMLButtonElement)) return;
   applyButtonStyleOverrides(btn, options.buttonStyle);
@@ -546,7 +589,7 @@ export async function waitForContinueChoice(
         `<button id="${escapeHtml(button.id)}" class="exp-continue-btn" type="button" data-action="${escapeHtml(button.action)}">${escapeHtml(button.label)}</button>`,
     )
     .join(" ");
-  container.innerHTML = `<div class="exp-continue-screen" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;text-align:center;"><div class="exp-continue-body card" style="max-width:980px;padding:24px 32px;"><div class="exp-continue-content" style="white-space:pre-line;">${html}</div><p class="exp-continue-actions" style="margin-top:2rem;">${buttonsHtml}</p></div></div>`;
+  container.innerHTML = buildContinueScreenHtml(html, buttonsHtml, options);
   for (const button of buttons) {
     const node = container.querySelector(`#${button.id}`);
     if (node instanceof HTMLButtonElement) {

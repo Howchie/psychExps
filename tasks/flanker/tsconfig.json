@@ -2,10 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
-    "composite": true,
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node", "vitest/globals", "jsdom"]
+    "rootDir": "src"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*.ts", "src/**/*.json"]
 }

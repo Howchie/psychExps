@@ -15,6 +15,14 @@ export interface RunTaskIntroFlowArgs {
   buttonIdPrefix: string;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -36,6 +44,14 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
       buttonIdPrefix: `${args.buttonIdPrefix}-intro-before-${idx}`,
       continueButtonStyle: args.continueButtonStyle,
       autoFocusContinueButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
   }
@@ -47,6 +63,11 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
         buttonId: `${args.buttonIdPrefix}-intro-start`,
         buttonStyle: args.continueButtonStyle,
         autoFocusButton: args.autoFocusContinueButton,
+        cardWidth: args.cardWidth,
+        cardMinHeight: args.cardMinHeight,
+        cardBackground: args.cardBackground,
+        cardBorder: args.cardBorder,
+        cardColor: args.cardColor,
       },
     );
   }
@@ -59,6 +80,11 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
     buttonIdPrefix: args.buttonIdPrefix,
     continueButtonStyle: args.continueButtonStyle,
     autoFocusContinueButton: args.autoFocusContinueButton,
+    cardWidth: args.cardWidth,
+    cardMinHeight: args.cardMinHeight,
+    cardBackground: args.cardBackground,
+    cardBorder: args.cardBorder,
+    cardColor: args.cardColor,
     renderHtml: args.renderHtml,
   });
   for (let idx = 0; idx < (args.afterIntroPages ?? []).length; idx += 1) {
@@ -71,6 +97,14 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
       buttonIdPrefix: `${args.buttonIdPrefix}-intro-after-${idx}`,
       continueButtonStyle: args.continueButtonStyle,
       autoFocusContinueButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
   }
@@ -94,6 +128,14 @@ export interface RunBlockUiFlowArgs {
   variables?: Record<string, unknown>;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -118,6 +160,11 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}-${sectionPrefix}-${idx}`,
         continueButtonStyle: args.continueButtonStyle,
         autoFocusContinueButton: args.autoFocusContinueButton,
+        cardWidth: args.cardWidth,
+        cardMinHeight: args.cardMinHeight,
+        cardBackground: args.cardBackground,
+        cardBorder: args.cardBorder,
+        cardColor: args.cardColor,
         renderHtml: args.renderHtml,
       });
     }
@@ -135,6 +182,11 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         buttonId: `${args.buttonIdPrefix}-block-start-${args.blockIndex}`,
         buttonStyle: args.continueButtonStyle,
         autoFocusButton: args.autoFocusContinueButton,
+        cardWidth: args.cardWidth,
+        cardMinHeight: args.cardMinHeight,
+        cardBackground: args.cardBackground,
+        cardBorder: args.cardBorder,
+        cardColor: args.cardColor,
       },
     );
   };
@@ -147,6 +199,14 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
       buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
       continueButtonStyle: args.continueButtonStyle,
       autoFocusContinueButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
   };
@@ -180,6 +240,11 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
         buttonIdPrefix: `${args.blockIndex}-${sectionPrefix}-${idx}`,
         continueButtonStyle: args.continueButtonStyle,
         autoFocusContinueButton: args.autoFocusContinueButton,
+        cardWidth: args.cardWidth,
+        cardMinHeight: args.cardMinHeight,
+        cardBackground: args.cardBackground,
+        cardBorder: args.cardBorder,
+        cardColor: args.cardColor,
         renderHtml: args.renderHtml,
       });
     }
@@ -193,6 +258,11 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
     buttonIdPrefix: `${args.buttonIdPrefix}-block-${args.blockIndex}`,
     continueButtonStyle: args.continueButtonStyle,
     autoFocusContinueButton: args.autoFocusContinueButton,
+    cardWidth: args.cardWidth,
+    cardMinHeight: args.cardMinHeight,
+    cardBackground: args.cardBackground,
+    cardBorder: args.cardBorder,
+    cardColor: args.cardColor,
     renderHtml: args.renderHtml,
   });
   await runInsertionGroups(args.afterPostInsertions, "blockEndAfterPost");
@@ -209,6 +279,14 @@ export interface RunTaskEndFlowArgs {
   doneButtonLabel?: string;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
   renderHtml?: (ctx: {
     pageText: string;
     pageHtml?: string;
@@ -230,6 +308,14 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       buttonIdPrefix: `${args.buttonIdPrefix}-end-before-${idx}`,
       continueButtonStyle: args.continueButtonStyle,
       autoFocusContinueButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
   }
@@ -241,6 +327,11 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
     buttonIdPrefix: args.buttonIdPrefix,
     continueButtonStyle: args.continueButtonStyle,
     autoFocusContinueButton: args.autoFocusContinueButton,
+    cardWidth: args.cardWidth,
+    cardMinHeight: args.cardMinHeight,
+    cardBackground: args.cardBackground,
+    cardBorder: args.cardBorder,
+    cardColor: args.cardColor,
     renderHtml: args.renderHtml,
   });
   for (let idx = 0; idx < (args.afterEndPages ?? []).length; idx += 1) {
@@ -253,6 +344,14 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       buttonIdPrefix: `${args.buttonIdPrefix}-end-after-${idx}`,
       continueButtonStyle: args.continueButtonStyle,
       autoFocusContinueButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
   }
@@ -265,6 +364,14 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       buttonLabel: args.doneButtonLabel ?? "Done",
       buttonStyle: args.continueButtonStyle,
       autoFocusButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardBorderRadius: args.cardBorderRadius,
+      cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
     },
   );
 }

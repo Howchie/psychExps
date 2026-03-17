@@ -186,6 +186,14 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       uiConfig?.continueButtonStyle ?? uiConfig?.buttonStyle ?? instructions?.continueButtonStyle ?? instructions?.buttonStyle,
     );
     const autoFocusContinueButton = uiConfig?.autoFocusContinueButton !== false;
+    const cardWidth = asString(uiConfig?.cardWidth) ?? undefined;
+    const cardMinHeight = asString(uiConfig?.cardMinHeight) ?? undefined;
+    const cardBackground = asString(uiConfig?.cardBackground) ?? undefined;
+    const cardBorder = asString(uiConfig?.cardBorder) ?? undefined;
+    const cardBorderRadius = asString(uiConfig?.cardBorderRadius) ?? undefined;
+    const cardColor = asString(uiConfig?.cardColor) ?? undefined;
+    const cardFontSize = asString(uiConfig?.cardFontSize) ?? undefined;
+    const cardFontFamily = asString(uiConfig?.cardFontFamily) ?? undefined;
     const blockSummaryRaw = instructions?.blockSummary;
     const repeatEvaluationCache = new Map<string, ReturnType<typeof evaluateBlockRepeatUntil>>();
     const makeRepeatCacheKey = (blockIndex: number, blockAttempt: number): string => `${blockIndex}:${blockAttempt}`;
@@ -395,6 +403,14 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           buttonIdPrefix: args.buttonIdPrefix,
           continueButtonStyle,
           autoFocusContinueButton,
+          cardWidth,
+          cardMinHeight,
+          cardBackground,
+          cardBorder,
+          cardBorderRadius,
+          cardColor,
+          cardFontSize,
+          cardFontFamily,
           renderHtml: args.renderInstruction,
         });
       }
@@ -538,6 +554,14 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             buttonIdPrefix: args.buttonIdPrefix,
             continueButtonStyle,
             autoFocusContinueButton,
+            cardWidth,
+            cardMinHeight,
+            cardBackground,
+            cardBorder,
+            cardBorderRadius,
+            cardColor,
+            cardFontSize,
+            cardFontFamily,
             introText: blockUi.introText ?? (ctx.block as any).introText,
             preBlockPages: blockUi.preBlockPages,
             showBlockLabel: blockUi.showBlockLabel,
@@ -614,6 +638,14 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             buttonIdPrefix: args.buttonIdPrefix,
             continueButtonStyle,
             autoFocusContinueButton,
+            cardWidth,
+            cardMinHeight,
+            cardBackground,
+            cardBorder,
+            cardBorderRadius,
+            cardColor,
+            cardFontSize,
+            cardFontFamily,
             postBlockPages,
             showBlockLabel: blockUi.showBlockLabel,
             beforePostInsertions,
@@ -662,6 +694,14 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           buttonIdPrefix: args.buttonIdPrefix,
           continueButtonStyle,
           autoFocusContinueButton,
+          cardWidth,
+          cardMinHeight,
+          cardBackground,
+          cardBorder,
+          cardBorderRadius,
+          cardColor,
+          cardFontSize,
+          cardFontFamily,
           renderHtml: args.renderInstruction,
           completeTitle: args.completeTitle,
           completeMessage: args.completeMessage,

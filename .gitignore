@@ -3,9 +3,9 @@
 /.Rtmp
 /.ipynb_checkpoints
 **/.ipynb_checkpoints/
-/node_modules/
-tasks/**/node_modules/
-**/node_modules/.vite/
-**/node_modules/.vitest/
-**/node_modules/.vite/vitest/**/results.json
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.tsbuildinfo
 /test-results/.last-run.json

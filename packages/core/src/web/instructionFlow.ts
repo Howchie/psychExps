@@ -45,6 +45,14 @@ export interface RunInstructionScreensArgs {
   buttonIdPrefix: string;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
+  cardWidth?: string;
+  cardMinHeight?: string;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
+  cardFontSize?: string;
+  cardFontFamily?: string;
   renderHtml?: (ctx: InstructionScreenRenderContext) => string;
 }
 
@@ -218,12 +226,22 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
   });
   for (const screen of screens) {
     const html = args.renderHtml ? args.renderHtml(screen.ctx) : renderInstructionScreenHtml(screen.ctx);
+    const htmlContent = !!screen.ctx.pageHtml;
     const actions = screen.ctx.pageActions ?? [];
     if (actions.length === 0) {
       await waitForContinue(args.container, html, {
         buttonId: screen.buttonId,
         buttonStyle: args.continueButtonStyle,
         autoFocusButton: args.autoFocusContinueButton,
+        cardWidth: args.cardWidth,
+        cardMinHeight: args.cardMinHeight,
+        cardBackground: args.cardBackground,
+        cardBorder: args.cardBorder,
+        cardBorderRadius: args.cardBorderRadius,
+        cardColor: args.cardColor,
+        cardFontSize: args.cardFontSize,
+        cardFontFamily: args.cardFontFamily,
+        htmlContent,
       });
       continue;
     }
@@ -236,6 +254,12 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
       buttons,
       buttonStyle: args.continueButtonStyle,
       autoFocusFirstButton: args.autoFocusContinueButton,
+      cardWidth: args.cardWidth,
+      cardMinHeight: args.cardMinHeight,
+      cardBackground: args.cardBackground,
+      cardBorder: args.cardBorder,
+      cardColor: args.cardColor,
+      htmlContent,
     });
     if (selected.action === "exit") {
       throw new InstructionFlowExitRequestedError();
