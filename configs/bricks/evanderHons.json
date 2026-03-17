@@ -1,4 +1,10 @@
 {
+  "ui": {
+    "pageBackground": "linear-gradient(180deg, #DBDBDB 0%, #ADADAD 100%)",
+    "cardWidth": "480px",                                                                                                                                                     
+    "cardMinHeight": "380px",
+    "cardBorder": "1px solid #111111"
+  },
   "task": {
     "implementation": "native_bricks",
     "runner": "native",

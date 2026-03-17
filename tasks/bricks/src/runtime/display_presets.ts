@@ -127,7 +127,7 @@ export const BUILTIN_DISPLAY_PRESETS = {
         rowOffsetPx: 0,
         pattern: 'checker_alternating',
         alternationStrength: 0.07,
-        variation: 0.12,
+        variation: 0.04,
         edgeShadingAlpha: 0,
         noiseCount: 20,
         seamDashCount: 8,

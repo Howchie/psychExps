@@ -80,6 +80,8 @@ interface ForcedControlState {
   switchOnDrop: boolean;
   sequence: unknown[] | null;
   spotlightPadding: number;
+  spotlightWidth: number | null;
+  spotlightHeight: number | null;
   dimAlpha: number;
   coverStory: { enableAmmoCue: boolean };
   activeOrderIndex: number;
@@ -726,6 +728,32 @@ export class GameState {
     const switchMode = ['on_clear', 'interval', 'interval_or_clear'].includes(switchModeRaw)
       ? switchModeRaw
       : 'on_clear';
+
+    // Calculate maximum possible brick dimensions for consistent spotlight window
+    const defaultWidth = Number(this.config.display?.brickWidth) || 80;
+    const forcedWidths = (this.config.bricks?.forcedSet || []).map((b: any) => {
+      const w = b.width ?? b.processingWidthPx ?? b.processing_width_px;
+      if (this._isSamplerSpec(w)) {
+        return Number((w as any).max) || Number((w as any).value) || defaultWidth;
+      }
+      return Number(w);
+    }).filter(Number.isFinite);
+    const categoryWidths = (this.config.bricks?.widthCategories || []).map((c: any) => {
+      const w = c.width;
+      if (this._isSamplerSpec(w)) {
+        return Number((w as any).max) || Number((w as any).value) || defaultWidth;
+      }
+      return Number(w);
+    }).filter(Number.isFinite);
+
+    const spotlightWidth = Number.isFinite(Number(forced.spotlightWidth))
+      ? Number(forced.spotlightWidth)
+      : Math.max(defaultWidth, ...forcedWidths, ...categoryWidths);
+
+    const spotlightHeight = Number.isFinite(Number(forced.spotlightHeight))
+      ? Number(forced.spotlightHeight)
+      : (Number.isFinite(Number(this.config.display?.brickHeight)) ? Math.max(8, Number(this.config.display?.brickHeight)) : 60);
+
     return {
       enabled: Boolean(forced.enable),
       switchMode,
@@ -733,6 +761,8 @@ export class GameState {
       switchOnDrop: forced.switchOnDrop !== false,
       sequence: Array.isArray(forced.sequence) ? forced.sequence : null,
       spotlightPadding: Math.max(0, Number(forced.spotlightPadding ?? 18)),
+      spotlightWidth,
+      spotlightHeight,
       dimAlpha: Math.max(0, Math.min(0.95, Number(forced.dimAlpha ?? 0.45))),
       coverStory: {
         enableAmmoCue: Boolean(forced.coverStory?.enableAmmoCue)
@@ -1377,6 +1407,8 @@ export class GameState {
       enabled: true,
       activeBrickId: active?.id ?? null,
       spotlightPadding: this.forcedControl.spotlightPadding,
+      spotlightWidth: this.forcedControl.spotlightWidth,
+      spotlightHeight: this.forcedControl.spotlightHeight,
       dimAlpha: this.forcedControl.dimAlpha,
       ammoLabel
     };

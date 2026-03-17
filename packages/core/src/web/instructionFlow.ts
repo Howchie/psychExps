@@ -259,6 +259,8 @@ export async function runInstructionScreens(args: RunInstructionScreensArgs): Pr
       cardBackground: args.cardBackground,
       cardBorder: args.cardBorder,
       cardColor: args.cardColor,
+      cardFontSize: args.cardFontSize,
+      cardFontFamily: args.cardFontFamily,
       htmlContent,
     });
     if (selected.action === "exit") {

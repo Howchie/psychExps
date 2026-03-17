@@ -103,6 +103,19 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
   });
 
   const orchestrator = new TaskOrchestrator<BlockPlanItem, Record<string, unknown>, ConveyorTrialData>(context);
+  
+  // Calculate experiment-wide maximum brick dimensions for consistent spotlight window
+  const experimentMax = calculateExperimentMaxBrickDimensions(taskConfig as Record<string, unknown>);
+  if (!(taskConfig.trial && typeof taskConfig.trial === 'object')) {
+    (taskConfig as any).trial = {};
+  }
+  const trialNode = (taskConfig as any).trial;
+  if (!(trialNode.forcedOrder && typeof trialNode.forcedOrder === 'object')) {
+    trialNode.forcedOrder = {};
+  }
+  trialNode.forcedOrder.spotlightWidth = experimentMax.maxWidth;
+  trialNode.forcedOrder.spotlightHeight = experimentMax.maxHeight;
+
   applyTaskInstructionConfig(taskConfig, {
     introPages: instructionSlots.intro,
     preBlockPages: instructionSlots.preBlock,
@@ -769,4 +782,66 @@ function collectSurveySummaries(row: ConveyorTrialData): { atwitOverall: number 
     atwitOverall: findFirstSurveyScore(surveys, "overall"),
     nasaRawTlx: findFirstSurveyScore(surveys, "raw_tlx"),
   };
+}
+
+function calculateExperimentMaxBrickDimensions(config: Record<string, unknown>) {
+  let maxWidth = 80;
+  let maxHeight = 60;
+
+  function update(w: unknown, h: unknown) {
+    const valW = typeof (w as any)?.max === 'number' ? (w as any).max : (typeof (w as any)?.value === 'number' ? (w as any).value : (typeof w === 'number' ? w : NaN));
+    if (Number.isFinite(valW)) maxWidth = Math.max(maxWidth, valW);
+    
+    const valH = typeof (h as any)?.max === 'number' ? (h as any).max : (typeof (h as any)?.value === 'number' ? (h as any).value : (typeof h === 'number' ? h : NaN));
+    if (Number.isFinite(valH)) maxHeight = Math.max(maxHeight, valH);
+  }
+
+  const display = asObject(config.display);
+  if (display) {
+    update(display.brickWidth, display.brickHeight);
+  }
+
+  function scanSection(section: Record<string, unknown> | null) {
+    if (!section) return;
+    const bricks = asObject(section.bricks);
+    if (bricks) {
+      const forcedSet = asArray(bricks.forcedSet);
+      forcedSet.forEach((b: any) => {
+        if (b && typeof b === 'object') {
+          update(b.width ?? b.processingWidthPx ?? b.processing_width_px, null);
+        }
+      });
+      const widthCategories = asArray(bricks.widthCategories);
+      widthCategories.forEach((c: any) => {
+        if (c && typeof c === 'object') {
+          update(c.width, null);
+        }
+      });
+    }
+    const d = asObject(section.display);
+    if (d) {
+      update(d.brickWidth, d.brickHeight);
+    }
+  }
+
+  scanSection(config);
+
+  const blocks = asArray(config.blocks);
+  blocks.forEach((b: any) => {
+    const blockObj = asObject(b);
+    if (blockObj) {
+      scanSection(blockObj);
+      scanSection(asObject(blockObj.overrides));
+    }
+  });
+
+  const manipulations = asArray(config.manipulations);
+  manipulations.forEach((m: any) => {
+    const manipObj = asObject(m);
+    if (manipObj) {
+      scanSection(asObject(manipObj.overrides));
+    }
+  });
+
+  return { maxWidth, maxHeight };
 }

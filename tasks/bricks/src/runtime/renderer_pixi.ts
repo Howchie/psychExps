@@ -868,7 +868,7 @@ export class ConveyorRenderer {
       const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
       return 1 / resolution;
     })();
-    const snap = (value: number) => Math.round((Number(value) || 0) / pixelStep) * pixelStep;
+    const snap = (value: number) => this._roundSymmetric(value, pixelStep);
     const snapSize = (value: number, min: number = pixelStep) => Math.max(min, snap(value));
 
     const tileSize = Math.max(48, Number(styleCfg.tileSizePx ?? 120));
@@ -895,7 +895,8 @@ export class ConveyorRenderer {
     const workingHeight = Math.max(pixelStep, snapSize(height - sideBand * 2 - (4 * patternScaleY), pixelStep));
     // Procedural redraw uses screen-space phase so belt texture speed can match brick advection.
     // Keep sign so visual direction matches prior belt motion convention.
-    const phase = snap(-(Number(phaseX) || 0));
+    // Use symmetric snap then negate to stay in sync with brick coordinates.
+    const phase = -snap(Number(phaseX) || 0);
 
     const wrappedOffset = (step: number) => {
       const s = Math.max(1, Number(step) || 1);
@@ -1373,11 +1374,14 @@ export class ConveyorRenderer {
     if (mode === 'none') {
       return numeric;
     }
-    if (mode === 'pixel') {
-      return Math.round(numeric);
-    }
     const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
-    return Math.round(numeric * resolution) / resolution;
+    const step = mode === 'pixel' ? 1 : (1 / resolution);
+    return this._roundSymmetric(numeric, step);
+  }
+
+  _roundSymmetric(value: number, step: number) {
+    const s = Math.max(1e-6, step);
+    return (value < 0 ? -Math.round(-value / s) : Math.round(value / s)) * s;
   }
 
   _quantizeSpotlightSignature(value: number, step: number) {
@@ -1386,7 +1390,7 @@ export class ConveyorRenderer {
       return '0';
     }
     const safeStep = Math.max(1e-4, Number(step) || 1);
-    return String(Math.round(numeric / safeStep));
+    return String(Math.round(this._roundSymmetric(numeric, safeStep) / safeStep));
   }
 
   _extractPointerPosition(e: any) {
@@ -2058,14 +2062,19 @@ export class ConveyorRenderer {
       try {
         vis.offsetX = Number(vis.offsetX ?? 0) + shift;
         let snappedOffsetX = vis.offsetX;
-        if (vis.pixelSnap && scrollSnapMode !== 'none') {
+        const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+        if (vis.pixelSnap) {
           if (scrollSnapMode === 'texture') {
-            snappedOffsetX = Math.round(vis.offsetX);
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1);
+          } else if (scrollSnapMode === 'none') {
+            // For 'none' mode, we still snap to device pixels (resolution) if pixelSnap is enabled
+            // to match brick movement and avoid phase-shift rocking.
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1 / resolution);
           } else if (vis.type === 'tiling') {
             const scaleX = Math.max(1e-6, Math.abs(Number(vis.node?.tileScale?.x) || 1));
-            snappedOffsetX = Math.round(vis.offsetX * scaleX) / scaleX;
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1 / scaleX);
           } else {
-            snappedOffsetX = Math.round(vis.offsetX);
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1);
           }
         }
 
@@ -2771,8 +2780,9 @@ export class ConveyorRenderer {
       this._updateBrickProgressVisual(sprite, brick, completionMode);
 
       const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
-      const x = this.pixelSnapBricks ? Math.round(brick.x) : (Math.round(brick.x * resolution) / resolution);
-      const y = this.pixelSnapBricks ? Math.round(brick.y) : (Math.round(brick.y * resolution) / resolution);
+      const step = this.pixelSnapBricks ? 1 : (1 / resolution);
+      const x = this._roundSymmetric(brick.x, step);
+      const y = this._roundSymmetric(brick.y, step);
 
       sprite.position.set(x, y);
       const isFocused = !focusEnabled || brick.id === this.activeBrickId;
