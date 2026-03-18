@@ -1059,6 +1059,7 @@ export class GameState {
         width: brick.width,
         height: brick.height,
         value: gainedPoints,
+        ...payload,
       });
     } else if (status === BRICK_STATUS.DROPPED) {
       this.stats.dropped += 1;
@@ -1258,11 +1259,15 @@ export class GameState {
       progress_total: brick.clearProgress,
       holds: brick.holds
     });
-    if (brick.clearProgress >= 1) {
+
+    // In practice mode we don't want to actually finalize and clear the brick.
+    // We let the `runHoldDurationPractice` script handle the quota and visual resets.
+    if (brick.clearProgress >= 1 && !this.config?.trial?.isPractice) {
       this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
         completion_mode: mode,
         holds: brick.holds,
         progress: brick.clearProgress,
+        hold_ms: holdMs,
         x: brick.x,
         y: brick.y
       });
