@@ -156,7 +156,7 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       cursorColorInside: asString(cursorRaw.colorInside) ?? "#000000",
       cursorColorOutside: asString(cursorRaw.colorOutside) ?? "#ef4444",
       perturbationComponents: parsePerturbationComponents(asArray(pertRaw.components)),
-      inputGain: toPositiveNumber(pertRaw.inputGain, 1),
+      inputGain: toPositiveNumber(pertRaw.inputGain ?? pertRaw.gainRatio, 1),
       maxDisplacementPx: toPositiveNumber(pertRaw.maxDisplacementPx, aperturePx / 2),
       sampleIntervalMs: toPositiveNumber(raw.sampleIntervalMs, 16),
       binMs: toPositiveNumber(raw.binMs, 2000),

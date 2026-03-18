@@ -106,6 +106,7 @@ interface PumpRuntime {
 
 export interface ResmanTankRecord {
   tankId: string;
+  /** Signed mean deviation (level − target). Positive = overfull, negative = underfull. Matches OpenMATB resman.py. */
   meanDeviation: number;
   proportionInTolerance: number;
   totalOutOfToleranceMs: number;
@@ -342,7 +343,8 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       if (tank.def.targetLevel == null) continue;
       const samples = deviationSamples.get(tank.def.id);
       if (samples) {
-        samples.push(Math.abs(tank.level - tank.def.targetLevel));
+        // Signed deviation (level - target), matching OpenMATB resman.py line 340.
+        samples.push(tank.level - tank.def.targetLevel);
       }
     }
   }

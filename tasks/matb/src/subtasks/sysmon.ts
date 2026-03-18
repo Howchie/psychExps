@@ -210,11 +210,22 @@ function driftArrow(scale: ScaleRuntime, rng: () => number): void {
   const lo = zoneMin(zone);
   const hi = zoneMax(zone);
 
+  // If the arrow is outside the current zone (e.g., just after a MISS/auto-solve
+  // when failureSide reset to 0 but position is still in a failure zone), snap it
+  // to a random position within the new zone immediately — matching OpenMATB
+  // sysmon.py which calls sample() when _pos is not in scale_zones[_zone].
+  let next = scale.state.position;
+  if (next < lo || next > hi) {
+    next = lo + Math.floor(rng() * (hi - lo + 1));
+    scale.state.position = next;
+    scale.zone = positionToZone(next);
+    return;
+  }
+
   const wholeSteps = Math.floor(scale.driftSpeed);
   const fracStep = scale.driftSpeed - wholeSteps;
   const stepsThisTick = wholeSteps + (rng() < fracStep ? 1 : 0);
 
-  let next = scale.state.position;
   for (let i = 0; i < stepsThisTick; i++) {
     const step = rng() < 0.5 ? -1 : 1;
     next += step;
@@ -320,32 +331,34 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     }
   }
 
-  function stopFailure(gauge: GaugeRuntimeAny, success: boolean): void {
+  /**
+   * Resolve an active failure.
+   *
+   * @param success   - true  = participant responded (HIT, positive feedback, arrow freezes)
+   * @param autoSolved - true  = scenario auto-solver fired (HIT, positive feedback, no freeze)
+   *                    false = natural alertTimeout expired (MISS, negative feedback, no freeze)
+   *
+   * Matches OpenMATB: when automaticsolver=True, stop_failure always sets ft="positive"
+   * and records HIT regardless of whether the user responded, but does NOT freeze the arrow.
+   */
+  function stopFailure(gauge: GaugeRuntimeAny, success: boolean, autoSolved = false): void {
     if (!gauge.failure) return;
     const now = performance.now() - startMs;
 
     gauge.failure = false;
     gauge.failureTimerMs = 0;
 
-    if (success) {
-      sdtRecords.push({
-        gaugeId: gauge.id,
-        gaugeKind: gauge.kind,
-        outcome: "HIT",
-        responseTimeMs: gauge.responseTimeMs,
-        timestampMs: now,
-      });
-      gauge.feedbackType = "positive";
-    } else {
-      sdtRecords.push({
-        gaugeId: gauge.id,
-        gaugeKind: gauge.kind,
-        outcome: "MISS",
-        responseTimeMs: null,
-        timestampMs: now,
-      });
-      gauge.feedbackType = "negative";
-    }
+    const positive = success || autoSolved;
+
+    sdtRecords.push({
+      gaugeId: gauge.id,
+      gaugeKind: gauge.kind,
+      outcome: positive ? "HIT" : "MISS",
+      // RT is meaningful only for manual responses; null for auto-solve and timeouts.
+      responseTimeMs: success ? gauge.responseTimeMs : null,
+      timestampMs: now,
+    });
+    gauge.feedbackType = positive ? "positive" : "negative";
     gauge.feedbackTimerMs = config!.feedbackDurationMs;
 
     // Reset gauge to default state.
@@ -355,7 +368,15 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     } else {
       const sg = gauge as ScaleRuntime;
       sg.failureSide = 0;
-      sg.state.frozen = success; // Freeze arrow on success.
+      if (success) {
+        // Manual HIT: snap arrow to center (position 5) then freeze in place,
+        // matching OpenMATB sysmon.py where _pos = 5 is set while freeze timer runs.
+        sg.state.position = 5;
+        sg.state.frozen = true;
+      } else {
+        // MISS or auto-solve: do not freeze; arrow will drift freely back to center zone.
+        sg.state.frozen = false;
+      }
     }
   }
 
@@ -533,7 +554,9 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
             (gauge as ScaleRuntime).failureSide = -1;
             startFailure(gauge);
           } else if (event.value === false || event.value === "false") {
-            stopFailure(gauge, false);
+            // Auto-solver scenario event: matches OpenMATB automaticsolver=True behaviour.
+            // Records HIT + positive feedback; does NOT freeze the arrow.
+            stopFailure(gauge, false, true);
           }
         }
         // Scale-specific: force a failure side.

@@ -100,7 +100,17 @@ export interface CommsSubTaskConfig {
 // Record types (for data export)
 // ---------------------------------------------------------------------------
 
-export type CommsOutcome = "HIT" | "MISS" | "FA" | "CR";
+/**
+ * Signal-detection outcomes, matching OpenMATB's get_sdt_value() categories:
+ *   HIT           = own callsign, correct radio, correct frequency
+ *   MISS          = own callsign, no response by timeout
+ *   BAD_RADIO     = own callsign, responded but wrong radio (correct freq)
+ *   BAD_FREQ      = own callsign, responded with correct radio but wrong freq
+ *   BAD_RADIO_FREQ = own callsign, responded with wrong radio AND wrong freq
+ *   FA            = other callsign, confirmed (false alarm)
+ *   CR            = other callsign, no response (correct rejection)
+ */
+export type CommsOutcome = "HIT" | "MISS" | "BAD_RADIO" | "BAD_FREQ" | "BAD_RADIO_FREQ" | "FA" | "CR";
 
 export interface CommsPromptRecord {
   promptIdx: number;
@@ -112,7 +122,11 @@ export interface CommsPromptRecord {
   selectedRadio: string | null;
   /** Frequency entered when participant confirmed (null = no response). */
   enteredFreqMhz: number | null;
-  /** Absolute deviation from target frequency in MHz (null = no response). */
+  /**
+   * Signed deviation from target frequency in MHz (null = no response).
+   * Positive = tuned above target, negative = below. Rounded to 0.1 MHz.
+   * Matches OpenMATB: round(currentfreq - targetfreq, 1).
+   */
   freqDeviationMhz: number | null;
   responded: boolean;
   outcome: CommsOutcome;
@@ -125,6 +139,9 @@ export interface CommsSubTaskResult {
   records: CommsPromptRecord[];
   hitCount: number;
   missCount: number;
+  badRadioCount: number;
+  badFreqCount: number;
+  badRadioFreqCount: number;
   faCount: number;
   crCount: number;
 }
@@ -215,19 +232,27 @@ function buildPromptText(callsign: string, radioLabel: string, freqMhz: number):
  *   → ["n","a","s","a","5","0","4", "com_1", "frequency", "1","1","8","point","3"]
  */
 function buildPromptClipSequence(callsign: string, radioId: string, freqMhz: number): string[] {
+  // Matches OpenMATB communications.py group_audio_files():
+  //   ["empty"]*20 + callsign*2 + ["radio"] + [radio_name] + ["frequency"] + freq_digits + ["empty"]
+
   const ids: string[] = [];
 
-  // Callsign: map each character to a letter or digit clip.
-  for (const ch of callsign.toLowerCase()) {
-    if (/[a-z]/.test(ch) || /[0-9]/.test(ch)) {
-      ids.push(ch);
-    }
-  }
+  // 20 silence clips (inter-prompt gap / attention buffer).
+  for (let i = 0; i < 20; i++) ids.push("empty");
 
+  // Callsign announced twice.
+  const callsignClips: string[] = [];
+  for (const ch of callsign.toLowerCase()) {
+    if (/[a-z0-9]/.test(ch)) callsignClips.push(ch);
+  }
+  ids.push(...callsignClips, ...callsignClips);
+
+  // "radio" cue word then the radio clip ID.
   // Radio: map "com1"→"com_1", "com2"→"com_2", "nav1"→"nav_1", "nav2"→"nav_2".
   const radioClipId = radioId
     .toLowerCase()
     .replace(/^(com|nav)(\d)$/, "$1_$2");
+  ids.push("radio");
   ids.push(radioClipId);
 
   // "frequency" cue word.
@@ -241,6 +266,9 @@ function buildPromptClipSequence(callsign: string, radioId: string, freqMhz: num
   for (const ch of intPart) ids.push(ch);
   ids.push("point");
   for (const ch of decPart) ids.push(ch);
+
+  // Trailing silence.
+  ids.push("empty");
 
   return ids;
 }
@@ -419,9 +447,16 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
         const selectedRadioId = currentRadio?.config.id ?? null;
         const enteredFreqMhz = currentRadio?.frequencyMhz ?? null;
         const radioMatch = selectedRadioId === p.targetRadioId;
-        const freqMatch = enteredFreqMhz !== null && Math.abs(enteredFreqMhz - p.targetFreqMhz) <= 1e-6;
-        outcome = radioMatch && freqMatch ? "HIT" : "MISS";
-        freqDeviation = enteredFreqMhz !== null ? Math.abs(enteredFreqMhz - p.targetFreqMhz) : null;
+        // Signed deviation rounded to 0.1 MHz precision, matching OpenMATB:
+        // round(currentfreq - targetfreq, 1)
+        freqDeviation = enteredFreqMhz !== null
+          ? Math.round((enteredFreqMhz - p.targetFreqMhz) * 10) / 10
+          : null;
+        const freqMatch = freqDeviation === 0;
+        if (radioMatch && freqMatch) outcome = "HIT";
+        else if (!radioMatch && freqMatch) outcome = "BAD_RADIO";
+        else if (radioMatch && !freqMatch) outcome = "BAD_FREQ";
+        else outcome = "BAD_RADIO_FREQ";
       } else {
         outcome = "MISS";
       }
@@ -628,10 +663,13 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       const result: CommsSubTaskResult = {
         elapsedMs: Math.round(elapsed),
         records: [...records],
-        hitCount:  records.filter((r) => r.outcome === "HIT").length,
-        missCount: records.filter((r) => r.outcome === "MISS").length,
-        faCount:   records.filter((r) => r.outcome === "FA").length,
-        crCount:   records.filter((r) => r.outcome === "CR").length,
+        hitCount:         records.filter((r) => r.outcome === "HIT").length,
+        missCount:        records.filter((r) => r.outcome === "MISS").length,
+        badRadioCount:    records.filter((r) => r.outcome === "BAD_RADIO").length,
+        badFreqCount:     records.filter((r) => r.outcome === "BAD_FREQ").length,
+        badRadioFreqCount: records.filter((r) => r.outcome === "BAD_RADIO_FREQ").length,
+        faCount:          records.filter((r) => r.outcome === "FA").length,
+        crCount:          records.filter((r) => r.outcome === "CR").length,
       };
 
       // Reset.
