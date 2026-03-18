@@ -2,6 +2,7 @@ import { computeBlockSummaryStats, type BlockSummaryWhere } from "./blockSummary
 
 export interface BlockRepeatMetricSpec {
   correctField: string;
+  metricField?: string;
 }
 
 export interface BlockRepeatUntilConfig {
@@ -10,6 +11,8 @@ export interface BlockRepeatUntilConfig {
   minAccuracy?: number;
   minCorrect?: number;
   minTotal?: number;
+  maxMeanMetric?: number;
+  minMeanMetric?: number;
   where?: BlockSummaryWhere;
   metrics: BlockRepeatMetricSpec;
 }
@@ -25,6 +28,7 @@ export interface BlockRepeatEvaluation {
     total: number;
     correct: number;
     accuracy: number;
+    meanMetric?: number;
   };
 }
 
@@ -111,7 +115,7 @@ export function evaluateBlockRepeatUntil(args: {
     passed: true,
     shouldRepeat: false,
     reason: "disabled",
-    stats: { total: 0, correct: 0, accuracy: 0 },
+    stats: { total: 0, correct: 0, accuracy: 0, meanMetric: 0 },
   };
   if (!cfg || !cfg.enabled) return fallback;
 
@@ -121,6 +125,7 @@ export function evaluateBlockRepeatUntil(args: {
     metrics: {
       correctField: cfg.metrics.correctField,
       rtField: "rt",
+      metricField: cfg.metrics.metricField,
     },
   });
   const accuracy = stats.total > 0 ? stats.correct / stats.total : 0;
@@ -128,6 +133,8 @@ export function evaluateBlockRepeatUntil(args: {
   if (typeof cfg.minAccuracy === "number") thresholdChecks.push(accuracy >= cfg.minAccuracy);
   if (typeof cfg.minCorrect === "number") thresholdChecks.push(stats.correct >= cfg.minCorrect);
   if (typeof cfg.minTotal === "number") thresholdChecks.push(stats.total >= cfg.minTotal);
+  if (typeof cfg.maxMeanMetric === "number") thresholdChecks.push(stats.meanMetric <= cfg.maxMeanMetric);
+  if (typeof cfg.minMeanMetric === "number") thresholdChecks.push(stats.meanMetric >= cfg.minMeanMetric);
   const passed = thresholdChecks.length > 0 ? thresholdChecks.every(Boolean) : true;
   const maxAttemptsReached = args.attemptIndex + 1 >= cfg.maxAttempts;
   const shouldRepeat = !passed && !maxAttemptsReached;
@@ -147,6 +154,7 @@ export function evaluateBlockRepeatUntil(args: {
       total: stats.total,
       correct: stats.correct,
       accuracy,
+      meanMetric: stats.meanMetric,
     },
   };
 }

@@ -2420,12 +2420,22 @@ export class ConveyorRenderer {
     }
     const perfCfg = this.config?.display?.performance || {};
     const maxEffects = Math.max(0, Number(perfCfg.maxActiveEffects ?? 180));
+
+    // Configurable feedback options for hold duration practice
+    const practiceUiCfg = this.config?.display?.practiceFeedback || {};
+    const binTooFastColor = toPixiColor(practiceUiCfg.colorTooFast ?? '#ef4444');
+    const binTooSlowColor = toPixiColor(practiceUiCfg.colorTooSlow ?? '#ef4444');
+    const binGoodColor = toPixiColor(practiceUiCfg.colorGood ?? '#22c55e');
+    const goodThresholdMin = Number(practiceUiCfg.goodThresholdMin ?? -0.2);
+    const goodThresholdMax = Number(practiceUiCfg.goodThresholdMax ?? 0.2);
+
     clearEvents.forEach((entry) => {
       if (this.effectVisuals.length >= maxEffects) {
         this.perfStats.effectDropsSkipped += 1;
         return;
       }
       const holdDuration = Math.max(0, Number(entry?.hold_ms ?? entry?.holdDurationMs ?? 0));
+      const scaledDelta = Number(entry?.scaledPerformanceDelta ?? 0);
       const width = Math.max(1, Number(entry?.width ?? this.config?.display?.brickWidth ?? 1));
       const height = Math.max(1, Number(entry?.height ?? this.config?.display?.brickHeight ?? 1));
       const centerX = Number(entry?.x ?? 0) + width * 0.5;
@@ -2440,8 +2450,17 @@ export class ConveyorRenderer {
       container.x = this.pixelSnapBricks ? Math.round(centerX) : centerX;
       container.y = this.pixelSnapBricks ? Math.round(startY) : startY;
 
+      let labelColor = toPixiColor(clearCfg.textColor);
+      if (scaledDelta < goodThresholdMin) {
+        labelColor = binTooFastColor;
+      } else if (scaledDelta > goodThresholdMax) {
+        labelColor = binTooSlowColor;
+      } else {
+        labelColor = binGoodColor;
+      }
+
       const text = new PIXI.Text(label, {
-        fill: toPixiColor(clearCfg.textColor),
+        fill: labelColor,
         fontSize: textSize,
         fontFamily: clearCfg.textFontFamily,
         fontWeight: clearCfg.textFontWeight as PIXI.TextStyleFontWeight,
