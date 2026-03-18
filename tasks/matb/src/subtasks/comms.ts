@@ -416,8 +416,12 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
 
     if (p.isOwn) {
       if (responded) {
-        outcome = "HIT";
-        freqDeviation = Math.abs(currentRadio.frequencyMhz - p.targetFreqMhz);
+        const selectedRadioId = currentRadio?.config.id ?? null;
+        const enteredFreqMhz = currentRadio?.frequencyMhz ?? null;
+        const radioMatch = selectedRadioId === p.targetRadioId;
+        const freqMatch = enteredFreqMhz !== null && Math.abs(enteredFreqMhz - p.targetFreqMhz) <= 1e-6;
+        outcome = radioMatch && freqMatch ? "HIT" : "MISS";
+        freqDeviation = enteredFreqMhz !== null ? Math.abs(enteredFreqMhz - p.targetFreqMhz) : null;
       } else {
         outcome = "MISS";
       }

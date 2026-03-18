@@ -213,8 +213,9 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedResmanConfig {
 }
 
 function parsePumpState(s: string | null): PumpState {
-  if (s === "on") return "on";
-  if (s === "failure") return "failure";
+  const normalized = (s ?? "").trim().toLowerCase();
+  if (normalized === "on") return "on";
+  if (normalized === "failure" || normalized === "failed") return "failure";
   return "off";
 }
 

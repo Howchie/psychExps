@@ -210,13 +210,18 @@ function driftArrow(scale: ScaleRuntime, rng: () => number): void {
   const lo = zoneMin(zone);
   const hi = zoneMax(zone);
 
-  // Random step: -1 or +1 (weighted by drift speed for more movement).
-  const step = rng() < 0.5 ? -1 : 1;
-  let next = scale.state.position + step;
+  const wholeSteps = Math.floor(scale.driftSpeed);
+  const fracStep = scale.driftSpeed - wholeSteps;
+  const stepsThisTick = wholeSteps + (rng() < fracStep ? 1 : 0);
 
-  // Clamp within zone.
-  if (next < lo) next = lo;
-  if (next > hi) next = hi;
+  let next = scale.state.position;
+  for (let i = 0; i < stepsThisTick; i++) {
+    const step = rng() < 0.5 ? -1 : 1;
+    next += step;
+    // Clamp within zone after each sub-step.
+    if (next < lo) next = lo;
+    if (next > hi) next = hi;
+  }
 
   scale.state.position = next;
   scale.zone = positionToZone(next);
