@@ -25,6 +25,7 @@ import {
   type SelectionContext,
   type StandardTaskInstructionConfig,
 } from "@experiments/core";
+import { createRdkRenderer, type RdkDot, type RdkRendererBackend, type RdkRenderer } from "./renderer";
 
 export const rdkAdapter = createTaskAdapter({
   manifest: {
@@ -39,6 +40,7 @@ export const rdkAdapter = createTaskAdapter({
 });
 
 type RdkMode = "dynamic" | "static";
+export type RdkDotMode = RdkMode;
 
 interface RdkDrtConfig extends ScopedDrtConfig {
   key: string;
@@ -88,6 +90,7 @@ interface RdkDisplayConfig {
   frameBorder: string;
   canvasBackground: string;
   showCrosshair: boolean;
+  rendererBackend: RdkRendererBackend;
 }
 
 interface ParsedRdkConfig {
@@ -138,6 +141,7 @@ function parseRdkConfig(taskConfig: Record<string, unknown>, selection: Selectio
     frameBorder: asString(displayRaw.frameBorder) ?? "#334155",
     canvasBackground: asString(displayRaw.canvasBackground) ?? "#e2e8f0",
     showCrosshair: displayRaw.showCrosshair !== false,
+    rendererBackend: (asString(displayRaw.rendererBackend) ?? "pixi") === "pixi" ? "pixi" : "canvas",
   };
 
   const trialDefaultsRaw = asObject(taskConfig.trialDefaults) ?? {};
@@ -264,7 +268,7 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
   stageShell.innerHTML = `
     <div id="rdk-frame" style="position: relative; border: 2px solid ${parsed.display.frameBorder}; width: ${parsed.display.aperturePx}px; height: ${parsed.display.aperturePx}px; background: ${parsed.display.canvasBackground}; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);">
       ${parsed.display.showCrosshair ? `<div style="position: absolute; width: 10px; height: 2px; background: ${parsed.display.frameBorder}; pointer-events: none; z-index: 10;"></div><div style="position: absolute; width: 2px; height: 10px; background: ${parsed.display.frameBorder}; pointer-events: none; z-index: 10;"></div>` : ""}
-      <canvas id="rdk-canvas" style="position: absolute; top: 0; left: 0; pointer-events: none;" width="${parsed.display.aperturePx}" height="${parsed.display.aperturePx}"></canvas>
+      <div id="rdk-renderer-host" style="position: absolute; top: 0; left: 0; pointer-events: none; width: ${parsed.display.aperturePx}px; height: ${parsed.display.aperturePx}px;"></div>
     </div>
     <div id="rdk-prompt" style="position: absolute; bottom: 2rem; color: #fff; font-size: 1.25rem; font-family: ui-sans-serif, system-ui, sans-serif; opacity: 0; transition: opacity 0.2s; pointer-events: none; text-align: center; max-width: 80%;"></div>
   `;
@@ -281,14 +285,18 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
     }),
     getTrials: ({ block }) => Array.from({ length: block.trials }, (_, trialIndex) => trialIndex),
     runTrial: async ({ block, blockIndex, trialIndex }) => {
-      const canvas = stageShell.querySelector("#rdk-canvas") as HTMLCanvasElement;
-      const ctx = canvas.getContext("2d")!;
+      const rendererHost = stageShell.querySelector("#rdk-renderer-host") as HTMLElement;
       const promptEl = stageShell.querySelector("#rdk-prompt") as HTMLElement;
 
-      promptEl.style.opacity = "0";
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const renderer = await createRdkRenderer(rendererHost, {
+          backend: parsed.display.rendererBackend,
+          width: parsed.display.aperturePx,
+          height: parsed.display.aperturePx,
+          backgroundColor: parsed.display.canvasBackground,
+      });
 
-      const dirs = ["left", "right", "up", "down"];
+      promptEl.style.opacity = "0";
+
       let trialDirection = block.trialTemplate.direction;
       if (block.trialTemplate.direction === "right" || block.trialTemplate.direction === "left") {
         trialDirection = Math.random() > 0.5 ? "left" : "right";
@@ -304,7 +312,7 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
       const result = await runTrialWithEnvelope<{ block: ParsedRdkBlock; blockIndex: number; trialIndex: number }, RdkTrialRecord>({
         context: { block, blockIndex, trialIndex },
         execute: async () => {
-          const res = await renderRdkTrial(ctx, canvas, block.trialTemplate, trialDirection, predominantColor, promptEl);
+          const res = await renderRdkTrial(renderer, parsed.display.aperturePx, block.trialTemplate, trialDirection, predominantColor, promptEl);
 
           return {
             taskId: "rdk",
@@ -324,8 +332,9 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
         }
       });
 
+      renderer.destroy();
+
       if (parsed.interTrialIntervalMs > 0 && trialIndex < block.trials - 1) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         promptEl.style.opacity = "0";
         await sleep(parsed.interTrialIntervalMs);
       }
@@ -348,8 +357,8 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
 }
 
 async function renderRdkTrial(
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
+  renderer: RdkRenderer,
+  aperturePx: number,
   template: ParsedRdkTrialTemplate,
   trialDirection: string,
   predominantColor: string,
@@ -374,10 +383,10 @@ async function renderRdkTrial(
       }
     }
 
-    const dots: { x: number; y: number; age: number; maxAge: number }[] = [];
-    const radius = canvas.width / 2;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const dots: RdkDot[] = [];
+    const radius = aperturePx / 2;
+    const cx = aperturePx / 2;
+    const cy = aperturePx / 2;
 
     for (let i = 0; i < dotCount; i++) {
       const r = radius * Math.sqrt(Math.random());
@@ -385,8 +394,9 @@ async function renderRdkTrial(
       dots.push({
         x: cx + r * Math.cos(theta),
         y: cy + r * Math.sin(theta),
-        age: 0,
-        maxAge: Math.random() * 20 + 10,
+        age: Math.floor(Math.random() * 20),
+        maxAge: Math.floor(Math.random() * 20) + 10,
+        isCoherent: false,
       });
     }
 
@@ -428,7 +438,6 @@ async function renderRdkTrial(
     function cleanup() {
       window.removeEventListener("keydown", keyHandler);
       cancelAnimationFrame(animationId);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
       resolve({ durationMs: performance.now() - (startTime ?? performance.now()), responseKey, rtMs, correct });
     }
 
@@ -440,8 +449,6 @@ async function renderRdkTrial(
         if (!responded) cleanup();
         return;
       }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       let currentCoherence = coherenceStart;
       if (compiledCoherenceFunc) {
@@ -458,44 +465,40 @@ async function renderRdkTrial(
         currentCoherence = coherenceEnd;
       }
 
-      ctx.fillStyle = dotColor;
+      const speedPerFrame = speedPxPerSec / 60;
 
       for (let i = 0; i < dots.length; i++) {
         const dot = dots[i];
         dot.age++;
 
-        const isCoherent = Math.random() < currentCoherence;
+        // Coherence is determined when dot is (re)born or every frame if we want standard RDK
+        // Typically coherence is assigned per-frame or per-life.
+        // Let's do standard per-frame reassignment to match common Psychopy/jsPsych RDK implementations.
+        dot.isCoherent = Math.random() < currentCoherence;
 
         if (mode === "dynamic") {
           let moveAngle = Math.random() * 2 * Math.PI;
-          if (isCoherent) {
+          if (dot.isCoherent) {
             if (trialDirection === "right") moveAngle = 0;
             else if (trialDirection === "left") moveAngle = Math.PI;
             else if (trialDirection === "down") moveAngle = Math.PI / 2;
             else if (trialDirection === "up") moveAngle = -Math.PI / 2;
           }
 
-          const speedPerFrame = speedPxPerSec / 60;
           dot.x += Math.cos(moveAngle) * speedPerFrame;
           dot.y += Math.sin(moveAngle) * speedPerFrame;
 
           const dx = dot.x - cx;
           const dy = dot.y - cy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+          const distSq = dx * dx + dy * dy;
 
-          if (dist > radius || dot.age > dot.maxAge) {
+          if (distSq > radius * radius || dot.age > dot.maxAge) {
              const r = radius * Math.sqrt(Math.random());
              const theta = Math.random() * 2 * Math.PI;
              dot.x = cx + r * Math.cos(theta);
              dot.y = cy + r * Math.sin(theta);
              dot.age = 0;
           }
-
-          ctx.fillStyle = dotColor;
-          ctx.beginPath();
-          ctx.arc(dot.x, dot.y, dotSizePx / 2, 0, 2 * Math.PI);
-          ctx.fill();
-
         } else if (mode === "static") {
              if (dot.age > dot.maxAge) {
                  const r = radius * Math.sqrt(Math.random());
@@ -504,16 +507,21 @@ async function renderRdkTrial(
                  dot.y = cy + r * Math.sin(theta);
                  dot.age = 0;
              }
-
-             let colorToDraw = Math.random() > 0.5 ? dotColor : dotColorAlternate;
-             if (isCoherent) {
-                 colorToDraw = predominantColor === "black" ? dotColorAlternate : dotColor;
-             }
-
-             ctx.fillStyle = colorToDraw;
-             ctx.fillRect(dot.x - dotSizePx/2, dot.y - dotSizePx/2, dotSizePx, dotSizePx);
+             // Static mode: coherence determines the color mix
+             const isSignalColor = dot.isCoherent ? true : Math.random() > 0.5;
+             dot.color = isSignalColor 
+                ? (predominantColor === "black" ? dotColorAlternate : dotColor)
+                : (predominantColor === "black" ? dotColor : dotColorAlternate);
         }
       }
+
+      renderer.render({
+          dots,
+          dotSizePx,
+          dotColor,
+          dotColorAlternate,
+          mode
+      });
 
       animationId = requestAnimationFrame(renderLoop);
     }
@@ -521,3 +529,4 @@ async function renderRdkTrial(
     animationId = requestAnimationFrame(renderLoop);
   });
 }
+
