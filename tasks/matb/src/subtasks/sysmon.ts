@@ -519,7 +519,15 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
         if (field === "failure") {
           if (event.value === true || event.value === "true") {
             startFailure(gauge);
-          } else {
+          } else if (event.value === "up" && gauge.kind === "scale") {
+            // OpenMATB-style: "up" means arrow drifts right (positive side).
+            (gauge as ScaleRuntime).failureSide = 1;
+            startFailure(gauge);
+          } else if (event.value === "down" && gauge.kind === "scale") {
+            // OpenMATB-style: "down" means arrow drifts left (negative side).
+            (gauge as ScaleRuntime).failureSide = -1;
+            startFailure(gauge);
+          } else if (event.value === false || event.value === "false") {
             stopFailure(gauge, false);
           }
         }
@@ -529,6 +537,11 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
           if (side === -1 || side === 1) {
             (gauge as ScaleRuntime).failureSide = side;
           }
+        }
+        // Light-specific: set on/off state directly (e.g. auto-solver indicator).
+        if (field === "on" && gauge.kind === "light") {
+          const lg = gauge as LightRuntime;
+          lg.state.on = event.value === true || event.value === "true" || event.value === "True";
         }
       }
     },

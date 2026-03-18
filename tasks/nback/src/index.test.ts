@@ -137,13 +137,126 @@ describe('NbackTaskAdapter', () => {
       rt: 450,
     });
 
-    expect(__testing__.readNbackTrialResponseRow(capture, 0, 3)).toEqual(
+    expect(capture.responseWindowRow).toEqual(
       expect.objectContaining({
         blockIndex: 0,
         trialIndex: 3,
-        phase: 'nback_response_window_stimulus',
         responseKey: 'm',
         responseCorrect: 1,
+        responseRtMs: 450,
+      }),
+    );
+  });
+
+  it('should calculate relative RT correctly when response window is segmented', () => {
+    const timeline: any[] = [];
+    const capture = __testing__.appendJsPsychNbackTrial({
+      timeline,
+      parsed: {
+        timing: {
+          trialDurationMs: 3000,
+          stimulusOnsetMs: 750,
+          responseWindowStartMs: 750,
+          responseWindowEndMs: 3000,
+        },
+        display: {
+          aperturePx: 300,
+          paddingYPx: 20,
+          cueHeightPx: 0,
+          cueMarginBottomPx: 0,
+          frameBackground: '#fff',
+          frameBorder: '1px solid #000',
+          textColor: '#111',
+          fixationFontSizePx: 24,
+          fixationFontWeight: 500,
+          stimulusFontSizePx: 40,
+          stimulusScale: 1,
+          imageWidthPx: null,
+          imageHeightPx: null,
+          imageUpscale: false,
+        },
+        responseSemantics: createResponseSemantics({ target: 'm', non_target: 'z' }),
+      } as any,
+      block: {
+        label: 'Block 1',
+        blockIndex: 0,
+        blockType: 'practice',
+        isPractice: true,
+        nLevel: 2,
+        stimulusVariant: null,
+        trials: [],
+        feedback: {
+          enabled: false,
+          durationMs: 0,
+          messages: {
+            correct: 'Correct',
+            incorrect: 'Incorrect',
+            timeout: 'Too slow',
+            invalid: 'Invalid key',
+            byResponseCategory: {},
+          },
+          style: {
+            correctColor: '#22c55e',
+            incorrectColor: '#ef4444',
+            timeoutColor: '#f59e0b',
+            invalidColor: '#f59e0b',
+            byResponseCategoryColors: {},
+            fontSizePx: 28,
+            fontWeight: 700,
+            canvasBackground: '#ffffff',
+            canvasBorder: '2px solid #ddd',
+          },
+        },
+        rtTask: {
+          enabled: true,
+          responseTerminatesTrial: false,
+          timing: {
+            trialDurationMs: 3000,
+            stimulusOnsetMs: 750,
+            responseWindowStartMs: 750,
+            responseWindowEndMs: 3000,
+          }
+        },
+        beforeBlockScreens: [],
+        afterBlockScreens: [],
+        drt: { enabled: false },
+        variables: {},
+      } as any,
+      trial: {
+        trialIndex: 5,
+        blockIndex: 0,
+        trialType: 'target',
+        item: 'B',
+        sourceCategory: 'other',
+        itemCategory: 'other',
+        correctResponse: 'm',
+      } as any,
+      resolvedStimulus: 'B',
+      runtime: {
+        participantId: 'p1',
+        variantId: 'v1',
+        variableResolver: createVariableResolver({}),
+      } as any,
+      preloaded: { image: null },
+      eventLogger: { emit: vi.fn() } as any,
+    });
+
+    // In this config (start=750, stimulus=750), the first segment is response_window_stimulus
+    const responseSegment = timeline.find((entry) => entry.data?.phase === 'nback_response_window_stimulus');
+    expect(responseSegment).toBeTruthy();
+
+    responseSegment.on_finish({
+      ...responseSegment.data,
+      response: 'm',
+      rt: 250, // Relative to start of segment (750ms)
+    });
+
+    expect(capture.responseWindowRow).toEqual(
+      expect.objectContaining({
+        trialIndex: 5,
+        responseKey: 'm',
+        responseCorrect: 1,
+        responseRtMs: 250,
       }),
     );
   });

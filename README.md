@@ -18,14 +18,16 @@ Replacing the values as required. Disabling local save ensures no csv is downloa
 # JATOS test auto
 pm2 start node --name autoresponder-jatos-once --no-autorestart -- \
     scripts/run-autoresponder-url.mjs \
-    --url "http://127.0.0.1:9000/publix/jcyRMNUWs2u?auto=true" \
+    --url "http://127.0.0.1:9000/publix/jcyRMNUWs2u?auto=true&auto_mode=data-only" \
     --max-minutes 130 \
     --done-text "Thank you very much for participating"
 pm2 status autoresponder-jatos-once
-pm2 logs autoresponder-jatos-once --lines 200 --nostream
+pm2 logs autoresponder-jatos-once --lines 10 --nostream
 # Code to run bricks difficulty estimate (from root):
 npm run difficulty -w @experiments/task-bricks --config evanderHons --trials 10000 --seed 123456 --no-by-trial-type --no-by-block-trial-type
 
+# Code to extract csv from json
+python scripts/jatos_to_long_csv.py temp/annikaHons_jatos_example.txt temp/annikaHons_jatos_example_long.csv
 # Experiments Workspace
 
 Unified experiment framework with a shared TypeScript core and task adapters.

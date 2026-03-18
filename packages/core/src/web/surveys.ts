@@ -1,5 +1,6 @@
 import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "../runtime/autoresponder";
 import { applyButtonStyleOverrides, escapeHtml, sleep, type ButtonStyleOverrides } from "./ui";
+import { getElementBySafeId } from "./domUtils";
 
 export type SurveyAnswerValue = string | number | null;
 export type SurveyAnswerMap = Record<string, SurveyAnswerValue>;
@@ -79,7 +80,7 @@ export async function runSurvey(
   container.innerHTML = buildSurveyHtml(survey, buttonId, rootClass);
   hydrateSurveyInteractions(container, survey);
 
-  const submitButton = container.querySelector(`#${buttonId}`);
+  const submitButton = getElementBySafeId(container, buttonId);
   if (!(submitButton instanceof HTMLButtonElement)) {
     throw new Error(`Survey submit button missing: ${buttonId}`);
   }
@@ -180,7 +181,7 @@ function autoFillSurvey(container: HTMLElement, survey: SurveyDefinition): numbe
       continue;
     }
     if (question.type === "slider") {
-      const input = container.querySelector(`#${sliderInputId(question.id)}`);
+      const input = getElementBySafeId(container, sliderInputId(question.id));
       if (!(input instanceof HTMLInputElement)) continue;
       const min = Math.min(question.min, question.max);
       const max = Math.max(question.min, question.max);
@@ -207,7 +208,7 @@ function collectSurveyAnswers(container: HTMLElement, survey: SurveyDefinition):
       answers[question.id] = parseStringNumber(value);
       continue;
     }
-    const slider = container.querySelector(`#${sliderInputId(question.id)}`);
+    const slider = getElementBySafeId(container, sliderInputId(question.id));
     if (!(slider instanceof HTMLInputElement)) {
       answers[question.id] = null;
       continue;
@@ -220,7 +221,7 @@ function collectSurveyAnswers(container: HTMLElement, survey: SurveyDefinition):
 function hydrateSurveyInteractions(container: HTMLElement, survey: SurveyDefinition): void {
   for (const question of survey.questions) {
     if (question.type !== "slider") continue;
-    const slider = container.querySelector(`#${sliderInputId(question.id)}`);
+    const slider = getElementBySafeId(container, sliderInputId(question.id));
     if (!(slider instanceof HTMLInputElement)) continue;
     const update = () => syncSliderValueLabel(container, question.id);
     slider.addEventListener("input", update);
@@ -230,10 +231,10 @@ function hydrateSurveyInteractions(container: HTMLElement, survey: SurveyDefinit
 }
 
 function syncSliderValueLabel(container: HTMLElement, questionId: string): void {
-  const slider = container.querySelector(`#${sliderInputId(questionId)}`);
-  const valueNode = container.querySelector(`#${sliderValueId(questionId)}`);
-  if (!(slider instanceof HTMLInputElement) || !(valueNode instanceof HTMLElement)) return;
-  valueNode.textContent = slider.value;
+  const input = getElementBySafeId(container, sliderInputId(questionId));
+  const valueNode = getElementBySafeId(container, sliderValueId(questionId));
+  if (!(input instanceof HTMLInputElement) || !(valueNode instanceof HTMLElement)) return;
+  valueNode.textContent = input.value;
 }
 
 function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: string): string {

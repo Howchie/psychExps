@@ -22,7 +22,8 @@
     "@experiments/task-go-no-go": "0.1.0",
     "@experiments/task-matb-tracking": "0.1.0",
     "@experiments/task-matb-sysmon": "0.1.0",
-    "@experiments/task-matb-resman": "0.1.0"
+    "@experiments/task-matb-resman": "0.1.0",
+    "@experiments/task-matb-comms": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

@@ -2,6 +2,7 @@ import { isAutoResponderEnabled, sampleAutoContinueDelayMs, sampleAutoResponse }
 import { asObject, asString } from "../utils/coerce";
 import type { CoreConfig, JSONObject } from "../api/types";
 import { normalizeKey as normalizeKeyBase } from "../infrastructure/keys";
+import { getElementBySafeId } from "./domUtils";
 
 export interface TimedResponse {
   key: string | null;
@@ -521,7 +522,7 @@ export async function waitForContinue(
   const autoResponderEnabled = isAutoResponderEnabled();
   const buttonHtml = `<button id="${buttonId}" class="exp-continue-btn" type="button">${escapeHtml(buttonLabel)}</button>`;
   container.innerHTML = buildContinueScreenHtml(html, buttonHtml, options);
-  const btn = container.querySelector(`#${buttonId}`);
+  const btn = getElementBySafeId(container, buttonId);
   if (!(btn instanceof HTMLButtonElement)) return;
   applyButtonStyleOverrides(btn, options.buttonStyle);
   const clearScreen = () => {
@@ -591,7 +592,7 @@ export async function waitForContinueChoice(
     .join(" ");
   container.innerHTML = buildContinueScreenHtml(html, buttonsHtml, options);
   for (const button of buttons) {
-    const node = container.querySelector(`#${button.id}`);
+    const node = getElementBySafeId(container, button.id);
     if (node instanceof HTMLButtonElement) {
       applyButtonStyleOverrides(node, options.buttonStyle);
     }
@@ -612,7 +613,7 @@ export async function waitForContinueChoice(
     const cleanup = () => {
       window.removeEventListener("keydown", onKey);
       for (const button of buttons) {
-        const node = container.querySelector(`#${button.id}`);
+        const node = getElementBySafeId(container, button.id);
         if (node instanceof HTMLButtonElement) {
           node.removeEventListener("click", onClick);
         }
@@ -638,14 +639,14 @@ export async function waitForContinueChoice(
     };
 
     for (const button of buttons) {
-      const node = container.querySelector(`#${button.id}`);
+      const node = getElementBySafeId(container, button.id);
       if (node instanceof HTMLButtonElement) {
         node.addEventListener("click", onClick);
       }
     }
     window.addEventListener("keydown", onKey);
 
-    const firstButton = container.querySelector(`#${buttons[0]?.id ?? ""}`);
+    const firstButton = getElementBySafeId(container, buttons[0]?.id ?? "");
     if (firstButton instanceof HTMLButtonElement && options.autoFocusFirstButton !== false) {
       firstButton.focus();
     }

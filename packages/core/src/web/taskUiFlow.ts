@@ -67,7 +67,10 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
         cardMinHeight: args.cardMinHeight,
         cardBackground: args.cardBackground,
         cardBorder: args.cardBorder,
+        cardBorderRadius: args.cardBorderRadius,
         cardColor: args.cardColor,
+        cardFontSize: args.cardFontSize,
+        cardFontFamily: args.cardFontFamily,
       },
     );
   }
@@ -84,7 +87,10 @@ export async function runTaskIntroFlow(args: RunTaskIntroFlowArgs): Promise<void
     cardMinHeight: args.cardMinHeight,
     cardBackground: args.cardBackground,
     cardBorder: args.cardBorder,
+    cardBorderRadius: args.cardBorderRadius,
     cardColor: args.cardColor,
+    cardFontSize: args.cardFontSize,
+    cardFontFamily: args.cardFontFamily,
     renderHtml: args.renderHtml,
   });
   for (let idx = 0; idx < (args.afterIntroPages ?? []).length; idx += 1) {
@@ -164,7 +170,10 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         cardMinHeight: args.cardMinHeight,
         cardBackground: args.cardBackground,
         cardBorder: args.cardBorder,
+        cardBorderRadius: args.cardBorderRadius,
         cardColor: args.cardColor,
+        cardFontSize: args.cardFontSize,
+        cardFontFamily: args.cardFontFamily,
         renderHtml: args.renderHtml,
       });
     }
@@ -186,7 +195,10 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
         cardMinHeight: args.cardMinHeight,
         cardBackground: args.cardBackground,
         cardBorder: args.cardBorder,
+        cardBorderRadius: args.cardBorderRadius,
         cardColor: args.cardColor,
+        cardFontSize: args.cardFontSize,
+        cardFontFamily: args.cardFontFamily,
       },
     );
   };
@@ -244,7 +256,10 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
         cardMinHeight: args.cardMinHeight,
         cardBackground: args.cardBackground,
         cardBorder: args.cardBorder,
+        cardBorderRadius: args.cardBorderRadius,
         cardColor: args.cardColor,
+        cardFontSize: args.cardFontSize,
+        cardFontFamily: args.cardFontFamily,
         renderHtml: args.renderHtml,
       });
     }
@@ -262,7 +277,10 @@ export async function runBlockEndFlow(args: RunBlockUiFlowArgs): Promise<void> {
     cardMinHeight: args.cardMinHeight,
     cardBackground: args.cardBackground,
     cardBorder: args.cardBorder,
+    cardBorderRadius: args.cardBorderRadius,
     cardColor: args.cardColor,
+    cardFontSize: args.cardFontSize,
+    cardFontFamily: args.cardFontFamily,
     renderHtml: args.renderHtml,
   });
   await runInsertionGroups(args.afterPostInsertions, "blockEndAfterPost");
@@ -331,7 +349,10 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
     cardMinHeight: args.cardMinHeight,
     cardBackground: args.cardBackground,
     cardBorder: args.cardBorder,
+    cardBorderRadius: args.cardBorderRadius,
     cardColor: args.cardColor,
+    cardFontSize: args.cardFontSize,
+    cardFontFamily: args.cardFontFamily,
     renderHtml: args.renderHtml,
   });
   for (let idx = 0; idx < (args.afterEndPages ?? []).length; idx += 1) {

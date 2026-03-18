@@ -42,7 +42,15 @@ export interface SpeakTextOptions {
   /** Volume 0-1. Default 1. */
   volume?: number;
   /**
-   * BCP-47 language/locale tag used to select a voice (e.g. "en-US").
+   * Prioritised list of voice names to try (exact match, case-insensitive).
+   * The first name that resolves to an available voice is used.
+   * E.g. ["Google US English", "Microsoft David - English (United States)"]
+   * Falls back to `lang` matching, then browser default, if none are found.
+   */
+  voiceNames?: string[];
+  /**
+   * BCP-47 language/locale tag used as a fallback voice selector (e.g. "en-US").
+   * Used only if no `voiceNames` match is found.
    * Falls back to the browser default if no matching voice is found.
    */
   lang?: string;
@@ -269,12 +277,23 @@ export class AudioService {
     utterance.pitch  = Math.max(0,   Math.min(2,  Number(options?.pitch  ?? 1)));
     utterance.volume = Math.max(0,   Math.min(1,  Number(options?.volume ?? 1)));
 
-    if (options?.lang) {
+    // Voice selection: try named voices first, then lang prefix, then browser default.
+    const voices = window.speechSynthesis.getVoices();
+    let selectedVoice: SpeechSynthesisVoice | undefined;
+    if (options?.voiceNames?.length) {
+      for (const name of options.voiceNames) {
+        selectedVoice = voices.find((v) => v.name.toLowerCase() === name.toLowerCase());
+        if (selectedVoice) break;
+      }
+    }
+    if (!selectedVoice && options?.lang) {
+      selectedVoice = voices.find((v) => v.lang.startsWith(options.lang!));
+    }
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang  = selectedVoice.lang;
+    } else if (options?.lang) {
       utterance.lang = options.lang;
-      // Pick the first available voice that matches the requested lang.
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find((v) => v.lang.startsWith(options.lang!));
-      if (match) utterance.voice = match;
     }
 
     this.activeUtterances.add(utterance);

@@ -1,4 +1,22 @@
 {
+  "display": {
+    "frameBackground": "#fffaff",
+    "fixationFontSizePx": 20,
+    "fixationFontWeight": 300,
+    "stimulusFontSizePx": 30,
+    "frameBorder": "2px solid #DA70D6"
+  },
+  "ui": {
+    "pageBackground": "linear-gradient(135deg, #fdfcfb 0%, #e2d1f9 100%)",
+    "cardWidth": "600px",
+    "cardMinHeight": "400px",
+    "cardBackground": "rgba(255, 255, 255, 0.95)",
+    "cardBorder": "1px solid #DA70D6",
+    "cardBorderRadius": "12px",
+    "cardColor": "#2A2431",
+    "cardFontSize": "1.2rem",
+    "cardFontFamily": "system-ui, -apple-system, sans-serif"
+  },
   "task": {
     "title": "NBack PM Text",
     "rtTask": {
@@ -6,7 +24,7 @@
       "timing": {
         "trialDurationMs": 3000,
         "fixationOnsetMs": 250,
-        "fixationDurationMs": 500,
+        "fixationDurationMs": 250,
         "stimulusOnsetMs": 750,
         "stimulusDurationMs": 2250,
         "responseWindowStartMs": 750,
@@ -50,24 +68,6 @@
   "mapping": {
     "targetKey": "m",
     "nonTargetKey": "z"
-  },
-  "display": {
-    "frameBackground": "#fffaff",
-    "fixationFontSizePx": 32,
-    "fixationFontWeight": 400,
-    "stimulusFontSizePx": 30,
-    "frameBorder": "2px solid #DA70D6"
-  },
-  "ui": {
-    "pageBackground": "linear-gradient(135deg, #fdfcfb 0%, #e2d1f9 100%)",
-    "cardWidth": "600px",
-    "cardMinHeight": "400px",
-    "cardBackground": "rgba(255, 255, 255, 0.95)",
-    "cardBorder": "1px solid #DA70D6",
-    "cardBorderRadius": "12px",
-    "cardColor": "#2A2431",
-    "cardFontSize": "1.1rem",
-    "cardFontFamily": "system-ui, -apple-system, sans-serif"
   },
   "instructions": {
     "pages": [

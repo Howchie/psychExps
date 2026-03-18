@@ -30,6 +30,8 @@ import { goNoGoAdapter } from "@experiments/task-go-no-go";
 import { matbTrackingAdapter } from "@experiments/task-matb-tracking";
 import { matbSysmonAdapter } from "@experiments/task-matb-sysmon";
 import { matbResmanAdapter } from "@experiments/task-matb-resman";
+import { matbCommsAdapter } from "@experiments/task-matb-comms";
+import { matbAdapter } from "@experiments/task-matb";
 
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
@@ -54,6 +56,8 @@ async function bootstrap(): Promise<void> {
     matbTrackingAdapter,
     matbSysmonAdapter,
     matbResmanAdapter,
+    matbCommsAdapter,
+    matbAdapter,
   ];
   const adapterMap = buildTaskMap(adapters);
 

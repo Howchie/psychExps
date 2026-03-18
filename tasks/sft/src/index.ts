@@ -281,8 +281,12 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   applyTaskInstructionConfig(context.taskConfig, {
     ...parsed.instructions,
     blockSummary: {
+      ...(asObject(parsed.blockSummary) ?? {}),
       enabled: true,
-      metrics: { correctField: "correct" },
+      metrics: {
+        ...(asObject(asObject(parsed.blockSummary)?.metrics) ?? {}),
+        correctField: "correct",
+      },
     },
   });
   return orchestrator.run({
@@ -296,6 +300,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
     runTrial: async ({ block, blockIndex, trial, trialIndex }) => {
       if (!jsPsych) throw new Error("jsPsych not initialized");
       let feedbackView: { text: string; color: string } | null = null;
+      let lastTrialResult: TrialRecord | null = null;
       const timeline: any[] = [];
       appendDotTrialTimeline({
         timeline,
@@ -355,6 +360,8 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
             trialType: "sft",
           });
 
+          lastTrialResult = mapRawToSftRecord(trialData, context.selection.participant.participantId);
+
           eventLogger.emit(
             "trial_complete",
             {
@@ -402,11 +409,9 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
         });
       }
 
-      const beforeCount = jsPsych.data.get().values().length;
       await runJsPsychTimeline(jsPsych, timeline);
-      const deltaRows = jsPsych.data.get().values().slice(beforeCount) as Array<Record<string, unknown>>;
-      const record = collectMainTrialRecords(deltaRows, context.selection.participant.participantId).at(-1);
-      if (!record) {
+
+      if (!lastTrialResult) {
         throw new Error(`SFT trial record missing for block=${block.id}, trial=${trial.id}`);
       }
 
@@ -1250,38 +1255,32 @@ function randomInt(min: number, max: number, rng: () => number): number {
 
 
 
-function collectMainTrialRecords(rows: Array<Record<string, unknown>>, participantId: string): TrialRecord[] {
-  const output: TrialRecord[] = [];
-  for (const row of rows) {
-    if (row.phase !== "main_response_window") continue;
+function mapRawToSftRecord(row: Record<string, unknown>, participantId: string): TrialRecord {
+  const channel1 = Number(row.channel1);
+  const channel2 = Number(row.channel2);
+  const trialIndex = Number(row.trialIndex);
+  const rt = Number(row.rt);
+  const correct = Number(row.correct);
 
-    const channel1 = Number(row.channel1);
-    const channel2 = Number(row.channel2);
-    const trialIndex = Number(row.trialIndex);
-    const rt = Number(row.rt);
-    const correct = Number(row.correct);
-
-    output.push({
-      participantId: asString(row.participantId) || participantId,
-      blockId: asString(row.blockId) || "",
-      blockLabel: asString(row.blockLabel) || "",
-      blockRule: asString(row.blockRule) || "",
-      trialId: asString(row.trialId) || "",
-      trialIndex: Number.isFinite(trialIndex) ? trialIndex : -1,
-      rule: asString(row.rule) || "",
-      layout: asString(row.layout) || "",
-      stimCode: asString(row.stimCode) || "",
-      channel1: Number.isFinite(channel1) ? channel1 : 0,
-      channel2: Number.isFinite(channel2) ? channel2 : 0,
-      stimCategory: asString(row.stimCategory) || "",
-      expectedCategory: asString(row.expectedCategory) || "",
-      responseCategory: asString(row.responseCategory) || "timeout",
-      responseKey: asString(row.responseKey) || "",
-      rt: Number.isFinite(rt) ? rt : -1,
-      correct: correct === 1 ? 1 : 0,
-    });
-  }
-  return output;
+  return {
+    participantId: asString(row.participantId) || participantId,
+    blockId: asString(row.blockId) || "",
+    blockLabel: asString(row.blockLabel) || "",
+    blockRule: asString(row.blockRule) || "",
+    trialId: asString(row.trialId) || "",
+    trialIndex: Number.isFinite(trialIndex) ? trialIndex : -1,
+    rule: asString(row.rule) || "",
+    layout: asString(row.layout) || "",
+    stimCode: asString(row.stimCode) || "",
+    channel1: Number.isFinite(channel1) ? channel1 : 0,
+    channel2: Number.isFinite(channel2) ? channel2 : 0,
+    stimCategory: asString(row.stimCategory) || "",
+    expectedCategory: asString(row.expectedCategory) || "",
+    responseCategory: asString(row.responseCategory) || "timeout",
+    responseKey: asString(row.responseKey) || "",
+    rt: Number.isFinite(rt) ? rt : -1,
+    correct: correct === 1 ? 1 : 0,
+  };
 }
 
 function clampUnitRange(value: number, min: number, max: number): number {

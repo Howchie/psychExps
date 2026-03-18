@@ -87,8 +87,12 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
     applyTaskInstructionConfig(context.taskConfig, {
       ...parsed.instructions,
       blockSummary: {
+        ...(asObject(parsed.instructions.blockSummary) ?? {}),
         enabled: true,
-        metrics: { correctField: "responseCorrect" },
+        metrics: {
+          ...(asObject(asObject(parsed.instructions.blockSummary)?.metrics) ?? {}),
+          correctField: "responseCorrect",
+        },
       },
     });
     const root = context.container;
@@ -161,9 +165,10 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
 
         await runJsPsychTimeline(jsPsych, timeline);
 
-        const trialData = readNbackTrialResponseRow(timelineCapture, block.blockIndex, trial.trialIndex);
-        const records = collectNbackRecords([trialData], runtime.participantId, runtime.variantId);
-        return records[0];
+        if (!timelineCapture.responseWindowRow) {
+          throw new Error(`Missing n-back response data for block ${block.blockIndex}, trial ${trial.trialIndex}.`);
+        }
+        return mapRawToNbackRecord(timelineCapture.responseWindowRow, runtime.participantId, runtime.variantId);
       },
       onBlockEnd: (ctx) => {
         const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
@@ -697,43 +702,28 @@ function resolveAllowedKeysForNback(semantics: ResponseSemantics, block: Planned
   return Array.from(keys);
 }
 
-function collectNbackRecords(rows: Array<Record<string, unknown>>, participantId: string, variantId: string): TrialRecord[] {
-  const output: TrialRecord[] = [];
-  for (const row of rows) {
-    if (row.phase !== "nback_response_window") continue;
-    output.push({
-      participantId: asString(row.participantId) || participantId,
-      variantId: asString(row.variantId) || variantId,
-      blockLabel: asString(row.blockLabel) || "",
-      blockIndex: Number(row.blockIndex ?? -1),
-      blockType: asString(row.blockType) || "",
-      nLevel: Number(row.nLevel ?? -1),
-      trialIndex: Number(row.trialIndex ?? -1),
-      trialType: asString(row.trialType) || "",
-      trial_code: (asString(row.trialType) || "").match(/^L\d+$/) ? `lure_${(asString(row.trialType) || "").substring(1)}` : asString(row.trialType) || "",
-      item: asString(row.item) || "",
-      stimulusPath: asString(row.stimulusPath) || "",
-      sourceCategory: asString(row.sourceCategory) || "",
-      itemCategory: asString(row.itemCategory) || "",
-      correctResponse: asString(row.correctResponse) || "",
-      responseKey: typeof row.responseKey === "string" ? normalizeKey(row.responseKey) : "",
-      responseRtMs: Number(row.responseRtMs ?? -1),
-      responseCorrect: Number(row.responseCorrect ?? 0) === 1 ? 1 : 0,
-      clockTime: asString(row.clockTime) || "",
-      clockTimeUnixMs: Number(row.clockTimeUnixMs ?? -1),
-    });
-  }
-  return output;
-}
-
-function readNbackTrialResponseRow(
-  capture: NbackTrialCapture,
-  blockIndex: number,
-  trialIndex: number,
-): Record<string, unknown> {
-  const row = capture.responseWindowRow;
-  if (row && Number(row.blockIndex) === blockIndex && Number(row.trialIndex) === trialIndex) return row;
-  throw new Error(`Missing n-back response window data for block ${blockIndex}, trial ${trialIndex}.`);
+function mapRawToNbackRecord(row: Record<string, unknown>, participantId: string, variantId: string): TrialRecord {
+  return {
+    participantId: asString(row.participantId) || participantId,
+    variantId: asString(row.variantId) || variantId,
+    blockLabel: asString(row.blockLabel) || "",
+    blockIndex: Number(row.blockIndex ?? -1),
+    blockType: asString(row.blockType) || "",
+    nLevel: Number(row.nLevel ?? -1),
+    trialIndex: Number(row.trialIndex ?? -1),
+    trialType: asString(row.trialType) || "",
+    trial_code: (asString(row.trialType) || "").match(/^L\d+$/) ? `lure_${(asString(row.trialType) || "").substring(1)}` : asString(row.trialType) || "",
+    item: asString(row.item) || "",
+    stimulusPath: asString(row.stimulusPath) || "",
+    sourceCategory: asString(row.sourceCategory) || "",
+    itemCategory: asString(row.itemCategory) || "",
+    correctResponse: asString(row.correctResponse) || "",
+    responseKey: typeof row.responseKey === "string" ? normalizeKey(row.responseKey) : "",
+    responseRtMs: Number(row.responseRtMs ?? -1),
+    responseCorrect: Number(row.responseCorrect ?? 0) === 1 ? 1 : 0,
+    clockTime: asString(row.clockTime) || "",
+    clockTimeUnixMs: Number(row.clockTimeUnixMs ?? -1),
+  };
 }
 
 function parseNbackConfig(
@@ -1419,7 +1409,6 @@ function restoreNbackRootPresentation(root: HTMLElement, prior: RootPresentation
 
 export const __testing__ = {
   appendJsPsychNbackTrial,
-  readNbackTrialResponseRow,
   applyNbackRootPresentation,
   restoreNbackRootPresentation,
 };
