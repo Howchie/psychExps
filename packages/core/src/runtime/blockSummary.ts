@@ -12,6 +12,7 @@ export interface BlockSummaryWhen {
 export interface BlockSummaryMetrics {
   correctField: string;
   rtField: string;
+  metricField?: string;
 }
 
 export type BlockSummaryWhereValue = string | number | boolean;
@@ -36,6 +37,7 @@ export interface BlockSummaryStats {
   accuracyPct?: number;
   meanRtMs?: number;
   validRtCount?: number;
+  meanMetric?: number;
 }
 
 export interface BlockSummaryModel {
@@ -211,7 +213,7 @@ export function computeBlockSummaryStats(args: {
   trialResults: unknown[];
   where?: BlockSummaryWhere;
   metrics: BlockSummaryMetrics;
-}): { total: number; correct: number; accuracyPct: number; meanRtMs: number; validRtCount: number } {
+}): { total: number; correct: number; accuracyPct: number; meanRtMs: number; validRtCount: number; meanMetric: number } {
   const { trialResults, where, metrics } = args;
   const rows = Array.isArray(trialResults) ? trialResults : [];
   const filteredRows = rows.filter((row) => {
@@ -230,6 +232,8 @@ export function computeBlockSummaryStats(args: {
   let correct = 0;
   let rtSum = 0;
   let validRtCount = 0;
+  let metricSum = 0;
+  let validMetricCount = 0;
   for (const row of filteredRows) {
     const record = asObject(row);
     const correctRaw = record ? record[metrics.correctField] : null;
@@ -240,10 +244,29 @@ export function computeBlockSummaryStats(args: {
       rtSum += rt;
       validRtCount += 1;
     }
+    if (metrics.metricField) {
+      const metricRaw = record ? record[metrics.metricField] : null;
+      if (Array.isArray(metricRaw)) {
+        for (const val of metricRaw) {
+          const metricValue = toFiniteNumber(val);
+          if (metricValue != null) {
+            metricSum += Math.abs(metricValue);
+            validMetricCount += 1;
+          }
+        }
+      } else {
+        const metricValue = toFiniteNumber(metricRaw);
+        if (metricValue != null) {
+          metricSum += Math.abs(metricValue);
+          validMetricCount += 1;
+        }
+      }
+    }
   }
   const accuracyPct = total > 0 ? (correct / total) * 100 : 0;
   const meanRtMs = validRtCount > 0 ? rtSum / validRtCount : 0;
-  return { total, correct, accuracyPct, meanRtMs, validRtCount };
+  const meanMetric = validMetricCount > 0 ? metricSum / validMetricCount : 0;
+  return { total, correct, accuracyPct, meanRtMs, validRtCount, meanMetric };
 }
 
 function applyTemplate(template: string, vars: Record<string, string>): string {
