@@ -1,0 +1,4 @@
+- generic [ref=e25]:
+  - paragraph [ref=e27]: "Lights: F5 should be green (on), F6 should be off. Press the key if either changes."
+  - paragraph [ref=e28]:
+    - button "Continue" [active] [ref=e29] [cursor=pointer]

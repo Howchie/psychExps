@@ -19,6 +19,13 @@ export function toPositiveNumber(value: unknown, fallback: number): number {
   return Math.floor(n);
 }
 
+/** Like toPositiveNumber but preserves decimal precision (no Math.floor). */
+export function toPositiveFloat(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
 export function toNonNegativeNumber(value: unknown, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return fallback;

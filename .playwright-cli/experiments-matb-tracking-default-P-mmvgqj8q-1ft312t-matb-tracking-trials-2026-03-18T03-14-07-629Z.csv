@@ -1,0 +1,5 @@
+participantId,variantId,blockIndex,blockLabel,trialIndex,phase,durationMs,sampleCount,insideCount,outsideCount,distanceSampleCount,meanBoundaryDistancePx,reticleRadiusPx,inputGain,perturbationComponentCount
+P_mmvgqj8q_1ft312t,default,0,Practice,0,practice,30000,1803,265,1538,1803,28.847110155408004,50,1,2
+P_mmvgqj8q_1ft312t,default,1,Main,0,main,60000,3602,49,3553,3602,106.79063530289494,50,1,2
+P_mmvgqj8q_1ft312t,default,1,Main,1,main,60000,3602,49,3553,3602,106.79056218798813,50,1,2
+P_mmvgqj8q_1ft312t,default,1,Main,2,main,60000,3602,49,3553,3602,106.79053231899451,50,1,2

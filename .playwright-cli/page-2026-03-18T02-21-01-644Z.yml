@@ -1,0 +1,4 @@
+- generic [ref=e31]:
+  - paragraph [ref=e33]: "Scales: arrows should stay in the centre zone. Press the key if one drifts to an extreme."
+  - paragraph [ref=e34]:
+    - button "Continue" [active] [ref=e35] [cursor=pointer]

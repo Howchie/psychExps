@@ -52,21 +52,22 @@
     "nonTargetKey": "z"
   },
   "display": {
-    "frameBackground": "#ffffff",
-    "fixationFontSizePx": 24,
+    "frameBackground": "#fffaff",
+    "fixationFontSizePx": 32,
     "fixationFontWeight": 400,
     "stimulusFontSizePx": 30,
-    "frameBorder": "2px solid #FF69B4"
+    "frameBorder": "2px solid #DA70D6"
   },
   "ui": {
-    "pageBackground": "linear-gradient(180deg, #F8C8DC 0%, #FFC0CB 100%)",
-    "cardWidth": "480px",                                                                                                                                                        
-    "cardMinHeight": "380px",                                                                                                                                                    
-    "cardBackground": "#C0FFF4",                                                                                                                                                 
-    "cardBorder": "1px solid #FF69B4",
-    "cardColor": "#461145",
-    "cardFontSize": "50px",
-    "cardFontFamily": "Georgia, serif"
+    "pageBackground": "linear-gradient(135deg, #fdfcfb 0%, #e2d1f9 100%)",
+    "cardWidth": "600px",
+    "cardMinHeight": "400px",
+    "cardBackground": "rgba(255, 255, 255, 0.95)",
+    "cardBorder": "1px solid #DA70D6",
+    "cardBorderRadius": "12px",
+    "cardColor": "#2A2431",
+    "cardFontSize": "1.1rem",
+    "cardFontFamily": "system-ui, -apple-system, sans-serif"
   },
   "instructions": {
     "pages": [

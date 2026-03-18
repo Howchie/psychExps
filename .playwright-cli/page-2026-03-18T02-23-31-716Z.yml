@@ -1,0 +1,4 @@
+- generic [ref=e13]:
+  - paragraph [ref=e15]: Manage the tank system by toggling pumps on and off.
+  - paragraph [ref=e16]:
+    - button "Continue" [active] [ref=e17] [cursor=pointer]

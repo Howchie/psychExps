@@ -1,0 +1,4 @@
+- generic [ref=e19]:
+  - paragraph [ref=e21]: The cursor will drift — compensate with your mouse to keep it inside.
+  - paragraph [ref=e22]:
+    - button "Continue" [active] [ref=e23] [cursor=pointer]

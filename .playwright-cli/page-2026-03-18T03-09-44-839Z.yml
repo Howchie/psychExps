@@ -1,0 +1,8 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - heading "MATB Compensatory Tracking" [level=2] [ref=e7]
+    - paragraph [ref=e8]:
+      - text: "Participant:"
+      - code [ref=e9]: P_mmvgqj8q_1ft312t
+  - paragraph [ref=e10]:
+    - button "Continue" [active] [ref=e11] [cursor=pointer]

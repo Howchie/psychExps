@@ -1,0 +1,6 @@
+- generic [ref=e37]:
+  - generic [ref=e38]:
+    - heading "Practice" [level=3] [ref=e39]
+    - paragraph [ref=e40]: "Block with 1 monitoring trials. Phase: practice."
+  - paragraph [ref=e41]:
+    - button "Continue" [active] [ref=e42] [cursor=pointer]

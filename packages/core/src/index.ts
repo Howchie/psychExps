@@ -17,6 +17,7 @@ export * from "./engines/tracking";
 export * from "./engines/scene";
 export * from "./engines/sceneRenderer";
 export * from "./engines/jspsychRtTask";
+export * from "./engines/audio";
 
 // Infrastructure
 export * from "./infrastructure/config";
@@ -37,6 +38,7 @@ export * from "./infrastructure/redirect";
 export * from "./infrastructure/spatial";
 export * from "./infrastructure/dataSink";
 export * from "./infrastructure/manipulations";
+export * from "./infrastructure/gamepad";
 
 // Runtime
 export * from "./runtime/sessionRunner";
@@ -54,6 +56,8 @@ export * from "./runtime/orchestrator";
 export * from "./runtime/taskInstructions";
 export * from "./runtime/blockSummary";
 export * from "./runtime/blockRepeat";
+export * from "./runtime/scenarioScheduler";
+export * from "./runtime/concurrentRunner";
 
 // Stimuli
 export * from "./stimuli/stimulus";
@@ -69,6 +73,7 @@ export * from "./web/surveys";
 export * from "./web/experiment";
 export * from "./web/feedback";
 export * from "./web/stimulusExport";
+export * from "./web/panelLayout";
 
 // Utils
 export * from "./utils/coerce";

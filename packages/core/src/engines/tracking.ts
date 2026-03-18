@@ -353,6 +353,138 @@ export class TrackingMotionController {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Perturbation controller for compensatory tracking (e.g., MATB pursuit).
+//
+// Unlike TrackingMotionController which moves a *target*, this generates a
+// sinusoidal perturbation signal that displaces a *cursor* from a fixed
+// centre. The participant's input (mouse delta or joystick) adds to a
+// compensation signal that opposes the perturbation.
+//
+// cursor_position = center + perturbation(t) + compensation
+//
+// Based on Comstock & Arnegard (1992) multi-axis tracking model.
+// ---------------------------------------------------------------------------
+
+export interface PerturbationComponent {
+  /** Which axis this component acts on. */
+  axis: "x" | "y";
+  /** Frequency in Hz. */
+  frequencyHz: number;
+  /** Amplitude in pixels (peak displacement). */
+  amplitude: number;
+  /** Phase offset in radians. Default 0. */
+  phaseRad?: number;
+}
+
+export interface PerturbationControllerConfig {
+  /** Sinusoidal perturbation components. */
+  components: PerturbationComponent[];
+  /**
+   * Gain ratio applied to the participant's input before adding to
+   * compensation. 1.0 = input maps 1:1 to pixels. Lower values make the
+   * task harder (less compensation per unit input). Default 1.0.
+   */
+  inputGain?: number;
+  /**
+   * Maximum extent (px) that the cursor can deviate from centre in
+   * either direction on each axis. Prevents the cursor from leaving
+   * the display area. Default: Infinity (no clamping).
+   */
+  maxDisplacementPx?: number;
+}
+
+export interface PerturbationState {
+  /** Current cursor X (centre-relative). */
+  cursorX: number;
+  /** Current cursor Y (centre-relative). */
+  cursorY: number;
+  /** Raw perturbation X at this instant. */
+  perturbationX: number;
+  /** Raw perturbation Y at this instant. */
+  perturbationY: number;
+  /** Accumulated compensation X. */
+  compensationX: number;
+  /** Accumulated compensation Y. */
+  compensationY: number;
+}
+
+export class PerturbationController {
+  private readonly components: Required<PerturbationComponent>[];
+  private readonly inputGain: number;
+  private readonly maxDisplacementPx: number;
+
+  private elapsedSec = 0;
+  private compensationX = 0;
+  private compensationY = 0;
+
+  constructor(config: PerturbationControllerConfig) {
+    this.components = (config.components ?? []).map((c) => ({
+      axis: c.axis,
+      frequencyHz: Math.max(0, Number(c.frequencyHz) || 0),
+      amplitude: Math.max(0, Number(c.amplitude) || 0),
+      phaseRad: Number(c.phaseRad) || 0,
+    }));
+    this.inputGain = Number(config.inputGain) || 1;
+    this.maxDisplacementPx = Number(config.maxDisplacementPx) || Infinity;
+  }
+
+  /**
+   * Advance time and return the current cursor state.
+   * @param dtMs  Delta time in milliseconds.
+   * @param inputDeltaX  Participant input delta this frame (pixels, raw).
+   * @param inputDeltaY  Participant input delta this frame (pixels, raw).
+   */
+  step(dtMs: number, inputDeltaX: number, inputDeltaY: number): PerturbationState {
+    const dtSec = Math.max(0, Number(dtMs) || 0) / 1000;
+    this.elapsedSec += dtSec;
+
+    // Accumulate compensation from participant input.
+    this.compensationX += (Number(inputDeltaX) || 0) * this.inputGain;
+    this.compensationY += (Number(inputDeltaY) || 0) * this.inputGain;
+
+    // Compute perturbation signal.
+    let pertX = 0;
+    let pertY = 0;
+    for (const c of this.components) {
+      const val = c.amplitude * Math.sin(2 * Math.PI * c.frequencyHz * this.elapsedSec + c.phaseRad);
+      if (c.axis === "x") pertX += val;
+      else pertY += val;
+    }
+
+    // Cursor = perturbation + compensation, clamped.
+    const max = this.maxDisplacementPx;
+    const cursorX = clamp(pertX + this.compensationX, -max, max);
+    const cursorY = clamp(pertY + this.compensationY, -max, max);
+
+    return {
+      cursorX,
+      cursorY,
+      perturbationX: pertX,
+      perturbationY: pertY,
+      compensationX: this.compensationX,
+      compensationY: this.compensationY,
+    };
+  }
+
+  /** Get the current state without advancing time. */
+  getState(): PerturbationState {
+    return this.step(0, 0, 0);
+  }
+
+  /** Reset compensation and elapsed time to zero. */
+  reset(): void {
+    this.elapsedSec = 0;
+    this.compensationX = 0;
+    this.compensationY = 0;
+  }
+
+  /** Current elapsed time in seconds. */
+  getElapsedSec(): number {
+    return this.elapsedSec;
+  }
+}
+
 function normalizeBounds(bounds: TrackingMotionBounds): Required<TrackingMotionBounds> {
   const widthPx = Math.max(1, Number(bounds.widthPx) || 1);
   const heightPx = Math.max(1, Number(bounds.heightPx) || 1);

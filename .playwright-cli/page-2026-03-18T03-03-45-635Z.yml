@@ -1,0 +1,6 @@
+- generic [ref=e41]:
+  - generic [ref=e42]:
+    - heading "Main" [level=3] [ref=e43]
+    - paragraph [ref=e44]: "Block with 3 tracking trials. Phase: main."
+  - paragraph [ref=e45]:
+    - button "Continue" [active] [ref=e46] [cursor=pointer]

@@ -1,0 +1,9 @@
+[     115ms] [ERROR] WebSocket connection to 'wss://localhost/exp/__vite_hmr?token=8AwClgzijlEo' failed: Error in connection establishment: net::ERR_CERT_COMMON_NAME_INVALID @ http://localhost:5175/@vite/client:801
+[     115ms] [ERROR] [vite] failed to connect to websocket (Error: WebSocket closed without opened.).  @ http://localhost:5175/@vite/client:840
+[     179ms] Error: WebSocket closed without opened.
+    at WebSocket.<anonymous> (http://localhost:5175/@vite/client:454:22)
+[     221ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5175/assets/lib/jatos-publix/javascripts/jatos.js:0
+[     224ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5175/jatos/assets/lib/jatos-publix/javascripts/jatos.js:0
+[     227ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5175/jatos/jatos.js:0
+[     234ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5175/jatos.js:0
+[     237ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5175/jatos.js:0

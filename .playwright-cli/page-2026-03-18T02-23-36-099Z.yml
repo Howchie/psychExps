@@ -1,0 +1,4 @@
+- generic [ref=e31]:
+  - paragraph [ref=e33]: Pumps may fail (turn red) — failed pumps cannot be toggled until restored.
+  - paragraph [ref=e34]:
+    - button "Continue" [active] [ref=e35] [cursor=pointer]

@@ -26,6 +26,9 @@ import { trackingAdapter } from "@experiments/task-tracking";
 import { changeDetectionAdapter } from "@experiments/task-change-detection";
 import { flankerAdapter } from "@experiments/task-flanker";
 import { goNoGoAdapter } from "@experiments/task-go-no-go";
+import { matbTrackingAdapter } from "@experiments/task-matb-tracking";
+import { matbSysmonAdapter } from "@experiments/task-matb-sysmon";
+import { matbResmanAdapter } from "@experiments/task-matb-resman";
 
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
@@ -46,6 +49,9 @@ async function bootstrap(): Promise<void> {
     changeDetectionAdapter,
     flankerAdapter,
     goNoGoAdapter,
+    matbTrackingAdapter,
+    matbSysmonAdapter,
+    matbResmanAdapter,
   ];
   const adapterMap = buildTaskMap(adapters);
 
