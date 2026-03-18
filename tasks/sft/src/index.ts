@@ -438,7 +438,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
         );
       }
 
-      return record;
+      return lastTrialResult;
     },
     onTaskStart: () => {
       jsPsych = initStandardJsPsych({ displayElement: root });
