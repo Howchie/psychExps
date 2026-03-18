@@ -354,12 +354,20 @@ function fitWaldAnalytic(rtWindow: number[], options: WaldFitOptions): WaldFitRe
     throw new Error(`t0=${t0} must be less than min RT=${minRt}.`);
   }
 
-  const shifted = rt.map((value) => value - t0).filter((value) => value > 0);
-  if (shifted.length < 1) throw new Error("No RT values remain after subtracting t0.");
+  let n = 0;
+  let s1 = 0;
+  let sInv = 0;
 
-  const n = shifted.length;
-  const s1 = shifted.reduce((sum, value) => sum + value, 0);
-  const sInv = shifted.reduce((sum, value) => sum + 1 / value, 0);
+  for (let i = 0; i < rt.length; i += 1) {
+    const value = rt[i] - t0;
+    if (value > 0) {
+      n += 1;
+      s1 += value;
+      sInv += 1 / value;
+    }
+  }
+
+  if (n < 1) throw new Error("No RT values remain after subtracting t0.");
 
   const prior = options.prior;
   const term1 = prior.beta0 + ((prior.mu0 * prior.mu0 * prior.precision0 + sInv) / 2)
