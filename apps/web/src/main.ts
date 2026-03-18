@@ -22,7 +22,9 @@ import { sftAdapter } from "@experiments/task-sft";
 import { nbackAdapter } from "@experiments/task-nback";
 import { bricksAdapter } from "@experiments/task-bricks";
 import { stroopAdapter } from "@experiments/task-stroop";
-import { trackingAdapter } from "@experiments/task-tracking";
+import { trackingAdapter,
+   } from "@experiments/task-tracking";
+import { rdkAdapter } from "@experiments/task-rdk";
 import { changeDetectionAdapter } from "@experiments/task-change-detection";
 import { flankerAdapter } from "@experiments/task-flanker";
 import { goNoGoAdapter } from "@experiments/task-go-no-go";
@@ -46,6 +48,7 @@ async function bootstrap(): Promise<void> {
     bricksAdapter,
     stroopAdapter,
     trackingAdapter,
+  rdkAdapter,
     changeDetectionAdapter,
     flankerAdapter,
     goNoGoAdapter,

@@ -16,6 +16,7 @@ export * from "./engines/conditions";
 export * from "./engines/tracking";
 export * from "./engines/scene";
 export * from "./engines/sceneRenderer";
+export * from "./engines/noise";
 export * from "./engines/jspsychRtTask";
 export * from "./engines/audio";
 

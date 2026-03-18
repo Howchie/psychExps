@@ -2410,6 +2410,69 @@ export class ConveyorRenderer {
     this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
   }
 
+  queuePracticeFeedback(clearEvents: any[] = []) {
+    if (!Array.isArray(clearEvents) || clearEvents.length === 0) {
+      return;
+    }
+    const clearCfg = this._resolveClearAnimationConfig();
+    if (!clearCfg.enable) {
+      return;
+    }
+    const perfCfg = this.config?.display?.performance || {};
+    const maxEffects = Math.max(0, Number(perfCfg.maxActiveEffects ?? 180));
+    clearEvents.forEach((entry) => {
+      if (this.effectVisuals.length >= maxEffects) {
+        this.perfStats.effectDropsSkipped += 1;
+        return;
+      }
+      const holdDuration = Math.max(0, Number(entry?.hold_ms ?? entry?.holdDurationMs ?? 0));
+      const width = Math.max(1, Number(entry?.width ?? this.config?.display?.brickWidth ?? 1));
+      const height = Math.max(1, Number(entry?.height ?? this.config?.display?.brickHeight ?? 1));
+      const centerX = Number(entry?.x ?? 0) + width * 0.5;
+      const centerY = Number(entry?.y ?? 0) + height * 0.5;
+      const startY = centerY - Math.max(1, height * 0.2) - clearCfg.startOffsetYPx;
+      const label = `${Math.round(holdDuration)} ms`;
+      const textSize = Math.max(
+        clearCfg.textMinSizePx,
+        Math.min(clearCfg.textMaxSizePx, height * clearCfg.textSizeFactor)
+      );
+      const container = new PIXI.Container();
+      container.x = this.pixelSnapBricks ? Math.round(centerX) : centerX;
+      container.y = this.pixelSnapBricks ? Math.round(startY) : startY;
+
+      const text = new PIXI.Text(label, {
+        fill: toPixiColor(clearCfg.textColor),
+        fontSize: textSize,
+        fontFamily: clearCfg.textFontFamily,
+        fontWeight: clearCfg.textFontWeight as PIXI.TextStyleFontWeight,
+        stroke: toPixiColor(clearCfg.textStrokeColor),
+        strokeThickness: clearCfg.textStrokeThickness,
+        dropShadow: true,
+        dropShadowColor: toPixiColor(clearCfg.textShadowColor),
+        dropShadowBlur: clearCfg.textShadowBlur,
+        dropShadowDistance: clearCfg.textShadowDistance,
+      });
+
+      const totalWidth = text.width;
+      const left = -totalWidth * 0.5;
+      text.x = left;
+      text.y = -text.height * 0.5;
+      container.addChild(text);
+
+      this.effectLayer.addChild(container);
+      this.effectVisuals.push({
+        kind: 'clear_points_pop',
+        node: container,
+        elapsedMs: 0,
+        durationMs: clearCfg.timeoutMs,
+        startY: container.y,
+        risePx: clearCfg.risePx,
+      });
+      this.perfStats.clearEffectsQueued += 1;
+    });
+    this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
+  }
+
   queueDropEffects(dropEvents: any[] = []) {
     if (!Array.isArray(dropEvents) || dropEvents.length === 0) {
       return;

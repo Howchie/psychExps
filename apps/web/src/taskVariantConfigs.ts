@@ -10,6 +10,7 @@ export const taskDefaults: Record<string, JSONObject> = {
   bricks: {},
   stroop: {},
   tracking: {},
+  rdk: {},
   change_detection: {},
 };
 

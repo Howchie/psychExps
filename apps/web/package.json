@@ -16,6 +16,7 @@
     "@experiments/task-bricks": "0.1.0",
     "@experiments/task-stroop": "0.1.0",
     "@experiments/task-tracking": "0.1.0",
+    "@experiments/task-rdk": "0.1.0",
     "@experiments/task-change-detection": "0.1.0",
     "@experiments/task-flanker": "0.1.0",
     "@experiments/task-go-no-go": "0.1.0",

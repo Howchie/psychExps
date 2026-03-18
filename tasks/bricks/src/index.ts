@@ -45,6 +45,7 @@ import {
   type ConveyorTrialDrtRuntime,
   type ConveyorTrialDrtRuntimeBindings,
 } from './runtime/runConveyorTrial.js';
+import { runHoldDurationPractice } from './runtime/runHoldDurationPractice.js';
 
 interface BlockPlanItem {
   index: number;
@@ -233,15 +234,32 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           };
         }
 
-        let record = await runConveyorTrial({
-          displayElement: stageHost,
-          blockLabel: block.label,
-          blockIndex: block.index,
-          trialIndex,
-          config: trial,
-          drtRuntime: injectedDrtRuntime,
-          hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
-        });
+        let record;
+        const isHoldDurationPractice =
+          block.isPractice &&
+          (trial as any)?.bricks?.completionMode === 'hold_duration';
+
+        if (isHoldDurationPractice) {
+          record = await runHoldDurationPractice({
+            displayElement: stageHost,
+            blockLabel: block.label,
+            blockIndex: block.index,
+            trialIndex,
+            config: trial,
+            drtRuntime: injectedDrtRuntime,
+            hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
+          });
+        } else {
+          record = await runConveyorTrial({
+            displayElement: stageHost,
+            blockLabel: block.label,
+            blockIndex: block.index,
+            trialIndex,
+            config: trial,
+            drtRuntime: injectedDrtRuntime,
+            hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
+          });
+        }
 
         if (resolvedDrtConfig.enabled && resolvedDrtConfig.scope === "trial") {
           const trialHandle = moduleRunner.getActiveHandle({
