@@ -43,6 +43,7 @@ export interface HoldDurationPracticeData {
   drt: unknown;
   timeline_events: Array<Record<string, unknown>>;
   performance?: Record<string, unknown>;
+  performance_deltas?: number[];
 }
 
 export interface HoldDurationPracticeDrtRuntimeBindings {
@@ -191,6 +192,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     misses: 0,
     falseAlarms: 0,
   };
+  const performanceDeltas: number[] = [];
   const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
   let lastHudSignature = '';
   const autoProfile = getAutoResponderProfile();
@@ -217,10 +219,28 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       const brick = gameState.bricks.get(brickId);
       if (brick) {
         // Queue practice feedback manually on every hold duration completion
+        const params = resolvedCfg.bricks?.completionParams || {};
+        const targetHoldMs = Math.max(50, Number(brick.targetHoldMs ?? params.target_hold_ms ?? 700));
+        const scaledPerformanceDelta = (holdDurationMs - targetHoldMs) / targetHoldMs;
+
+        logEvent({
+          type: 'practice_feedback',
+          brick_id: brick.id,
+          conveyor_id: brick.conveyorId,
+          hold_ms: holdDurationMs,
+          target_hold_ms: targetHoldMs,
+          scaled_performance_delta: scaledPerformanceDelta,
+          abs_scaled_performance_delta: Math.abs(scaledPerformanceDelta),
+          time: gameState.elapsed,
+        });
+        performanceDeltas.push(scaledPerformanceDelta);
+
         renderer.queuePracticeFeedback([{
           brickId: brick.id,
           conveyorId: brick.conveyorId,
           holdDurationMs: holdDurationMs,
+          targetHoldMs: targetHoldMs,
+          scaledPerformanceDelta: scaledPerformanceDelta,
           x: brick.x,
           y: brick.y,
           width: brick.width,
@@ -471,7 +491,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         tick_cost_max_ms: frameStats.tickCostMaxMs,
         budget_overrun_ratio: frameStats.frames > 0 ? (frameStats.budgetOverrunFrames / frameStats.frames) : 0,
         severe_ratio: frameStats.frames > 0 ? (frameStats.severeFrames / frameStats.frames) : 0,
-        renderer: rendererPerf
+        renderer: rendererPerf,
       };
       const trialData: HoldDurationPracticeData = {
         block_label: trial.blockLabel,
@@ -487,6 +507,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         drt: drtData,
         timeline_events: timelineEvents,
         performance: perfSummary,
+        performance_deltas: performanceDeltas,
       };
       if (debugCfg.performanceConsole) {
         console.info('[bricks-performance]', perfSummary);
