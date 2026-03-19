@@ -228,7 +228,7 @@ export function computeBlockSummaryStats(args: {
     }
     return true;
   });
-  const total = filteredRows.length;
+  let total = 0;
   let correct = 0;
   let rtSum = 0;
   let validRtCount = 0;
@@ -237,7 +237,16 @@ export function computeBlockSummaryStats(args: {
   for (const row of filteredRows) {
     const record = asObject(row);
     const correctRaw = record ? record[metrics.correctField] : null;
-    if (correctRaw === true || Number(correctRaw) === 1) correct += 1;
+    if (Array.isArray(correctRaw)) {
+      for (const value of correctRaw) {
+        if (value === null || value === undefined) continue;
+        total += 1;
+        if (value === true || Number(value) === 1) correct += 1;
+      }
+    } else {
+      total += 1;
+      if (correctRaw === true || Number(correctRaw) === 1) correct += 1;
+    }
     const rtRaw = record ? record[metrics.rtField] : null;
     const rt = toFiniteNumber(rtRaw);
     if (rt != null && rt >= 0) {

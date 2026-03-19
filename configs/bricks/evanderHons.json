@@ -1,7 +1,7 @@
 {
   "ui": {
     "pageBackground": "linear-gradient(180deg, #DBDBDB 0%, #ADADAD 100%)",
-    "cardWidth": "480px",                                                                                                                                                     
+    "cardWidth": "480px",
     "cardMinHeight": "380px",
     "cardBorder": "1px solid #111111"
   },
@@ -19,9 +19,9 @@
         },
         "stimMode": "border",
         "border": {
-            "widthPx": 10,
-            "radiusPx": 0,
-            "target": "display"
+          "widthPx": 10,
+          "radiusPx": 0,
+          "target": "display"
         },
         "isiSampler": {
           "type": "uniform",
@@ -55,8 +55,8 @@
     "brickHeight": 36,
     "brickCornerRadius": 3,
     "beltTexture": {
-        "scrollSnapMode": "screen",
-        "scrollRenderMode": "auto"
+      "scrollSnapMode": "screen",
+      "scrollRenderMode": "auto"
     },
     "spotlight": {
       "snapMode": "screen",
@@ -154,49 +154,49 @@
           "highlightColor": "#caa987"
         },
         "box_light_brown": {
-            "pattern": "cardboard_block",
-            "baseFillColor": "#b4936b",
-            "baseFillAlpha": 1,
-            "alpha": 0.96,
-            "plankCount": 0,
-            "insetPx": 2,
-            "speckleColor": "#7e5f40",
-            "speckleAlpha": 0.16,
-            "speckleCount": 25,
-            "tapeColor": "#d9c2a2",
-            "tapeAlpha": 0.5,
-            "tapeWidthRatio": 0.10,
-            "tapeOrientation": "horizontal"
+          "pattern": "cardboard_block",
+          "baseFillColor": "#b4936b",
+          "baseFillAlpha": 1,
+          "alpha": 0.96,
+          "plankCount": 0,
+          "insetPx": 2,
+          "speckleColor": "#7e5f40",
+          "speckleAlpha": 0.16,
+          "speckleCount": 25,
+          "tapeColor": "#d9c2a2",
+          "tapeAlpha": 0.5,
+          "tapeWidthRatio": 0.1,
+          "tapeOrientation": "horizontal"
         },
         "box_dark_brown": {
-            "pattern": "cardboard_block",
-            "baseFillColor": "#9A7651",
-            "baseFillAlpha": 1,
-            "alpha": 0.96,
-            "plankCount": 0,
-            "insetPx": 2,
-            "speckleColor": "#7e5f40",
-            "speckleAlpha": 0.16,
-            "speckleCount": 25,
-            "tapeColor": "#d9c2a2",
-            "tapeAlpha": 0.5,
-            "tapeWidthRatio": 0.10,
-            "tapeOrientation": "horizontal"
+          "pattern": "cardboard_block",
+          "baseFillColor": "#9A7651",
+          "baseFillAlpha": 1,
+          "alpha": 0.96,
+          "plankCount": 0,
+          "insetPx": 2,
+          "speckleColor": "#7e5f40",
+          "speckleAlpha": 0.16,
+          "speckleCount": 25,
+          "tapeColor": "#d9c2a2",
+          "tapeAlpha": 0.5,
+          "tapeWidthRatio": 0.1,
+          "tapeOrientation": "horizontal"
         },
         "box_med_brown": {
-            "pattern": "cardboard_block",
-            "baseFillColor": "#A7855E",
-            "baseFillAlpha": 1,
-            "alpha": 0.96,
-            "plankCount": 0,
-            "insetPx": 2,
-            "speckleColor": "#7e5f40",
-            "speckleAlpha": 0.16,
-            "speckleCount": 25,
-            "tapeColor": "#d9c2a2",
-            "tapeAlpha": 0.5,
-            "tapeWidthRatio": 0.10,
-            "tapeOrientation": "horizontal"
+          "pattern": "cardboard_block",
+          "baseFillColor": "#A7855E",
+          "baseFillAlpha": 1,
+          "alpha": 0.96,
+          "plankCount": 0,
+          "insetPx": 2,
+          "speckleColor": "#7e5f40",
+          "speckleAlpha": 0.16,
+          "speckleCount": 25,
+          "tapeColor": "#d9c2a2",
+          "tapeAlpha": 0.5,
+          "tapeWidthRatio": 0.1,
+          "tapeOrientation": "horizontal"
         }
       }
     },
@@ -408,15 +408,15 @@
       "borderRadius": "0",
       "boxShadow": "none",
       "buttonStyle": {
-          "background": "black",
-          "border": "none",
-          "borderRadius": "200px",
-          "padding": "18px 32px",
-          "fontSize": "24px",
-          "outline": "none",
-          "boxShadow": "none"
-       }
-     },
+        "background": "black",
+        "border": "none",
+        "borderRadius": "200px",
+        "padding": "18px 32px",
+        "fontSize": "24px",
+        "outline": "none",
+        "boxShadow": "none"
+      }
+    },
     "statsPresentation": {
       "scopeByMetric": {
         "points": "experiment",
@@ -427,8 +427,12 @@
         {
           "at": "block_end",
           "scope": "experiment",
-          "metrics": ["points"],
-          "when": { "isPractice": true }
+          "metrics": [
+            "points"
+          ],
+          "when": {
+            "isPractice": true
+          }
         }
       ]
     }
@@ -447,6 +451,18 @@
     ]
   },
   "manipulations": [
+    {
+      "id": "difficulty_practice",
+      "label": "Practice speed",
+      "overrides": {
+        "conveyors": {
+          "speedPxPerSec": {
+            "type": "fixed",
+            "value": 12
+          }
+        }
+      }
+    },
     {
       "id": "difficulty_low",
       "label": "Low speed",
@@ -608,23 +624,83 @@
       }
     }
   ],
-    "blocks": [
+  "blocks": [
+    {
+      "label": "HoldDurationPractice",
+      "phase": "practice",
+      "trials": 1,
+      "overrides": {
+        "task": {
+          "modules": {
+            "drt": {
+              "enabled": false
+            }
+          }
+        },
+        "display": {
+          "practiceFeedback": {
+            "colorTooFast": "#FF0000",
+            "colorTooSlow": "#0000FF",
+            "colorGood": "#008000",
+            "goodThresholdMin": -0.15,
+            "goodThresholdMax": 0.15
+          }
+        },
+        "surveys": {
+          "postTrial": []
+        },
+        "trial": {
+          "mode": "max_bricks",
+          "holdDurationPractice": {
+            "requiredPresses": 20,
+            "fullWidthConveyor": true,
+            "centerBrick": true,
+            "hideHud": true,
+            "replenishDelayMs": 250,
+            "useSpotlightWindow": true
+          }
+        }
+      },
+      "preBlockScreens": [
+        "Click on the brick with the left mouse button.\nTry to hold the button for exactly {bricks.completionParams.target_hold_ms} ms and then release it.\nAfter each click you will see the actual time you held the button for.\nThis feedback will be green if you were close to the target time.\n\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow."
+      ],
+      "repeatUntil": {
+        "enabled": true,
+        "maxAttempts": 3,
+        "minTotal": 20,
+        "maxMeanMetric": 0.25,
+        "metrics": {
+          "correctField": "practice_press_results",
+          "metricField": "performance_deltas"
+        }
+      }
+    },
     {
       "label": "Practice1",
       "phase": "practice",
       "trials": 3,
       "overrides": {
-              "task": {
-                  "modules": {
-                    "drt": { "enabled": false }
-                  }
+        "task": {
+          "modules": {
+            "drt": {
+              "enabled": false
             }
-       },
-       "manipulations": [
-        "difficulty_low",
+          }
+        }
+      },
+      "manipulations": [
+        "difficulty_practice",
         "condition_plan"
       ],
-     "afterBlockScreens": [{"html": "Well done!<p>As part of this experiment, you will also be asked to respond to a flashing stimulus called the DRT.<p>Whenever you see the border of the experiment window flash red, like this<p><img src='assets/drt_border.png' alt='DRT example' style='max-width: 480px; width: 100%; height: auto;'/><p>You should press the SPACEBAR as quickly as possible. This will happen repeatedly throughout the conveyor task.<p>"},"We will now do some practice trials putting both tasks together. Remember, use your mouse cursor to open boxes by highlighting the conveyor, and press SPACEBAR whenever you see the red square."]
+      "preBlockScreens": [
+        "Great work!\nNow, we will use this same click-and-hold strategy to open some boxes!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must click and hold for {bricks.completionParams.target_hold_ms} ms several times on each box, until it opens.\nWhen it opens, a new block will be highlighed.\nTry to open as many boxes as possible to collect more coins!\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+      ],
+      "afterBlockScreens": [
+        {
+          "html": "Well done!<p>As part of this experiment, you will also be asked to respond to a flashing stimulus called the DRT.<p>Whenever you see the border of the experiment window flash red, like this<p><img src='assets/drt_border.png' alt='DRT example' style='max-width: 480px; width: 100%; height: auto;'/><p>You should press the SPACEBAR as quickly as possible. This will happen repeatedly throughout the conveyor task.<p>"
+        },
+        "We will now do some practice trials putting both tasks together.\nRemember, use your mouse cursor to open boxes by highlighting the conveyor, and press SPACEBAR whenever you see the red square.\n\nThe conveyors will start to move a little more quickly now."
+      ]
     },
     {
       "label": "Practice2",
@@ -634,7 +710,9 @@
         "difficulty_low",
         "condition_plan"
       ],
-     "afterBlockScreens": ["Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes."]
+      "afterBlockScreens": [
+        "Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes."
+      ]
     },
     {
       "label": "Block1",
@@ -644,7 +722,9 @@
         "difficulty_low",
         "condition_plan"
       ],
-      "afterBlockScreens": ["The conveyors will move a little faster now."]
+      "afterBlockScreens": [
+        "The conveyors will move a little faster now."
+      ]
     },
     {
       "label": "High Difficulty",
@@ -658,15 +738,17 @@
   ],
   "instructions": {
     "introPages": [
-        {"html": "Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit.<p>Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward."
-        },
-        "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it.\n\nYou need to try to hold the mouse button for 1000 ms (1 second), then release it (and do so over and over again).\nThe closer to exactly 1 second you hold the button for, the more of the box will disappear.\nIf you hold the button too long or too short, little-to-none of the brick will be removed.\n\nOnly the highlighted box is currently actionable. Once you clear a box, another random block will be selected for you to work on.\nBy working hard at estimating 1 second holds, you can clear the boxes faster.",
-        "Complete as many boxes as possible before their deadlines.\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+      {
+        "html": "Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit.<p>Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward."
+      },
+      "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it.\n\nYou need to try to hold the mouse button for {bricks.completionParams.target_hold_ms} ms, then release it.\nThe closer to exactly {bricks.completionParams.target_hold_ms} ms you hold the button for, the more of the box will disappear.\nIf you hold the button too long or too short, little-to-none of the box will be removed.\n\nOnly the highlighted box is currently actionable. Once you clear a box, another random box will be highlighted.\nBy working hard at estimating {bricks.completionParams.target_hold_ms} ms holds, you can clear the boxes faster.",
+      "We will start with a practice of the click-and-hold task."
     ],
-   "blockSummary": {
+    "blockSummary": {
       "enabled": false
-   },
-   "showBlockLabel": false,
-   "endPages": "That concludes the experiment.\nThank you very much for participating."
+    },
+    "showBlockIntro": false,
+    "showBlockLabel": false,
+    "endPages": "That concludes the experiment.\nThank you very much for participating."
   }
 }

@@ -19,6 +19,7 @@ import {
   toPositiveNumber,
   toNonNegativeNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   TaskOrchestrator,
   runTrialWithEnvelope,
   sleep,
@@ -353,8 +354,8 @@ function parseConfig(taskConfig: Record<string, unknown>, _selection: SelectionC
       phase: asString(raw.phase) ?? "main",
       trials: toPositiveNumber(raw.trials, 1),
       trialDurationMs: toPositiveNumber(raw.trialDurationMs ?? trialDefaultsRaw.durationMs, 120000),
-      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens ?? raw.preBlockInstructions),
-      afterBlockScreens: toStringScreens(raw.afterBlockScreens ?? raw.postBlockInstructions),
+      beforeBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "before")),
+      afterBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "after")),
       failureSchedule,
       resmanConfig: mergedResmanConfig,
     } satisfies ParsedBlock;

@@ -1,3 +1,6 @@
+# PM placement Monte Carlo simulation:
+cd /data/work/Experiments/tasks/nback && npx vitest run pm-placement-sim.test.ts --reporter=verbose
+
 # Code to build and copy (change paths):
 cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/annikaHons/
 For JATOS deployment, make a single component, add the repo directory with the above commands, set the html to index.html and the component json to:

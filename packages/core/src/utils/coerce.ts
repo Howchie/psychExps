@@ -56,6 +56,29 @@ export function toStringScreens(value: unknown): string[] {
   return asArray(value).map((item) => asString(item)).filter((item): item is string => Boolean(item));
 }
 
+export type BlockScreenSlot = "before" | "after" | "repeatAfter";
+
+const BLOCK_SCREEN_SLOT_KEYS: Record<BlockScreenSlot, string[]> = {
+  before: ["beforeBlockScreens", "preBlockScreens", "preBlockInstructions"],
+  after: ["afterBlockScreens", "postBlockScreens", "postBlockInstructions"],
+  repeatAfter: ["repeatAfterBlockScreens", "repeatPostBlockScreens"],
+};
+
+export function resolveBlockScreenSlotValue(
+  block: Record<string, unknown> | null | undefined,
+  slot: BlockScreenSlot,
+): unknown {
+  const source = block ?? null;
+  if (!source) return undefined;
+  const keys = BLOCK_SCREEN_SLOT_KEYS[slot];
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
 export function asStringArray(value: unknown, fallback: string[]): string[] {
   const list = asArray(value).map((item) => asString(item)).filter((item): item is string => Boolean(item));
   return list.length > 0 ? list : [...fallback];

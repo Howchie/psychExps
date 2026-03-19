@@ -37,6 +37,7 @@ import {
   toFiniteNumber,
   toNumberArray,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   maybeExportStimulusRows,
   collectSurveyEntries,
   createInstructionRenderer,
@@ -778,8 +779,8 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     }
     if (!known.has(manipulationId)) throw new Error(`Unknown manipulation '${manipulationId}' in block '${id}'.`);
     const feedback = parseTrialFeedbackConfig(asObject(b.feedback), feedbackDefaults);
-    const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
-    const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
+    const rawBeforeBlockScreens = resolveBlockScreenSlotValue(b, "before");
+    const rawAfterBlockScreens = resolveBlockScreenSlotValue(b, "after");
     const beforeBlockScreens = toStringScreens(rawBeforeBlockScreens);
     const afterBlockScreens = toStringScreens(rawAfterBlockScreens);
     return { id, label, nTrials, manipulationId, feedback, beforeBlockScreens, afterBlockScreens };

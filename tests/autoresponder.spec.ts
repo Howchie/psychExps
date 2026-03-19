@@ -27,8 +27,9 @@ function installDownloadCapture(page: Page, testInfo: TestInfo): { flush: () => 
 
 test("sft completes in auto mode", async ({ page }, testInfo) => {
   const capture = installDownloadCapture(page, testInfo);
-  await page.goto("/?task=sft&variant=default&auto=true&participant=auto_e2e_sft");
-  await expect(page.getByText("SFT complete")).toBeVisible();
+  const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
+  await page.goto("/?task=sft&variant=default&auto=true&auto_mode=data-only&participant=auto_e2e_sft");
+  await downloadPromise;
   await page.waitForTimeout(1000);
   const files = await capture.flush();
   expect(files.length).toBeGreaterThan(0);
@@ -37,7 +38,7 @@ test("sft completes in auto mode", async ({ page }, testInfo) => {
 test("stroop completes in auto mode", async ({ page }, testInfo) => {
   const capture = installDownloadCapture(page, testInfo);
   const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });
-  await page.goto("/?task=stroop&variant=default&auto=true&participant=auto_e2e_stroop");
+  await page.goto("/?task=stroop&variant=default&auto=true&auto_mode=data-only&participant=auto_e2e_stroop");
   await downloadPromise;
   await page.waitForTimeout(1000);
   const files = await capture.flush();
@@ -70,4 +71,3 @@ test("nback pm_module_export_demo exports stimulus list with trial codes", async
   expect(csv).toContain("pm");
   expect(csv).toMatch(/lure_[0-9]+/);
 });
-

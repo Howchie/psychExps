@@ -44,6 +44,11 @@ export interface HoldDurationPracticeData {
   timeline_events: Array<Record<string, unknown>>;
   performance?: Record<string, unknown>;
   performance_deltas?: number[];
+  practice_press_results?: boolean[];
+  practice_press_count?: number;
+  practice_correct_count?: number;
+  practice_required_presses?: number | null;
+  practice_replenish_delay_ms?: number;
 }
 
 export interface HoldDurationPracticeDrtRuntimeBindings {
@@ -125,17 +130,76 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     trialIndex: trial.trialIndex,
   });
   const resolvedCfg = applyDisplayPreset(cfg, resolvedDisplayPresetId);
+  const trialNode = asRecord(resolvedCfg?.trial) ?? {};
+  const practiceNode = asRecord(trialNode.holdDurationPractice) ?? asRecord((resolvedCfg as any)?.holdDurationPractice) ?? {};
+  const forceFullWidth = practiceNode.fullWidthConveyor !== false;
+  const forceCenteredBrick = practiceNode.centerBrick !== false;
+  const requiredPressesRaw = Number(
+    practiceNode.requiredPresses ??
+    practiceNode.requiredTrials ??
+    practiceNode.requiredHolds ??
+    practiceNode.pressesRequired,
+  );
+  const requiredPresses = Number.isFinite(requiredPressesRaw) ? Math.max(1, Math.floor(requiredPressesRaw)) : null;
+  const replenishDelayRaw = Number(
+    practiceNode.replenishDelayMs ??
+    practiceNode.trialTimeMs ??
+    practiceNode.nextTrialDelayMs,
+  );
+  const replenishDelayMs = Number.isFinite(replenishDelayRaw) ? Math.max(0, Math.floor(replenishDelayRaw)) : 220;
+  const useSpotlightWindow =
+    practiceNode.spotlightWindow === true ||
+    practiceNode.useSpotlightWindow === true;
+  const hidePracticeHud = practiceNode.hideHud !== false;
 
   // Force single stationary conveyor and single brick for practice
   if (!resolvedCfg.conveyors) resolvedCfg.conveyors = {};
   resolvedCfg.conveyors.nConveyors = 1;
   resolvedCfg.conveyors.speedPxPerSec = 0;
+  if (forceFullWidth) {
+    const canvasWidth = Number(resolvedCfg?.display?.canvasWidth);
+    if (Number.isFinite(canvasWidth)) {
+      resolvedCfg.conveyors.lengthPx = Math.max(1, canvasWidth);
+    }
+  }
   if (!resolvedCfg.bricks) resolvedCfg.bricks = {};
   resolvedCfg.bricks.speedPxPerSec = 0;
+  if (!resolvedCfg.bricks.spawn || typeof resolvedCfg.bricks.spawn !== 'object') {
+    resolvedCfg.bricks.spawn = {};
+  }
+  resolvedCfg.bricks.spawn.mode = 'manual';
+  if (resolvedCfg.bricks.forcedSetPlan && typeof resolvedCfg.bricks.forcedSetPlan === 'object') {
+    resolvedCfg.bricks.forcedSetPlan = {
+      ...(resolvedCfg.bricks.forcedSetPlan as Record<string, unknown>),
+      enable: false,
+    };
+  }
+  if (forceCenteredBrick) {
+    resolvedCfg.bricks.forcedSet = [{ conveyorIndex: 0, xFraction: 0.5 }];
+  }
   // Make sure it doesn't try to clear based on standard rules
   if (!resolvedCfg.bricks.completionParams) resolvedCfg.bricks.completionParams = {};
   if (!resolvedCfg.trial) resolvedCfg.trial = {};
+  if (!resolvedCfg.display) resolvedCfg.display = {};
+  if (!resolvedCfg.display.ui || typeof resolvedCfg.display.ui !== "object") {
+    resolvedCfg.display.ui = {};
+  }
+  if (hidePracticeHud) {
+    resolvedCfg.display.ui.showHUD = false;
+  }
   resolvedCfg.trial.isPractice = true;
+  if (useSpotlightWindow) {
+    if (!resolvedCfg.trial.forcedOrder || typeof resolvedCfg.trial.forcedOrder !== "object") {
+      resolvedCfg.trial.forcedOrder = {};
+    }
+    resolvedCfg.trial.forcedOrder.enable = true;
+    resolvedCfg.trial.forcedOrder.switchMode = "on_clear";
+    resolvedCfg.trial.forcedOrder.sequence = [0];
+  }
+  if (requiredPresses !== null) {
+    resolvedCfg.trial.mode = 'max_bricks';
+    resolvedCfg.bricks.maxBricksPerTrial = requiredPresses;
+  }
 
   const injectedDrtRuntime = args.drtRuntime ?? null;
   const legacyDrtRaw = resolveScopedModuleConfig(resolvedCfg, "drt") ?? {};
@@ -179,6 +243,14 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   };
 
   const gameState = new GameState(resolvedCfg, { onEvent: logEvent, seed: baseSeed });
+  if (forceCenteredBrick) {
+    const conveyor = gameState.conveyors[0];
+    const active = gameState.activeBricks[0];
+    if (conveyor && active) {
+      const centerX = Math.max(0, (Number(conveyor.length) - Number(active.width)) * 0.5);
+      active.x = centerX;
+    }
+  }
   const runtimeConveyorLengths = gameState.conveyors.map((conveyor: any) => conveyor.length);
   const difficultyEstimate = estimateTrialDifficulty(gameState, resolvedCfg);
 
@@ -193,6 +265,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     falseAlarms: 0,
   };
   const performanceDeltas: number[] = [];
+  const practicePressResults: boolean[] = [];
+  let pendingReplenish: { brickId: string; dueAtMs: number } | null = null;
   const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
   let lastHudSignature = '';
   const autoProfile = getAutoResponderProfile();
@@ -209,50 +283,66 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     ? Math.max(0, Math.floor(brickQuotaEndDelayMsRaw))
     : (globalEndDelayMs > 0 ? globalEndDelayMs : 3000);
 
+  const processPracticeHold = (brickId: string, holdDurationMs: number, x: number, y: number) => {
+    if (pendingReplenish) {
+      return;
+    }
+    const beforeBrick = gameState.bricks.get(brickId);
+    const holdsBefore = Number(beforeBrick?.holds ?? -1);
+    gameState.handleBrickHold(brickId, holdDurationMs, gameState.elapsed, { x, y });
+
+    const brick = gameState.bricks.get(brickId);
+    const holdRegistered = brick ? Number(brick.holds ?? 0) > holdsBefore : false;
+    if (brick && holdRegistered) {
+      // Queue practice feedback manually on every hold duration completion
+      const params = resolvedCfg.bricks?.completionParams || {};
+      const targetHoldMs = Math.max(50, Number(brick.targetHoldMs ?? params.target_hold_ms ?? 700));
+      const scaledPerformanceDelta = (holdDurationMs - targetHoldMs) / targetHoldMs;
+      const practiceUiCfg = asRecord(resolvedCfg?.display?.practiceFeedback) ?? {};
+      const goodThresholdMin = Number(practiceUiCfg.goodThresholdMin ?? -0.2);
+      const goodThresholdMax = Number(practiceUiCfg.goodThresholdMax ?? 0.2);
+      const isGoodPress = scaledPerformanceDelta >= goodThresholdMin && scaledPerformanceDelta <= goodThresholdMax;
+
+      logEvent({
+        type: 'practice_feedback',
+        brick_id: brick.id,
+        conveyor_id: brick.conveyorId,
+        hold_ms: holdDurationMs,
+        target_hold_ms: targetHoldMs,
+        scaled_performance_delta: scaledPerformanceDelta,
+        abs_scaled_performance_delta: Math.abs(scaledPerformanceDelta),
+        press_correct: isGoodPress,
+        time: gameState.elapsed,
+      });
+      performanceDeltas.push(scaledPerformanceDelta);
+      practicePressResults.push(isGoodPress);
+
+      renderer.queuePracticeFeedback([{
+        brickId: brick.id,
+        conveyorId: brick.conveyorId,
+        holdDurationMs: holdDurationMs,
+        targetHoldMs: targetHoldMs,
+        scaledPerformanceDelta: scaledPerformanceDelta,
+        x: brick.x,
+        y: brick.y,
+        width: brick.width,
+        height: brick.height,
+      }]);
+
+      // Actual visual replenish back to full is delayed (pendingReplenish) so users can learn from the clear state.
+      pendingReplenish = {
+        brickId: brick.id,
+        dueAtMs: gameState.elapsed + replenishDelayMs,
+      };
+    }
+  };
+
   const renderer = new ConveyorRenderer(resolvedCfg, {
     onBrickClick: (brickId: string, x: number, y: number) => {
       gameState.handleBrickInteraction(brickId, gameState.elapsed, { x, y });
     },
     onBrickHold: (brickId: string, holdDurationMs: number, x: number, y: number) => {
-      gameState.handleBrickHold(brickId, holdDurationMs, gameState.elapsed, { x, y });
-
-      const brick = gameState.bricks.get(brickId);
-      if (brick) {
-        // Queue practice feedback manually on every hold duration completion
-        const params = resolvedCfg.bricks?.completionParams || {};
-        const targetHoldMs = Math.max(50, Number(brick.targetHoldMs ?? params.target_hold_ms ?? 700));
-        const scaledPerformanceDelta = (holdDurationMs - targetHoldMs) / targetHoldMs;
-
-        logEvent({
-          type: 'practice_feedback',
-          brick_id: brick.id,
-          conveyor_id: brick.conveyorId,
-          hold_ms: holdDurationMs,
-          target_hold_ms: targetHoldMs,
-          scaled_performance_delta: scaledPerformanceDelta,
-          abs_scaled_performance_delta: Math.abs(scaledPerformanceDelta),
-          time: gameState.elapsed,
-        });
-        performanceDeltas.push(scaledPerformanceDelta);
-
-        renderer.queuePracticeFeedback([{
-          brickId: brick.id,
-          conveyorId: brick.conveyorId,
-          holdDurationMs: holdDurationMs,
-          targetHoldMs: targetHoldMs,
-          scaledPerformanceDelta: scaledPerformanceDelta,
-          x: brick.x,
-          y: brick.y,
-          width: brick.width,
-          height: brick.height,
-        }]);
-
-        // Reset the visual clear progress without destroying the brick
-        brick.clearProgress = 0;
-
-        // Count it as a cleared/completed brick to increment the quota manually
-        gameState.stats.cleared += 1;
-      }
+      processPracticeHold(brickId, holdDurationMs, x, y);
     },
     onBrickHover: (brickId: string, isHovering: boolean, x: number, y: number) => {
       gameState.handleBrickHover(brickId, isHovering, gameState.elapsed, { x, y });
@@ -508,6 +598,11 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         timeline_events: timelineEvents,
         performance: perfSummary,
         performance_deltas: performanceDeltas,
+        practice_press_results: practicePressResults,
+        practice_press_count: practicePressResults.length,
+        practice_correct_count: practicePressResults.filter(Boolean).length,
+        practice_required_presses: requiredPresses,
+        practice_replenish_delay_ms: replenishDelayMs,
       };
       if (debugCfg.performanceConsole) {
         console.info('[bricks-performance]', perfSummary);
@@ -563,10 +658,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
             const candidate = activeBricks[Math.floor(Math.random() * activeBricks.length)] ?? activeBricks[0];
             const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
             const point = candidate?.sprite ?? { x: 0, y: 0 };
-            gameState.handleBrickHold(String(candidate.id), holdDurationMs, gameState.elapsed, {
-              x: Number(point.x ?? 0),
-              y: Number(point.y ?? 0),
-            });
+            processPracticeHold(String(candidate.id), holdDurationMs, Number(point.x ?? 0), Number(point.y ?? 0));
           }
           const interActionDelayMs = sampleAutoInteractionDelayMs() ?? 900;
           nextAutoActionAt = gameState.elapsed + Math.max(40, interActionDelayMs);
@@ -622,15 +714,26 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       }
 
       if (!pendingEnd && enforceBrickQuota) {
-        const completed = gameState.stats.cleared + gameState.stats.dropped;
+        const completed = practicePressResults.length;
         if (completed >= brickQuota) {
           scheduleEnd('brick_quota_met');
         }
       }
 
+      if (pendingReplenish && gameState.elapsed >= pendingReplenish.dueAtMs) {
+        const brick = gameState.bricks.get(pendingReplenish.brickId);
+        if (brick) {
+          brick.clearProgress = 0;
+        }
+        pendingReplenish = null;
+      }
+
       // Re-spawn immediately when cleared to keep it looping
       if (gameState.bricks.size === 0) {
-         gameState._spawnBrick(gameState.conveyors[0], { x: 0, reason: 'practice_respawn' });
+        const conveyor = gameState.conveyors[0];
+        const width = Math.max(8, Number(resolvedCfg?.display?.brickWidth ?? 80));
+        const centerX = Math.max(0, ((Number(conveyor?.length ?? width) - width) * 0.5));
+        gameState._spawnBrick(conveyor, { x: centerX, reason: 'practice_respawn', bypassSpacing: true });
       }
 
       if (!pendingEnd && maxDuration !== null && gameState.elapsed >= maxDuration) {

@@ -26,6 +26,7 @@ import {
   toPositiveFloat,
   toNonNegativeNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   TaskOrchestrator,
   runTrialWithEnvelope,
   sleep,
@@ -596,8 +597,8 @@ function parseConfig(taskConfig: Record<string, unknown>, _selection: SelectionC
       label: asString(raw.label) ?? `Block ${index + 1}`,
       phase: asString(raw.phase) ?? "main",
       trials: toPositiveNumber(raw.trials, 1),
-      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens ?? raw.preBlockInstructions),
-      afterBlockScreens: toStringScreens(raw.afterBlockScreens ?? raw.postBlockInstructions),
+      beforeBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "before")),
+      afterBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "after")),
       trialTemplate,
     } satisfies ParsedBlock;
   });

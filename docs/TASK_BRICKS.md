@@ -110,6 +110,8 @@ Important: `parameterTransforms` must be an array of objects. A string value lik
 - object page: `{ "title": "How To Process", "html": "<p>...</p>" }`
 - shared slots: `pages|introPages|intro|screens`, `preBlockPages|beforeBlockPages|beforeBlockScreens`, `postBlockPages|afterBlockPages|afterBlockScreens`, `endPages|outroPages|end|outro`
 - block flow controls: `blockIntroTemplate`, `showBlockLabel`, `preBlockBeforeBlockIntro`
+- optional: `showBlockIntro` (default `true`) to include/skip the automatic block-intro continue card
+- block-level pre-screen aliases in `blocks[]`: `beforeBlockScreens` and `preBlockScreens` (legacy: `preBlockInstructions`)
 
 Instruction text/html supports `{dot.path}` interpolation against the merged Bricks config (and resolver-backed variables), for example:
 - `{bricks.completionParams.target_hold_ms}`
@@ -166,6 +168,18 @@ Notes on `drt` outputs:
 
 Notes on runtime performance outputs:
 - Each trial record now includes `record.performance` with frame pacing summary (`avg_fps`, frame overrun ratios, tick cost) and renderer counters (active/peak effects, skipped effects at cap, clear-point effects queued, active/peak brick sprites).
+- Hold-duration practice records also include `practice_press_results` (boolean per registered hold), `practice_press_count`, `practice_correct_count`, and `practice_required_presses`.
+
+Hold-duration practice helper config (`trial.holdDurationPractice`):
+- `requiredPresses`: force press-count quota by switching practice run logic to `max_bricks`.
+- `fullWidthConveyor`: when true (default), practice conveyor uses full canvas width.
+- `centerBrick`: when true (default), practice brick is placed at conveyor midpoint.
+- `replenishDelayMs` (aliases: `trialTimeMs`, `nextTrialDelayMs`): after each hold release, keep the visible clear-progress state for this many ms, then refill to full to start the next practice press-trial.
+- `useSpotlightWindow` (alias: `spotlightWindow`): enable the spotlight window / forced-order focus frame in hold-duration practice.
+- `hideHud`: when true (default), hides HUD counters/timer during hold-duration practice.
+
+Quota note:
+- Hold-duration `requiredPresses` now uses the internal count of registered practice hold trials (same source as `practice_press_results`), not `game.stats.cleared`.
 
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.

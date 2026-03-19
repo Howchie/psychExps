@@ -47,6 +47,7 @@ import {
   asStringArray,
   asPositiveNumberArray,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   toPositiveNumber,
   toNonNegativeNumber,
   parseTrialFeedbackConfig,
@@ -308,6 +309,7 @@ interface PlannedTrial {
   correctResponse: string;
   expectedCategory?: string;
   usedAsSource?: boolean;
+  locked?: boolean;
 }
 
 interface PlannedBlock {
@@ -1002,9 +1004,9 @@ function parseBlock(
   const resolvedLureCount = variableResolver.resolveToken(b.lureCount, scope);
   const resolvedStimulusVariant = variableResolver.resolveToken(b.stimulusVariant, scope);
   const resolvedFeedbackRaw = variableResolver.resolveToken(b.feedback, scope);
-  const rawBeforeBlockScreens = b.beforeBlockScreens ?? b.preBlockInstructions;
-  const rawAfterBlockScreens = b.afterBlockScreens ?? b.postBlockInstructions;
-  const rawRepeatAfterBlockScreens = b.repeatAfterBlockScreens ?? b.repeatPostBlockScreens;
+  const rawBeforeBlockScreens = resolveBlockScreenSlotValue(b, "before");
+  const rawAfterBlockScreens = resolveBlockScreenSlotValue(b, "after");
+  const rawRepeatAfterBlockScreens = resolveBlockScreenSlotValue(b, "repeatAfter");
   const rawBlockSummary = b.blockSummary;
   const rawRepeatUntil = b.repeatUntil;
   const rawRtTask = b.rtTask;
@@ -1267,6 +1269,7 @@ function injectNBackTargets(
     trials[pos].correctResponse = targetKey;
     trials[pos].usedAsSource = true;
     trials[backPos].usedAsSource = true;
+    trials[backPos].locked = true;
     inserted += 1;
   }
   return inserted;
@@ -1305,6 +1308,7 @@ function injectNBackLures(
     trials[pos].trialType = `L${lag}`;
     trials[pos].usedAsSource = true;
     trials[lurePos].usedAsSource = true;
+    trials[lurePos].locked = true;
     used.add(pos);
     used.add(lurePos);
     inserted += 1;
@@ -1411,6 +1415,8 @@ export const __testing__ = {
   appendJsPsychNbackTrial,
   applyNbackRootPresentation,
   restoreNbackRootPresentation,
+  injectNBackTargets,
+  injectNBackLures,
 };
 
 function drawSizedImage(

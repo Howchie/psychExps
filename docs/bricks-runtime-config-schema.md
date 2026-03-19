@@ -658,6 +658,17 @@ Each field can be:
   maxTimeSec?: number | null;          // used in fixed_time
   endDelayMs?: number;                 // global post-end delay (ms), default 0
   brickQuotaEndDelayMs?: number;       // post-end delay for "brick_quota_met" (ms), default 3000
+  holdDurationPractice?: {
+    requiredPresses?: number;          // for hold-duration practice runner, forces max_bricks quota
+    fullWidthConveyor?: boolean;       // default true in hold-duration practice runner
+    centerBrick?: boolean;             // default true in hold-duration practice runner
+    hideHud?: boolean;                 // default true in hold-duration practice runner
+    replenishDelayMs?: number;         // ms to keep post-release clear state before refilling (default 220)
+    trialTimeMs?: number;              // alias of replenishDelayMs
+    nextTrialDelayMs?: number;         // alias of replenishDelayMs
+    useSpotlightWindow?: boolean;      // enable forced-order spotlight window during hold-duration practice
+    spotlightWindow?: boolean;         // alias of useSpotlightWindow
+  };
   forcedOrder?: {
     enable?: boolean;
     switchMode?: "on_clear" | "interval" | "interval_or_clear";

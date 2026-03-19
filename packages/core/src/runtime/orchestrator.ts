@@ -97,6 +97,7 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
     postBlockPages?: unknown;
     endPages?: unknown;
     blockIntroTemplate?: unknown;
+    showBlockIntro?: boolean;
     showBlockLabel?: boolean;
     preBlockBeforeIntro?: boolean;
   };
@@ -107,6 +108,7 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   };
   getBlockUi?: (ctx: { block: TBlock; blockIndex: number; blockAttempt?: number }) => {
     introText?: string | null;
+    showBlockIntro?: boolean;
     preBlockPages?: unknown;
     postBlockPages?: unknown;
     repeatPostBlockPages?: unknown;
@@ -272,6 +274,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     };
     type ResolvedBlockUi = {
       introText: string | null;
+      showBlockIntro: boolean;
       preBlockPages: InstructionScreenSpec[];
       postBlockPages: InstructionScreenSpec[];
       repeatPostBlockPages: InstructionScreenSpec[];
@@ -341,6 +344,10 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           block,
           ctx.blockIndex,
         ),
+        showBlockIntro:
+          (typeof instructions?.showBlockIntro === "boolean"
+            ? instructions.showBlockIntro
+            : args.instructionDefaults?.showBlockIntro) ?? true,
         preBlockPages: mergeScreens(preBlockGlobal, beforeBlockScreens),
         postBlockPages: mergeScreens(postBlockGlobal, afterBlockScreens),
         repeatPostBlockPages,
@@ -360,6 +367,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       if (!customBlockUi) return defaultBlockUi;
       return {
         introText: customBlockUi.introText ?? defaultBlockUi.introText,
+        showBlockIntro: customBlockUi.showBlockIntro ?? defaultBlockUi.showBlockIntro,
         preBlockPages: customBlockUi.preBlockPages
           ? toInstructionScreenSpecs(customBlockUi.preBlockPages)
           : defaultBlockUi.preBlockPages,
@@ -563,6 +571,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             cardFontSize,
             cardFontFamily,
             introText: blockUi.introText ?? (ctx.block as any).introText,
+            showBlockIntro: blockUi.showBlockIntro,
             preBlockPages: blockUi.preBlockPages,
             showBlockLabel: blockUi.showBlockLabel,
             preBlockBeforeIntro: blockUi.preBlockBeforeIntro,

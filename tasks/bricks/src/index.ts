@@ -17,6 +17,7 @@ import {
   resolveInstructionScreenSlots,
   resolveTemplatedString,
   runSurveySequence,
+  resolveBlockScreenSlotValue,
   asObject,
   asArray,
   asString,
@@ -65,6 +66,25 @@ interface ActiveBricksDrtScope {
 
 function toBricksDrtScopeId(blockIndex: number, trialIndex: number | null): string {
   return `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`;
+}
+
+function isExplicitHoldDurationPracticeTrial(args: {
+  block: Record<string, unknown>;
+  trial: Record<string, unknown>;
+}): boolean {
+  const trialNode = asObject(args.trial?.trial) ?? {};
+  const trialScoped = asObject(trialNode.holdDurationPractice) ?? asObject(args.trial?.holdDurationPractice);
+  if (trialScoped) {
+    return trialScoped.enabled !== false;
+  }
+  const blockScoped = asObject(args.block?.holdDurationPractice);
+  if (blockScoped) {
+    return blockScoped.enabled !== false;
+  }
+  if (args.block?.holdDurationPractice === true) {
+    return true;
+  }
+  return false;
 }
 
 async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
@@ -195,6 +215,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
 
         const resolvedDrtConfig = resolveBricksDrtConfig(resolveScopedModuleConfig(trial, "drt"));
         let injectedDrtRuntime: ConveyorTrialDrtRuntime | undefined;
+        let activeTrialController: DrtController | null = null;
         const scopeId = toBricksDrtScopeId(blockIndex, resolvedDrtConfig.scope === "trial" ? trialIndex : null);
 
         if (resolvedDrtConfig.enabled) {
@@ -219,10 +240,13 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           };
           active.config = resolvedDrtConfig;
           activeDrtScopes.set(scopeId, active);
+          if (resolvedDrtConfig.scope === "trial") {
+            activeTrialController = controller;
+          }
           injectedDrtRuntime = {
             config: active.config,
             controller,
-            stopOnCleanup: false,
+            stopOnCleanup: resolvedDrtConfig.scope === "trial",
             attachBindings: (bindings) => {
               active.bindings = bindings;
               active.activeTrialIndex = trialIndex;
@@ -235,9 +259,10 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         }
 
         let record;
-        const isHoldDurationPractice =
-          block.isPractice &&
-          (trial as any)?.bricks?.completionMode === 'hold_duration';
+        const isHoldDurationPractice = isExplicitHoldDurationPracticeTrial({
+          block: block as unknown as Record<string, unknown>,
+          trial: trial as unknown as Record<string, unknown>,
+        });
 
         if (isHoldDurationPractice) {
           record = await runHoldDurationPractice({
@@ -268,7 +293,9 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
             blockIndex,
             trialIndex,
           });
-          const controller = (trialHandle?.controller as DrtController | null | undefined) ?? null;
+          const controller =
+            activeTrialController ??
+            ((trialHandle?.controller as DrtController | null | undefined) ?? null);
           if (controller) {
             const responseRows = controller.exportResponseRows() as unknown as Array<Record<string, unknown>>;
             const latestEstimate = responseRows
@@ -428,9 +455,9 @@ function buildBlockPlan(
         : (typeof phase === 'string' && phase.toLowerCase().includes('practice'));
     const trialsRaw = Number(block.trials ?? 1);
     const trials = Number.isFinite(trialsRaw) ? Math.max(1, Math.floor(trialsRaw)) : 1;
-    const beforeBlockScreens = block.beforeBlockScreens ?? block.preBlockInstructions;
-    const afterBlockScreens = block.afterBlockScreens ?? block.postBlockInstructions;
-    const repeatAfterBlockScreens = block.repeatAfterBlockScreens ?? block.repeatPostBlockScreens;
+    const beforeBlockScreens = resolveBlockScreenSlotValue(block, "before");
+    const afterBlockScreens = resolveBlockScreenSlotValue(block, "after");
+    const repeatAfterBlockScreens = resolveBlockScreenSlotValue(block, "repeatAfter");
 
     const blockConfigBase = deepClone(config);
     for (const manipulation of selectedManipulations) {
