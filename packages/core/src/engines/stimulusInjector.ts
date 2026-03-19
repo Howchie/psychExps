@@ -103,13 +103,14 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
     const trials = Array.isArray(block?.trials) ? block.trials : [];
     if (trials.length === 0) return block;
 
-    const eligibleIndices = trials
-      .map((t: any, idx: number) => ({ trialType: String(t?.trialType ?? ""), idx }))
-      .filter((entry: { trialType: string; idx: number }) => {
-        if (!Array.isArray(injection.eligibleTrialTypes) || injection.eligibleTrialTypes.length === 0) return true;
-        return injection.eligibleTrialTypes.includes(entry.trialType);
-      })
-      .map((entry: { trialType: string; idx: number }) => entry.idx);
+    const eligibleIndices: number[] = [];
+    const hasEligibleTypes = Array.isArray(injection.eligibleTrialTypes) && injection.eligibleTrialTypes.length > 0;
+    for (let idx = 0; idx < trials.length; idx += 1) {
+      const trialType = String(trials[idx]?.trialType ?? "");
+      if (!hasEligibleTypes || injection.eligibleTrialTypes!.includes(trialType)) {
+        eligibleIndices.push(idx);
+      }
+    }
     if (eligibleIndices.length === 0) return block;
 
     const positions = generateProspectiveMemoryPositions(

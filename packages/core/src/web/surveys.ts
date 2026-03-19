@@ -496,11 +496,17 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
     submitButtonStyle: options.submitButtonStyle,
     autoFocusSubmitButton: options.autoFocusSubmitButton,
     computeScores: (answers) => {
-      const numericValues = selectedSubscales
-        .map((subscale) => answers[subscale.id])
-        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-      if (numericValues.length === 0) return undefined;
-      const average = numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < selectedSubscales.length; i += 1) {
+        const value = answers[selectedSubscales[i].id];
+        if (typeof value === "number" && Number.isFinite(value)) {
+          sum += value;
+          count += 1;
+        }
+      }
+      if (count === 0) return undefined;
+      const average = sum / count;
       return { raw_tlx: Number(average.toFixed(3)) };
     },
   };
