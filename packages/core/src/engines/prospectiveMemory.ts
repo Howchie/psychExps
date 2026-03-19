@@ -45,10 +45,13 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
     if (!config.enabled || !context.rng || !context.stimuliByCategory) return block;
 
     const trials = Array.isArray(block.trials) ? block.trials : [];
-    const eligibleIndices = trials
-      .map((t: any, idx: number) => ({ type: t.trialType, idx }))
-      .filter((t: any) => !config.eligibleTrialTypes || config.eligibleTrialTypes.includes(t.type))
-      .map((t: any) => t.idx);
+    const eligibleIndices: number[] = [];
+    for (let idx = 0; idx < trials.length; idx += 1) {
+      const type = trials[idx]?.trialType;
+      if (!config.eligibleTrialTypes || config.eligibleTrialTypes.includes(type)) {
+        eligibleIndices.push(idx);
+      }
+    }
 
     if (eligibleIndices.length === 0) return block;
 
