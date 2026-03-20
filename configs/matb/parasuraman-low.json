@@ -17,6 +17,29 @@
       "Session complete. Thank you."
     ]
   },
+  "ui": {
+    "pageBackground": "#0a0a0a",
+    "cardWidth": "800px",
+    "cardMinHeight": "600px",
+    "cardBackground": "#1a1a1a",
+    "cardBorder": "1px solid #444444",
+    "cardBorderRadius": "0px",
+    "cardColor": "#cccccc",
+    "cardFontSize": "1rem",
+    "cardFontFamily": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    "continueButtonStyle": {
+      "background": "#222222",
+      "border": "1px solid #444444",
+      "borderRadius": "0px",
+      "color": "#cccccc",
+      "fontSize": "12px",
+      "fontWeight": "700",
+      "padding": "8px 20px",
+      "outline": "none",
+      "boxShadow": "none",
+      "textTransform": "uppercase"
+    }
+  },
   "layout": {
     "rows": 2,
     "cols": 2,
@@ -126,6 +149,20 @@
   "endSurvey": {
     "preset": "nasa_tlx",
     "title": "Workload Assessment",
-    "required": true
+    "required": true,
+    "questionBorder": "1px solid #444444",
+    "questionBorderRadius": "0px",
+    "submitButtonStyle": {
+      "background": "#222222",
+      "border": "1px solid #444444",
+      "borderRadius": "0px",
+      "color": "#cccccc",
+      "fontSize": "12px",
+      "fontWeight": "700",
+      "padding": "8px 20px",
+      "outline": "none",
+      "boxShadow": "none",
+      "textTransform": "uppercase"
+    }
   }
 }

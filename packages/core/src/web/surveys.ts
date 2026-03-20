@@ -66,6 +66,10 @@ export interface RunSurveyOptions {
   className?: string;
   submitButtonStyle?: ButtonStyleOverrides;
   autoFocusSubmitButton?: boolean;
+  cardBackground?: string;
+  cardBorder?: string;
+  cardBorderRadius?: string;
+  cardColor?: string;
 }
 
 export async function runSurvey(
@@ -77,7 +81,7 @@ export async function runSurvey(
   const buttonId = options.buttonId ?? `exp-survey-submit-${sanitizeId(survey.id)}`;
   const rootClass = options.className ?? "exp-survey-screen";
 
-  container.innerHTML = buildSurveyHtml(survey, buttonId, rootClass);
+  container.innerHTML = buildSurveyHtml(survey, buttonId, rootClass, options);
   hydrateSurveyInteractions(container, survey);
 
   const submitButton = getElementBySafeId(container, buttonId);
@@ -237,7 +241,12 @@ function syncSliderValueLabel(container: HTMLElement, questionId: string): void 
   valueNode.textContent = input.value;
 }
 
-function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: string): string {
+function buildSurveyHtml(
+  survey: SurveyDefinition,
+  buttonId: string,
+  rootClass: string,
+  options: RunSurveyOptions = {},
+): string {
   const title = survey.title ? `<h2 style="margin:0 0 0.75rem 0;">${escapeHtml(survey.title)}</h2>` : "";
   const description = survey.description ? `<p style="margin:0 0 1rem 0;">${escapeHtml(survey.description)}</p>` : "";
   const showQuestionNumbers = survey.showQuestionNumbers !== false;
@@ -255,7 +264,14 @@ function buildSurveyHtml(survey: SurveyDefinition, buttonId: string, rootClass: 
     ))
     .join("");
   const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
-  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div class="card" style="width:min(900px,96vw);padding:24px 32px;">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1.5rem 0 0 0;text-align:center;"><button class="exp-continue-btn" id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
+
+  const bgOverride = options.cardBackground ? `background:${options.cardBackground};` : "";
+  const borderOverride = options.cardBorder ? `border:${options.cardBorder};` : "";
+  const radiusOverride = options.cardBorderRadius ? `border-radius:${options.cardBorderRadius};` : "";
+  const colorOverride = options.cardColor ? `color:${options.cardColor};` : "";
+  const cardStyle = `width:min(900px,96vw);padding:24px 32px;${bgOverride}${borderOverride}${radiusOverride}${colorOverride}`;
+
+  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div class="card" style="${cardStyle}">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1.5rem 0 0 0;text-align:center;"><button class="exp-continue-btn" id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
 
 function renderQuestion(

@@ -422,6 +422,7 @@ export class ConveyorRenderer {
   config: Record<string, any>;
   onBrickClick: (brickId: string, x: number | null, y: number | null) => void;
   onBrickHold: (brickId: string, durationMs: number, x: number | null, y: number | null) => void;
+  onBrickHoldState: (brickId: string, isHolding: boolean, x: number | null, y: number | null) => void;
   onBrickHover: (brickId: string, hovering: boolean, x: number | null, y: number | null) => void;
   onPointerDebug: (payload: Record<string, any>) => void;
   runtimeLengths: number[] | null;
@@ -444,12 +445,12 @@ export class ConveyorRenderer {
   interactionLayer: PIXI.Container | null;
   conveyorZones: Map<string, PIXI.Graphics>;
   bricksByConveyor: Map<string, any[]>;
-  conveyorHoldStart: Map<string, { brickId: string; t: number }>;
+  conveyorHoldStart: Map<string, { brickId: string; t: number | null; mode: 'hold_duration' | 'hold_to_clear' }>;
   conveyorHovered: Set<string>;
   conveyorHoverTarget: Map<string, string>;
   conveyorPointerPos: Map<string, { x: number | null; y: number | null }>;
   spotlightZone: PIXI.Graphics | null;
-  spotlightHoldStart: { brickId: string; t: number } | null;
+  spotlightHoldStart: { brickId: string; t: number | null; mode: 'hold_duration' | 'hold_to_clear' } | null;
   spotlightHoveredBrickId: string | null;
   spotlightPointerPos: { x: number | null; y: number | null };
   spotlightPointerInside: boolean;
@@ -492,10 +493,11 @@ export class ConveyorRenderer {
   hudLayer!: PIXI.Container;
   drtLayer!: PIXI.Container;
 
-  constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
+  constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHoldState, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
     this.config = config;
     this.onBrickClick = typeof onBrickClick === 'function' ? onBrickClick : () => {};
     this.onBrickHold = typeof onBrickHold === 'function' ? onBrickHold : () => {};
+    this.onBrickHoldState = typeof onBrickHoldState === 'function' ? onBrickHoldState : () => {};
     this.onBrickHover = typeof onBrickHover === 'function' ? onBrickHover : () => {};
     this.onPointerDebug = typeof onPointerDebug === 'function' ? onPointerDebug : () => {};
     this.runtimeLengths = Array.isArray(runtimeLengths) ? runtimeLengths.slice() : null;
@@ -1573,17 +1575,21 @@ export class ConveyorRenderer {
       zone.cursor = 'pointer';
 
       const endSpotlightHold = (e: any) => {
-        const mode = this.config?.bricks?.completionMode;
         const holdState = this.spotlightHoldStart;
-        if (mode !== 'hold_duration' || !holdState) {
+        if (!holdState) {
           return;
         }
         this.spotlightHoldStart = null;
         const pos = this._extractPointerPosition(e);
         this.spotlightPointerPos = pos;
-        const holdDurationMs = Math.max(0, performance.now() - holdState.t);
-        this._emitPointerDebug('spotlight_hold_end', holdState.brickId, e, { hold_ms: Math.round(holdDurationMs) });
-        this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+        if (holdState.mode === 'hold_duration') {
+          const holdDurationMs = Math.max(0, performance.now() - Number(holdState.t ?? performance.now()));
+          this._emitPointerDebug('spotlight_hold_end', holdState.brickId, e, { hold_ms: Math.round(holdDurationMs) });
+          this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+          return;
+        }
+        this._emitPointerDebug('spotlight_hold_state_end', holdState.brickId, e);
+        this.onBrickHoldState(holdState.brickId, false, pos.x, pos.y);
       };
 
       zone.on('pointerdown', (e) => {
@@ -1597,8 +1603,12 @@ export class ConveyorRenderer {
           return;
         }
         if (mode === 'hold_duration') {
-          this.spotlightHoldStart = { brickId: targetBrickId, t: performance.now() };
+          this.spotlightHoldStart = { brickId: targetBrickId, t: performance.now(), mode: 'hold_duration' };
           this._emitPointerDebug('spotlight_hold_begin', targetBrickId, e);
+        } else if (mode === 'hold_to_clear') {
+          this.spotlightHoldStart = { brickId: targetBrickId, t: null, mode: 'hold_to_clear' };
+          this._emitPointerDebug('spotlight_hold_state_begin', targetBrickId, e);
+          this.onBrickHoldState(targetBrickId, true, pos.x, pos.y);
         } else {
           this._emitPointerDebug('spotlight_click', targetBrickId, e);
           this.onBrickClick(targetBrickId, pos.x, pos.y);
@@ -1659,17 +1669,21 @@ export class ConveyorRenderer {
 
     const endConveyorHold = (e: any) => {
       const cid = (zone as any).conveyorId;
-      const mode = this.config?.bricks?.completionMode;
       const holdState = this.conveyorHoldStart.get(cid);
-      if (mode !== 'hold_duration' || !holdState) {
+      if (!holdState) {
         return;
       }
       this.conveyorHoldStart.delete(cid);
       const pos = this._extractPointerPosition(e);
       this.conveyorPointerPos.set(cid, pos);
-      const holdDurationMs = Math.max(0, performance.now() - holdState.t);
-      this._emitPointerDebug('conveyor_hold_end', holdState.brickId, e, { conveyor_id: cid, hold_ms: Math.round(holdDurationMs) });
-      this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+      if (holdState.mode === 'hold_duration') {
+        const holdDurationMs = Math.max(0, performance.now() - Number(holdState.t ?? performance.now()));
+        this._emitPointerDebug('conveyor_hold_end', holdState.brickId, e, { conveyor_id: cid, hold_ms: Math.round(holdDurationMs) });
+        this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+        return;
+      }
+      this._emitPointerDebug('conveyor_hold_state_end', holdState.brickId, e, { conveyor_id: cid });
+      this.onBrickHoldState(holdState.brickId, false, pos.x, pos.y);
     };
 
     zone.on('pointerdown', (e) => {
@@ -1685,9 +1699,18 @@ export class ConveyorRenderer {
       if (mode === 'hold_duration') {
         this.conveyorHoldStart.set(cid, {
           brickId: targetBrickId,
-          t: performance.now()
+          t: performance.now(),
+          mode: 'hold_duration'
         });
         this._emitPointerDebug('conveyor_hold_begin', targetBrickId, e, { conveyor_id: cid });
+      } else if (mode === 'hold_to_clear') {
+        this.conveyorHoldStart.set(cid, {
+          brickId: targetBrickId,
+          t: null,
+          mode: 'hold_to_clear'
+        });
+        this._emitPointerDebug('conveyor_hold_state_begin', targetBrickId, e, { conveyor_id: cid });
+        this.onBrickHoldState(targetBrickId, true, pos.x, pos.y);
       } else {
         this._emitPointerDebug('conveyor_click', targetBrickId, e, { conveyor_id: cid });
         this.onBrickClick(targetBrickId, pos.x, pos.y);
@@ -2765,7 +2788,7 @@ export class ConveyorRenderer {
       const progressChanged = sprite.progressValue !== brick.clearProgress;
       const needsProgressRedraw =
         progressChanged &&
-        (completionMode === 'hold_duration' || completionMode === 'hover_to_clear') &&
+        (completionMode === 'hold_duration' || completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear') &&
         !sprite.usesProgressMask;
       if (
         sprite.modeValue !== completionMode ||
@@ -2893,7 +2916,7 @@ export class ConveyorRenderer {
   }
 
   _shouldUseProgressMask(shape: string, completionMode: string) {
-    if (!['hold_duration', 'hover_to_clear'].includes(completionMode)) {
+    if (!['hold_duration', 'hover_to_clear', 'hold_to_clear'].includes(completionMode)) {
       return false;
     }
     return shape === 'rect' || shape === 'rounded_rect';
@@ -2937,6 +2960,26 @@ export class ConveyorRenderer {
       sprite.on('pointerdown', beginHold);
       // End hold across multiple exit/release cases because bricks move while
       // the pointer is down, which can otherwise drop the release callback.
+      sprite.on('pointerup', endHold);
+      sprite.on('pointerupoutside', endHold);
+      sprite.on('pointerout', endHold);
+      sprite.on('pointerleave', endHold);
+      sprite.on('pointeroutoutside', endHold);
+      sprite.on('pointercancel', endHold);
+    } else if (this.config.bricks.completionMode === 'hold_to_clear') {
+      const beginHold = (e: any) => {
+        const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
+        const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
+        this._emitPointerDebug('brick_hold_state_begin', brick.id, e);
+        this.onBrickHoldState(brick.id, true, gx, gy);
+      };
+      const endHold = (e: any) => {
+        const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
+        const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
+        this._emitPointerDebug('brick_hold_state_end', brick.id, e);
+        this.onBrickHoldState(brick.id, false, gx, gy);
+      };
+      sprite.on('pointerdown', beginHold);
       sprite.on('pointerup', endHold);
       sprite.on('pointerupoutside', endHold);
       sprite.on('pointerout', endHold);
@@ -2988,7 +3031,7 @@ export class ConveyorRenderer {
       Math.min(Number(defaultCornerRadius) || 0, Number(brick.width) / 2, Number(brick.height) / 2)
     );
     const supportsMaskProgress = this._shouldUseProgressMask(shape, completionMode);
-    if (completionMode === 'hold_duration' && supportsMaskProgress) {
+    if ((completionMode === 'hold_duration' || completionMode === 'hold_to_clear') && supportsMaskProgress) {
       const progressGraphic = new PIXI.Graphics();
       this._drawBrickBody(progressGraphic, {
         brick,
@@ -3031,7 +3074,7 @@ export class ConveyorRenderer {
       sprite.progressMask = mask;
       sprite.usesProgressMask = true;
       sprite.progressMaxWidth = brick.width;
-    } else if (completionMode === 'hold_duration') {
+    } else if (completionMode === 'hold_duration' || completionMode === 'hold_to_clear') {
       const legacyGraphic = new PIXI.Graphics();
       const remainingWidth = getBrickVisibleWidth(brick, completionMode);
       const legacyRadius = Math.max(0, Math.min(cornerRadius, remainingWidth / 2, brick.height / 2));

@@ -24,6 +24,7 @@ interface BrickRecord {
   holds: number;
   clearProgress: number;
   isHovered: boolean;
+  isHeld: boolean;
   color: string;
   borderColor: string | null;
   shape: string;
@@ -930,6 +931,7 @@ export class GameState {
       holds: 0,
       clearProgress: 0,
       isHovered: false,
+      isHeld: false,
       color: String(pickedColor ?? ''),
       borderColor: pickedBorderColor != null ? String(pickedBorderColor) : null,
       shape: pickedShape,
@@ -1175,6 +1177,30 @@ export class GameState {
           y: brick.y
         });
       }
+    } else if (mode === 'click_to_clear') {
+      const meanPx = Math.max(1, Number(params.click_clear_mean_px ?? 20));
+      const sdPx = Math.max(0, Number(params.click_clear_sd_px ?? 0));
+      const minPx = Math.max(0, Number(params.click_clear_min_px ?? 1));
+      const clearPx = sdPx > 0
+        ? Math.max(minPx, this.rng.nextNormal(meanPx, sdPx))
+        : Math.max(minPx, meanPx);
+      const progressDelta = clearPx / Math.max(1, brick.initialWidth);
+      brick.clicks += 1;
+      brick.clearProgress = Math.min(1, (brick.clearProgress ?? 0) + progressDelta);
+      this._log('brick_click_progress', {
+        brick_id: brick.id,
+        clicks: brick.clicks,
+        clear_px: clearPx,
+        progress: brick.clearProgress,
+      });
+      if (brick.clearProgress >= 1) {
+        this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
+          completion_mode: mode,
+          clicks: brick.clicks,
+          x: brick.x,
+          y: brick.y,
+        });
+      }
     } else if (mode === 'hold_duration') {
       this._log('brick_click_progress', {
         brick_id: brick.id,
@@ -1184,6 +1210,11 @@ export class GameState {
       this._log('brick_click_progress', {
         brick_id: brick.id,
         note: 'Click ignored in hover_to_clear mode; progress is driven by hover exposure.'
+      });
+    } else if (mode === 'hold_to_clear') {
+      this._log('brick_click_progress', {
+        brick_id: brick.id,
+        note: 'Click ignored in hold_to_clear mode; progress is driven by continuous hold exposure.'
       });
     } else {
       // Future modes can plug in here (e.g., cognitive tasks).
@@ -1274,6 +1305,57 @@ export class GameState {
     }
   }
 
+  handleBrickHoldState(brickId: string, isHolding: boolean, timestamp: number, clickPos: PointerPos = {}) {
+    const { x = null, y = null } = clickPos || {};
+    const brick = this.bricks.get(brickId);
+    if (!brick) {
+      this.stats.clickErrors += 1;
+      this._log('brick_hold_state', { brick_id: brickId ?? null, x, y, valid: false, holding: Boolean(isHolding) });
+      return;
+    }
+    const mode = this.config.bricks.completionMode;
+    if (mode !== 'hold_to_clear') {
+      return;
+    }
+    if (!isHolding) {
+      if (!brick.isHeld) return;
+      brick.isHeld = false;
+      this._log('brick_hold_end', {
+        brick_id: brick.id,
+        conveyor_id: brick.conveyorId,
+        x,
+        y,
+        valid: true
+      });
+      return;
+    }
+    const gate = this._canWorkOnBrick(brick);
+    if (!gate.ok) {
+      this.stats.clickErrors += 1;
+      this._log('brick_hold_state', {
+        brick_id: brick.id,
+        conveyor_id: brick.conveyorId,
+        x,
+        y,
+        valid: false,
+        holding: true,
+        blocked_reason: gate.reason
+      });
+      return;
+    }
+    if (brick.isHeld) {
+      return;
+    }
+    brick.isHeld = true;
+    this._log('brick_hold_begin', {
+      brick_id: brick.id,
+      conveyor_id: brick.conveyorId,
+      x,
+      y,
+      valid: true
+    });
+  }
+
   /**
    * Advances the simulation by dt milliseconds.
    */
@@ -1292,17 +1374,16 @@ export class GameState {
       const speed = conveyor ? conveyor.speed : brick.speed;
       brick.speed = speed;
       const hoverCanProcess = completionMode === 'hover_to_clear' && brick.isHovered && this._canWorkOnBrick(brick).ok;
+      const holdCanProcess = completionMode === 'hold_to_clear' && brick.isHeld && this._canWorkOnBrick(brick).ok;
       brick.x += speed * dt;
-      if (hoverCanProcess) {
+      if (hoverCanProcess || holdCanProcess) {
         const referenceWidth = Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1));
-        const processRatePxPerSec = Math.max(
-          0,
-          Number(this.config?.bricks?.completionParams?.hover_process_rate_px_s ?? speed) || speed
-        );
+        const rateKey = completionMode === 'hold_to_clear' ? 'hold_process_rate_px_s' : 'hover_process_rate_px_s';
+        const processRatePxPerSec = Math.max(0, Number(this.config?.bricks?.completionParams?.[rateKey] ?? speed) || speed);
         const progressDelta = (processRatePxPerSec * dt) / referenceWidth;
         brick.clearProgress = Math.max(0, Math.min(1, (brick.clearProgress ?? 0) + progressDelta));
       }
-      if (completionMode === 'hover_to_clear' && (brick.clearProgress ?? 0) >= 1) {
+      if ((completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear') && (brick.clearProgress ?? 0) >= 1) {
         this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
           completion_mode: completionMode,
           progress: brick.clearProgress,

@@ -434,6 +434,8 @@ export const bricksAdapter = createTaskAdapter({
       { id: 'evanderHons', label: 'Evander Honours', configPath: 'bricks/evanderHons' },
       { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No Spotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
       { id: 'evanderHonsHover', label: 'Evander Honours Hover', configPath: 'bricks/evanderHonsHover' },
+      { id: 'evanderHonsHoldContinuous', label: 'Evander Honours Hold Continuous', configPath: 'bricks/evanderHonsHoldContinuous' },
+      { id: 'continuousSpawn', label: 'Continuous Spawn Demo', configPath: 'bricks/continuousSpawn' },
       { id: 'drt_block_demo', label: 'DRT Block Scope Demo', configPath: 'bricks/drt_block_demo' },
     ],
   },

@@ -347,6 +347,9 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     onBrickHold: (brickId: string, holdDurationMs: number, x: number, y: number) => {
       processPracticeHold(brickId, holdDurationMs, x, y);
     },
+    onBrickHoldState: (brickId: string, isHolding: boolean, x: number, y: number) => {
+      gameState.handleBrickHoldState(brickId, isHolding, gameState.elapsed, { x, y });
+    },
     onBrickHover: (brickId: string, isHovering: boolean, x: number, y: number) => {
       gameState.handleBrickHover(brickId, isHovering, gameState.elapsed, { x, y });
     },

@@ -205,6 +205,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     onBrickHold: (brickId: string, holdDurationMs: number, x: number, y: number) => {
       gameState.handleBrickHold(brickId, holdDurationMs, gameState.elapsed, { x, y });
     },
+    onBrickHoldState: (brickId: string, isHolding: boolean, x: number, y: number) => {
+      gameState.handleBrickHoldState(brickId, isHolding, gameState.elapsed, { x, y });
+    },
     onBrickHover: (brickId: string, isHovering: boolean, x: number, y: number) => {
       gameState.handleBrickHover(brickId, isHovering, gameState.elapsed, { x, y });
     },

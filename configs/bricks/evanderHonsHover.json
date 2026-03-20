@@ -291,10 +291,6 @@
       "targetingArea": "conveyor"
     },
     "completionParams": {
-      "target_hold_ms": 1000,
-      "progress_per_perfect": 0.27,
-      "progress_curve": 0.8,
-      "overshoot_tolerance_ms": 200,
       "width_scaling": true,
       "width_reference_px": 50,
       "width_scaling_exponent": 1,
@@ -406,7 +402,7 @@
         "enableAmmoCue": false
       }
     },
-    "brickQuotaEndDelayMs": 3000,
+    "brickQuotaEndDelayMs": 1000,
     "stopDrtOnBrickQuotaMet": true
   },
   "experiment": {
@@ -482,7 +478,7 @@
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 22
+            "value": 26
           }
         }
       }
@@ -494,7 +490,7 @@
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 28
+            "value": 32
           }
         }
       }
@@ -585,7 +581,7 @@
         "condition_plan"
       ],
       "preBlockScreens": [
-        "Great work!\nNow, we will open some boxes by hovering over them!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must hover your mouse cursor on the conveyor belt to open each box.\n\nTry to open as many boxes as possible to collect more coins!\n\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+        "We will now try to open some boxes!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must hover your mouse cursor on the conveyor belt to open each box.\n\nTry to open as many boxes as possible to collect more coins!\n\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
       ],
       "afterBlockScreens": [
         {

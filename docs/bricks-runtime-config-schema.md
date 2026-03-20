@@ -489,7 +489,7 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
 
 ```ts
 {
-  completionMode: "single_click" | "multi_click" | "hold_duration" | "hover_to_clear" | string;
+  completionMode: "single_click" | "multi_click" | "hold_duration" | "hover_to_clear" | "hold_to_clear" | string;
   completionParams?: {
     clicks_required?: number;        // multi_click
     target_hold_ms?: number;         // hold_duration
@@ -500,6 +500,7 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
     width_reference_px?: number;     // hold_duration
     width_scaling_exponent?: number; // hold_duration
     hover_process_rate_px_s?: number;// hover_to_clear; if unset, uses runtime `brick.speed`
+    hold_process_rate_px_s?: number; // hold_to_clear; if unset, uses runtime `brick.speed`
   };
 
   maxBricksPerTrial?: number;
@@ -561,6 +562,12 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
 - Processing depletes visible width from the right edge at `hover_process_rate_px_s`.
 - Depleted segments are fully removed visually (no translucent ghost body), while interaction bounds remain the full brick object until clear/drop.
 - If `hover_process_rate_px_s` is not set, the runtime uses `brick.speed` (the sampled conveyor/brick px/s rate), so depletion rate matches forward progress by default.
+
+`hold_to_clear` runtime behavior:
+- Bricks continue moving while held (normal conveyor advection still applies).
+- Processing depletes visible width while the mouse button is held at `hold_process_rate_px_s`.
+- Works with all targeting areas (`brick`, `conveyor`, `spotlight`).
+- If `hold_process_rate_px_s` is not set, the runtime uses `brick.speed`.
 
 ### `BrickCategorySpec`
 

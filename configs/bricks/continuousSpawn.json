@@ -211,7 +211,7 @@
       "hudPanel": true,
       "hudPanelColor": "#0f172a",
       "hudPanelAlpha": 0.38,
-      "showTimer": false,
+      "showTimer": true,
       "showRemainingBlocks": false,
       "showDroppedBlocks": true,
       "showPoints": true,
@@ -286,18 +286,14 @@
     }
   },
   "bricks": {
-    "completionMode": "hold_duration",
+    "completionMode": "click_to_clear",
     "interaction": {
-      "targetingArea": "spotlight"
+      "targetingArea": "conveyor"
     },
     "completionParams": {
-      "target_hold_ms": 1000,
-      "progress_per_perfect": 0.27,
-      "progress_curve": 0.8,
-      "overshoot_tolerance_ms": 500,
-      "width_scaling": true,
-      "width_reference_px": 50,
-      "width_scaling_exponent": 1
+      "click_clear_mean_px": 17,
+      "click_clear_sd_px": 5,
+      "click_clear_min_px": 1
     },
     "textureCategories": [
       {
@@ -328,9 +324,9 @@
             "box_light_brown",
             "crate_light_brown",
             "box_med_brown",
-            "crate_med_brown",
+            "crate_mid_brown",
             "box_dark_brown",
-            "crate_dark_brown"
+            "crate_deep_brown"
           ],
           "without_replacement": true
         },
@@ -350,63 +346,34 @@
     "forcedSetPlan": {
       "enable": true,
       "count": 4,
-      "defaults": {
-        "width": {
-          "type": "uniform",
-          "min": 30,
-          "max": 70
-        }
-      },
       "fields": {
         "conveyorIndex": {
-          "values": [
-            0,
-            1,
-            2,
-            3
-          ],
+          "values": [0, 1, 2, 3],
           "draw": "without_replacement"
         },
-        "rightEdge": 150,
-        "textureCategoryId": {
-          "values": [
-            "Other",
-            "Other",
-            "Other",
-            "Other"
-          ],
-          "draw": "without_replacement"
-        }
+        "rightEdge": 80
       }
     },
-    "maxBricksPerTrial": 4,
     "spawn": {
       "ratePerSec": {
         "type": "fixed",
-        "value": 0
+        "value": 0.35
       },
       "interSpawnDist": null,
-      "minSpacingPx": 0,
+      "minSpacingPx": 30,
       "byConveyor": true,
-      "maxActivePerConveyor": 1
+      "maxActivePerConveyor": 3
     }
   },
   "difficultyModel": {
     "holdQualityMean": 0.8
   },
   "trial": {
-    "mode": "max_bricks",
-    "maxTimeSec": null,
+    "mode": "fixed_time",
+    "maxTimeSec": 90,
     "forcedOrder": {
-      "enable": true,
-      "switchMode": "on_clear",
-      "switchOnDrop": true,
-      "coverStory": {
-        "enableAmmoCue": false
-      }
-    },
-    "brickQuotaEndDelayMs": 1000,
-    "stopDrtOnBrickQuotaMet": true
+      "enable": false
+    }
   },
   "experiment": {
     "showBetweenBlockSummary": true,
@@ -431,8 +398,8 @@
     "statsPresentation": {
       "scopeByMetric": {
         "points": "experiment",
-        "cleared": "block",
-        "dropped": "block"
+        "cleared": "trial",
+        "dropped": "trial"
       },
       "reset": [
         {
@@ -464,245 +431,70 @@
   "manipulations": [
     {
       "id": "difficulty_practice",
-      "label": "Practice speed",
+      "label": "Practice: slow speed, low spawn rate",
       "overrides": {
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
             "value": 12
           }
+        },
+        "bricks": {
+          "spawn": {
+            "ratePerSec": {
+              "type": "fixed",
+              "value": 0.2
+            }
+          }
         }
       }
     },
     {
       "id": "difficulty_low",
-      "label": "Low speed",
+      "label": "Low difficulty",
       "overrides": {
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
             "value": 22
           }
+        },
+        "bricks": {
+          "spawn": {
+            "ratePerSec": {
+              "type": "fixed",
+              "value": 0.3
+            }
+          }
         }
       }
     },
     {
       "id": "difficulty_high",
-      "label": "High speed",
+      "label": "High difficulty",
       "overrides": {
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 28
+            "value": 32
+          }
+        },
+        "bricks": {
+          "spawn": {
+            "ratePerSec": {
+              "type": "fixed",
+              "value": 0.5
+            }
           }
         }
-      }
-    },
-    {
-      "id": "condition_plan",
-      "label": "Trial-wise target presence/order plan",
-      "overrides": {},
-      "trialPlan": {
-        "schedule": {
-          "mode": "quota_shuffle"
-        },
-        "variants": [
-          {
-            "id": "control",
-            "label": "Control: no high-value brick",
-            "overrides": {
-              "bricks": {
-                "forcedSetPlan": {
-                  "fields": {
-                    "textureCategoryId": {
-                      "values": [
-                        "Other",
-                        "Other",
-                        "Other",
-                        "Other"
-                      ],
-                      "draw": "without_replacement"
-                    }
-                  }
-                }
-              },
-              "trial": {
-                "forcedOrder": {
-                  "sequence": [
-                    0,
-                    1,
-                    2,
-                    3
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "id": "target_pos2",
-            "label": "High-value in position 2",
-            "overrides": {
-              "bricks": {
-                "forcedSetPlan": {
-                  "fields": {
-                    "textureCategoryId": {
-                      "values": [
-                        "Target",
-                        "Other",
-                        "Other",
-                        "Other"
-                      ],
-                      "draw": "sequence"
-                    }
-                  }
-                }
-              },
-              "trial": {
-                "forcedOrder": {
-                  "sequence": [
-                    1,
-                    0,
-                    2,
-                    3
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "id": "target_pos3",
-            "label": "High-value in position 3",
-            "overrides": {
-              "bricks": {
-                "forcedSetPlan": {
-                  "fields": {
-                    "textureCategoryId": {
-                      "values": [
-                        "Target",
-                        "Other",
-                        "Other",
-                        "Other"
-                      ],
-                      "draw": "sequence"
-                    }
-                  }
-                }
-              },
-              "trial": {
-                "forcedOrder": {
-                  "sequence": [
-                    1,
-                    2,
-                    0,
-                    3
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "id": "target_pos4",
-            "label": "High-value in position 4",
-            "overrides": {
-              "bricks": {
-                "forcedSetPlan": {
-                  "fields": {
-                    "textureCategoryId": {
-                      "values": [
-                        "Target",
-                        "Other",
-                        "Other",
-                        "Other"
-                      ],
-                      "draw": "sequence"
-                    }
-                  }
-                }
-              },
-              "trial": {
-                "forcedOrder": {
-                  "sequence": [
-                    1,
-                    2,
-                    3,
-                    0
-                  ]
-                }
-              }
-            }
-          }
-        ]
       }
     }
   ],
   "blocks": [
     {
-      "label": "HoldDurationPractice",
-      "phase": "practice",
-      "showBetweenBlockSummary": false,
-      "trials": 1,
-      "overrides": {
-        "task": {
-          "modules": {
-            "drt": {
-              "enabled": false
-            }
-          }
-        },
-        "display": {
-          "practiceFeedback": {
-            "colorTooFast": "#D71B60",
-            "colorTooSlow": "#0072B2",
-            "colorGood": "#05FE04",
-            "goodThresholdMin": -0.15,
-            "goodThresholdMax": 0.15
-          }
-        },
-        "surveys": {
-          "postTrial": []
-        },
-        "bricks": {
-          "forcedSet": [
-            {
-              "conveyorIndex": 0,
-              "xFraction": 0.5,
-              "textureCategoryId": "Other"
-            }
-          ]
-        },
-        "trial": {
-          "mode": "max_bricks",
-          "holdDurationPractice": {
-            "requiredPresses": 3,
-            "fullWidthConveyor": true,
-            "centerBrick": false,
-            "hideHud": true,
-            "replenishDelayMs": 250,
-            "useSpotlightWindow": true
-          }
-        }
-      },
-      "preBlockScreens": [
-        "Click on the brick with the left mouse button.\nTry to hold the button for exactly {bricks.completionParams.target_hold_ms} ms and then release it.\nAfter each click you will see the actual time you held the button for.\nThis feedback will be green if you were close to the target time.\n\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow.\n\nThe block will end after you make 20 clicks."
-      ],
-      "repeatAfterBlockScreens": [
-        "Remember:\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow.\n\nPress continue when you are ready for the next set of trials."
-      ],
-      "repeatUntil": {
-        "enabled": true,
-        "maxAttempts": 3,
-        "minTotal": 20,
-        "maxMeanMetric": 0.25,
-        "metrics": {
-          "correctField": "practice_press_results",
-          "metricField": "performance_deltas"
-        }
-      }
-    },
-    {
       "label": "Practice1",
       "phase": "practice",
-      "trials": 3,
+      "trials": 2,
       "overrides": {
         "task": {
           "modules": {
@@ -710,26 +502,16 @@
               "enabled": false
             }
           }
+        },
+        "trial": {
+          "maxTimeSec": 60
         }
       },
-      "repeatUntil": {
-          "enabled": true,
-          "maxAttempts": 3,
-          "minMeanMetric": 3,
-          "metrics": {
-            "correctField": "game.stats.cleared",
-            "metricField": "game.stats.cleared"
-          }
-      },
-      "repeatAfterBlockScreens": [
-        "Let's have another try.\nRemember: you must click inside the highlighted area.\nClick and hold repeatedly until the box opens.\nDo this for each brick in turn."
-      ],
       "manipulations": [
-        "difficulty_practice",
-        "condition_plan"
+        "difficulty_practice"
       ],
       "preBlockScreens": [
-        "Great work!\nNow, we will use this same click-and-hold strategy to open some boxes!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must click and hold for {bricks.completionParams.target_hold_ms} ms several times on each box, until it opens.\n\nOnly the highlighted box is currently actionable.\nOnce you clear a box, another random box will be highlighted.\nBy working hard at estimating {bricks.completionParams.target_hold_ms} ms holds, you can clear the boxes faster.\nTry to open as many boxes as possible to collect more coins!\n\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+        "We will now try to open some boxes!\n\nBoxes will continuously appear on the conveyor belts and move toward the furnace at the end.\nClick on a belt to work on the box moving along it — wider boxes take more clicks to open.\n\nBoxes that reach the furnace are destroyed — try to open as many as you can before the time runs out!\n\nAfter each trial you will be asked to rate your workload on a scale of 1-10."
       ],
       "afterBlockScreens": [
         {
@@ -762,10 +544,8 @@
           },
           "forcedSet": [],
           "forcedSetPlan": {
-            "enable": false,
-            "count": 0
+            "enable": false
           },
-          "maxBricksPerTrial": 0,
           "spawn": {
             "ratePerSec": {
               "type": "fixed",
@@ -781,18 +561,19 @@
       "preBlockScreens": [
         "Let's practice the DRT.\nIgnore the conveyors and focus only on the red border signal.\n\nPress SPACEBAR as quickly as possible whenever the border flashes red.\n\nThis block will end after 60 seconds."
       ],
-      "afterBlockScreens": ["Great job!\n\nWe will now do some practice trials putting both tasks together.\n\nRemember, use your mouse to open boxes by click-and-holding on the box for {bricks.completionParams.target_hold_ms} ms.\nPress SPACEBAR whenever you see the red square.\n\nThe conveyors will start to move a little more quickly now."]
+      "afterBlockScreens": [
+        "Great job!\n\nWe will now do some practice trials putting both tasks together.\n\nRemember, click on the belt to work on the box moving along it — wider boxes take more clicks.\nPress SPACEBAR whenever you see the red border flash.\n\nBoxes will keep appearing throughout the trial — keep up with the flow!"
+      ]
     },
     {
       "label": "Practice2",
       "phase": "practice",
-      "trials": 3,
+      "trials": 2,
       "manipulations": [
-        "difficulty_low",
-        "condition_plan"
+        "difficulty_low"
       ],
       "afterBlockScreens": [
-        "Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes."
+        "Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to keep up."
       ]
     },
     {
@@ -800,8 +581,7 @@
       "phase": "main",
       "trials": 4,
       "manipulations": [
-        "difficulty_low",
-        "condition_plan"
+        "difficulty_low"
       ],
       "afterBlockScreens": [
         "The conveyors will move a little faster now."
@@ -812,18 +592,16 @@
       "phase": "main",
       "trials": 4,
       "manipulations": [
-        "difficulty_high",
-        "condition_plan"
+        "difficulty_high"
       ]
     }
   ],
   "instructions": {
     "introPages": [
       {
-        "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit. Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward.</div>"
+        "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Welcome to the box task!<p>You will try to open as many boxes as you can before the time runs out. Boxes will continuously appear on four conveyor belts and move toward the furnace at the end of each belt.<p>Sometimes you will see a present — these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>Each box requires several clicks to open — wider boxes take more clicks. The timer in the top corner counts down — keep opening boxes until it reaches zero!</div>"
       },
-      "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it. You need to try to hold the mouse button for {bricks.completionParams.target_hold_ms} ms, then release it. The closer to exactly {bricks.completionParams.target_hold_ms} ms you hold the button for, the more of the box will disappear.\n\nIf you hold the button too long or short, less of the box will be removed.",
-      "We will start with a practice of the click-and-hold task."
+      "To open a box, click anywhere on the belt while the box is under your cursor. Keep clicking until the box disappears, then move to the next one. Wider boxes take more clicks to open."
     ],
     "blockSummary": {
       "enabled": true,
@@ -833,8 +611,8 @@
       },
       "title": "End of {blockLabel}",
       "lines": [
-        "Boxes opened: {blockCleared}",
-        "Boxes lost: {blockDropped}",
+        "Boxes opened: {trialCleared}",
+        "Boxes lost: {trialDropped}",
         "Current coin balance: {experimentPoints}"
       ],
       "metrics": {

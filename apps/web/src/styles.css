@@ -54,9 +54,14 @@ body {
 }
 
 code {
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.05);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+.card code {
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
 }
 
 .exp-continue-screen {

@@ -124,6 +124,12 @@ Completion-mode note (`hover_to_clear`):
 - Bricks keep moving while hovered, and visible width is depleted from the right edge at a processing rate (`completionParams.hover_process_rate_px_s`).
 - If that config key is omitted, the runtime default is the brick/conveyor progress-rate variable `brick.speed` (not a fixed constant).
 
+Completion-mode note (`hold_to_clear`):
+- Hold processing is rate-based while the pointer is held down.
+- Bricks keep moving while held, and visible width is depleted at `completionParams.hold_process_rate_px_s`.
+- Supports all interaction targeting areas (`brick`, `conveyor`, `spotlight`).
+- If that key is omitted, runtime falls back to `brick.speed`.
+
 Interaction targeting note:
 - Default targeting is direct brick hit-testing.
 - Preferred selector is `bricks.interaction.targetingArea`:

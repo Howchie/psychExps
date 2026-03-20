@@ -535,10 +535,15 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       const surveyDef = createSurveyFromPreset(
         config.endSurvey as Parameters<typeof createSurveyFromPreset>[0],
       );
+      const uiConfig = asObject(context.taskConfig.ui);
       root.innerHTML = "";
       surveyResult = await runSurvey(root, surveyDef, {
         buttonId:             "matb-survey-submit",
         autoFocusSubmitButton: true,
+        cardBackground:       asString(uiConfig?.cardBackground) ?? undefined,
+        cardBorder:           asString(uiConfig?.cardBorder) ?? undefined,
+        cardBorderRadius:     asString(uiConfig?.cardBorderRadius) ?? undefined,
+        cardColor:            asString(uiConfig?.cardColor) ?? undefined,
       });
     } catch (err) {
       console.warn("[MATB] End survey failed:", err);
