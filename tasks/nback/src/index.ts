@@ -309,6 +309,7 @@ interface PlannedTrial {
   correctResponse: string;
   expectedCategory?: string;
   usedAsSource?: boolean;
+  /** If true, stimulus injectors (like PM) must not overwrite this trial. */
   locked?: boolean;
 }
 

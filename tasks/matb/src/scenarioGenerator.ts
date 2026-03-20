@@ -48,6 +48,22 @@ export interface MatbScenarioConfig {
   commsOwnRatio?: number;
   /** Minimum gap between prompts (ms). */
   commsMinGapMs?: number;
+  /**
+   * Minimum frequency variation from a radio's current frequency (MHz).
+   * Target frequency is offset by a random amount in [min, max] variation,
+   * matching the OpenMATB communications plugin behaviour. Default 5.0.
+   */
+  commsMinVariationMhz?: number;
+  /**
+   * Maximum frequency variation from a radio's current frequency (MHz).
+   * Default 6.0.
+   */
+  commsMaxVariationMhz?: number;
+  /**
+   * Starting frequencies for each radio (keyed by radio id, e.g. "nav1").
+   * Radios not listed here default to the midpoint of frequencyRange.
+   */
+  radioDefaultFreqsMhz?: Record<string, number>;
 
   // ── Resman ───────────────────────────────────────────────────────────────
   /** Pump ids available for failure injection (numeric strings, e.g. "1"–"8"). */
@@ -155,25 +171,47 @@ export function generateMatbScenario(cfg: MatbScenarioConfig): ScenarioEvent[] {
   const commsInterval   = cfg.commsIntervalMs ?? 40000;
   const commsOwnRatio   = cfg.commsOwnRatio   ?? 0.5;
   const commsMinGap     = cfg.commsMinGapMs   ?? 15000;
+  const commsMinVar     = cfg.commsMinVariationMhz ?? 5.0;
+  const commsMaxVar     = cfg.commsMaxVariationMhz ?? 6.0;
 
-  const freqSteps = Math.round((freqRange.maxMhz - freqRange.minMhz) / freqRange.stepMhz);
+  // Initialise per-radio current frequencies (simulated state used to pick
+  // a target that is a realistic distance away — matching OpenMATB comms.py).
+  const midFreq = roundToStep(
+    (freqRange.minMhz + freqRange.maxMhz) / 2,
+    freqRange.stepMhz,
+  );
+  const radioCurrentFreq: Record<string, number> = {};
+  for (const id of radioIds) {
+    radioCurrentFreq[id] = cfg.radioDefaultFreqsMhz?.[id] ?? midFreq;
+  }
 
   {
     let t = activeStart + jitter(commsInterval * 0.6, 0.3, rng);
     while (t < activeEnd) {
-      const isOwn     = rng() < commsOwnRatio;
-      const callsign  = isOwn ? ownCallsign : pickRandom(otherCallsigns, rng);
-      const radio     = pickRandom(radioIds, rng);
-      const freqMhz   = roundToStep(
-        freqRange.minMhz + rng() * (freqRange.maxMhz - freqRange.minMhz),
-        freqRange.stepMhz,
-      );
+      const isOwn    = rng() < commsOwnRatio;
+      const callsign = isOwn ? ownCallsign : pickRandom(otherCallsigns, rng);
+      const radio    = pickRandom(radioIds, rng);
+
+      // Pick a target frequency that differs from the radio's current
+      // frequency by a random amount in [commsMinVar, commsMaxVar] MHz,
+      // with a randomly chosen sign, clamped to the legal range.
+      const variation = commsMinVar + rng() * (commsMaxVar - commsMinVar);
+      const sign      = rng() < 0.5 ? 1 : -1;
+      const raw       = radioCurrentFreq[radio] + sign * variation;
+      const clamped   = Math.max(freqRange.minMhz, Math.min(freqRange.maxMhz, raw));
+      const freqMhz   = roundToStep(clamped, freqRange.stepMhz);
+
       events.push({
         timeMs:   Math.round(t),
         targetId: "comms",
         command:  "prompt",
         value:    { callsign, radio, frequency: +freqMhz.toFixed(3) },
       });
+
+      // Update simulated current frequency so the next prompt for this radio
+      // starts from a realistic position (the participant just tuned to freqMhz).
+      radioCurrentFreq[radio] = freqMhz;
+
       t += Math.max(commsMinGap, jitter(commsInterval, 0.3, rng));
     }
   }

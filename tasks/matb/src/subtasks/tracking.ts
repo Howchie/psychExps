@@ -11,7 +11,6 @@
 import {
   PerturbationController,
   TrackingBinSummarizer,
-  computeTrackingDistance,
   asArray,
   asObject,
   asString,
@@ -55,26 +54,52 @@ export interface TrackingSubTaskConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Result type
+// Result types
 // ---------------------------------------------------------------------------
+
+/** One bin of tracking data. centerDistancePx is Euclidean distance from reticle center. */
+export interface TrackingBin {
+  binIndex: number;
+  startMs: number;
+  endMs: number;
+  sampleCount: number;
+  /** Frames where cursor was inside the reticle target. */
+  insideCount: number;
+  /** Frames where cursor was outside the reticle target. */
+  outsideCount: number;
+  centerDistanceSampleCount: number;
+  /**
+   * Mean Euclidean distance from the reticle center (px).
+   * Matches OpenMATB track.py return_deviation() — sqrt(x² + y²).
+   * Null if no samples in this bin.
+   */
+  meanCenterDistancePx: number | null;
+}
+
+/**
+ * One cursor excursion (period outside the target), matching OpenMATB's
+ * per-excursion response_time log entry.
+ */
+export interface TrackingExcursionRecord {
+  excursionIdx: number;
+  /** Session time (ms) when cursor left the target. */
+  startMs: number;
+  /** Session time (ms) when cursor returned to target. null if still outside at session end. */
+  endMs: number | null;
+  /** Duration of the excursion in ms. null if still outside at session end. */
+  durationMs: number | null;
+}
 
 export interface TrackingSubTaskResult {
   elapsedMs: number;
   sampleCount: number;
   insideCount: number;
   outsideCount: number;
-  distanceSampleCount: number;
-  meanBoundaryDistancePx: number | null;
-  bins: Array<{
-    binIndex: number;
-    startMs: number;
-    endMs: number;
-    sampleCount: number;
-    insideCount: number;
-    outsideCount: number;
-    distanceSampleCount: number;
-    meanBoundaryDistancePx: number | null;
-  }>;
+  centerDistanceSampleCount: number;
+  meanCenterDistancePx: number | null;
+  bins: TrackingBin[];
+  /** Per-excursion records: one entry each time the cursor returns to the target. */
+  excursionRecords: TrackingExcursionRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -129,8 +154,14 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
   let sampleCount = 0;
   let insideCount = 0;
   let outsideCount = 0;
-  let distanceSampleCount = 0;
-  let distanceSum = 0;
+  let centerDistanceSampleCount = 0;
+  let centerDistanceSum = 0;
+
+  // Excursion tracking — matches OpenMATB track.py per-excursion response_time logging.
+  let wasInsidePrev: boolean | null = null;
+  let excursionStartMs: number | null = null;
+  let excursionIdx = 0;
+  const excursionRecords: TrackingExcursionRecord[] = [];
 
   // Rolling window for live performance score.
   const PERF_WINDOW = 150; // last N samples
@@ -208,8 +239,12 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       sampleCount = 0;
       insideCount = 0;
       outsideCount = 0;
-      distanceSampleCount = 0;
-      distanceSum = 0;
+      centerDistanceSampleCount = 0;
+      centerDistanceSum = 0;
+      wasInsidePrev = null;
+      excursionStartMs = null;
+      excursionIdx = 0;
+      excursionRecords.length = 0;
       accDx = 0;
       accDy = 0;
       perfRing.length = 0;
@@ -229,23 +264,47 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       const halfAperture = config.aperturePx / 2;
       const absCursorX = halfAperture + state.cursorX;
       const absCursorY = halfAperture + state.cursorY;
-      const distResult = computeTrackingDistance({ x: absCursorX, y: absCursorY }, reticleTarget);
-      const inside = distResult.inside;
-      const boundaryDistancePx = distResult.boundaryDistancePx;
 
-      // Sample.
+      // Euclidean distance from reticle center — matches OpenMATB track.py return_deviation().
+      const offX = absCursorX - halfAperture;
+      const offY = absCursorY - halfAperture;
+      const centerDistancePx = Math.sqrt(offX * offX + offY * offY);
+      const inside = centerDistancePx <= config.reticleRadiusPx;
+
+      // Sample at configured interval.
       const elapsed = now - startMs;
       if (elapsed - lastSampleElapsed >= config.sampleIntervalMs) {
         sampleCount += 1;
         if (inside) insideCount += 1;
         else outsideCount += 1;
-        if (Number.isFinite(boundaryDistancePx)) {
-          distanceSampleCount += 1;
-          distanceSum += boundaryDistancePx;
-        }
+
+        centerDistanceSampleCount += 1;
+        centerDistanceSum += centerDistancePx;
+
         const timeMs = Math.max(0, Math.round(elapsed));
-        binner.add({ timeMs, inside, boundaryDistancePx });
+        // Pass centerDistancePx as the binner's distance metric (renamed to
+        // meanCenterDistancePx on export — matching OpenMATB's center_deviation).
+        binner.add({ timeMs, inside, boundaryDistancePx: centerDistancePx });
         lastSampleElapsed = elapsed;
+
+        // Excursion detection — matches OpenMATB per-excursion response_time logging.
+        if (wasInsidePrev !== null) {
+          if (wasInsidePrev && !inside) {
+            // Transition inside → outside: start excursion.
+            excursionStartMs = elapsed;
+            excursionIdx++;
+          } else if (!wasInsidePrev && inside && excursionStartMs !== null) {
+            // Transition outside → inside: close and record excursion.
+            excursionRecords.push({
+              excursionIdx,
+              startMs:   Math.round(excursionStartMs),
+              endMs:     Math.round(elapsed),
+              durationMs: Math.round(elapsed - excursionStartMs),
+            });
+            excursionStartMs = null;
+          }
+        }
+        wasInsidePrev = inside;
 
         // Rolling performance window.
         if (perfRing.length < PERF_WINDOW) {
@@ -295,9 +354,6 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
 
       // Support runtime parameter changes via "set" commands.
       if (event.command === "set" && event.path) {
-        // e.g., path = "perturbation.inputGain", value = 0.5
-        // e.g., path = "perturbation.components.0.amplitude", value = 60
-        // For now, recreate the perturbation controller on any perturbation change.
         if (event.path.startsWith("perturbation.")) {
           applyPerturbationOverride(config, event.path, event.value);
           perturbation = new PerturbationController({
@@ -323,16 +379,41 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       }
 
       const elapsed = performance.now() - startMs;
-      const bins = binner ? binner.export(elapsed) : [];
+
+      // Close any open excursion at session end.
+      if (excursionStartMs !== null) {
+        excursionRecords.push({
+          excursionIdx,
+          startMs:   Math.round(excursionStartMs),
+          endMs:     Math.round(elapsed),
+          durationMs: Math.round(elapsed - excursionStartMs),
+        });
+      }
+
+      // Export bins, renaming the binner's boundaryDistancePx → meanCenterDistancePx.
+      const rawBins = binner ? binner.export(elapsed) : [];
+      const bins: TrackingBin[] = rawBins.map((b) => ({
+        binIndex:                  b.binIndex,
+        startMs:                   b.startMs,
+        endMs:                     b.endMs,
+        sampleCount:               b.sampleCount,
+        insideCount:               b.insideCount,
+        outsideCount:              b.outsideCount,
+        centerDistanceSampleCount: b.distanceSampleCount,
+        meanCenterDistancePx:      b.meanBoundaryDistancePx,
+      }));
 
       const result: TrackingSubTaskResult = {
         elapsedMs: Math.round(elapsed),
         sampleCount,
         insideCount,
         outsideCount,
-        distanceSampleCount,
-        meanBoundaryDistancePx: distanceSampleCount > 0 ? distanceSum / distanceSampleCount : null,
+        centerDistanceSampleCount,
+        meanCenterDistancePx: centerDistanceSampleCount > 0
+          ? centerDistanceSum / centerDistanceSampleCount
+          : null,
         bins,
+        excursionRecords: [...excursionRecords],
       };
 
       // Reset state.
@@ -343,6 +424,10 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       container = null;
       binner = null;
       reticleTarget = null;
+      wasInsidePrev = null;
+      excursionStartMs = null;
+      excursionIdx = 0;
+      excursionRecords.length = 0;
 
       return result;
     },

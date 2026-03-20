@@ -5,6 +5,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { __testing__, nbackAdapter } from './index';
 import { createResponseSemantics, createVariableResolver, SeededRandom, StimulusInjectorModule, generateProspectiveMemoryPositions } from '@experiments/core';
 
+// PlannedTrial is a private interface — infer its shape from the inject function signature.
+type NbackTrial = Parameters<(typeof __testing__)['injectNBackTargets']>[1][number];
+
 describe('NbackTaskAdapter', () => {
   it('exposes manifest and lifecycle hooks', () => {
     expect(nbackAdapter.manifest.taskId).toBe('nback');
@@ -178,7 +181,7 @@ describe('NbackTaskAdapter', () => {
       const trials = items.map((item, i) => ({
         trialIndex: i, blockIndex: 0, trialType: 'F',
         item, sourceCategory: 'other', itemCategory: 'other', correctResponse: 'z',
-      }));
+      })) as NbackTrial[];
 
       injectNBackTargets(rng, trials, N_LEVEL, N_TARGETS, 'm');
       for (const lagPass of LURE_LAG_PASSES) {
@@ -239,7 +242,7 @@ describe('NbackTaskAdapter', () => {
     const sampleTrials = items.map((item, i) => ({
       trialIndex: i, blockIndex: 0, trialType: 'F',
       item, sourceCategory: 'other', itemCategory: 'other', correctResponse: 'z',
-    }));
+    })) as NbackTrial[];
     injectNBackTargets(rngSample, sampleTrials, N_LEVEL, N_TARGETS, 'm');
     for (const lagPass of LURE_LAG_PASSES) {
       injectNBackLures(rngSample, sampleTrials, N_LEVEL, N_LURES - sampleTrials.filter(t => t.trialType.startsWith('L')).length, lagPass);
@@ -268,7 +271,7 @@ describe('NbackTaskAdapter', () => {
         const tr = localItems.map((item, i) => ({
           trialIndex: i, blockIndex: 0, trialType: 'F',
           item, sourceCategory: 'other', itemCategory: 'other', correctResponse: 'z',
-        }));
+        })) as NbackTrial[];
         injectNBackTargets(r, tr, N_LEVEL, N_TARGETS, 'm');
         for (const lp of LURE_LAG_PASSES) {
           injectNBackLures(r, tr, N_LEVEL, N_LURES - tr.filter(t => t.trialType.startsWith('L')).length, lp);
@@ -312,7 +315,7 @@ describe('NbackTaskAdapter', () => {
 
     // Build a minimal 20-trial 2-back sequence with items A–T
     const items = 'ABCDEFGHIJKLMNOPQRST'.split('');
-    const makeTrials = () => items.map((item, i) => ({
+    const makeTrials = (): NbackTrial[] => items.map((item, i) => ({
       trialIndex: i,
       blockIndex: 0,
       trialType: 'F',

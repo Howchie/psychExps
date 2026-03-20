@@ -112,10 +112,27 @@ export interface ResmanTankRecord {
   totalOutOfToleranceMs: number;
 }
 
+/**
+ * Per-physics-tick record for a target tank, matching OpenMATB's per-update
+ * {tank}_in_tolerance and {tank}_deviation log entries (emitted every 2 s).
+ */
+export interface ResmanTickRecord {
+  /** Session elapsed time at the tick (ms). */
+  timeMs: number;
+  tankId: string;
+  /** Tank level at this tick (integer, matching OpenMATB's int arithmetic). */
+  level: number;
+  /** Signed deviation: level − target (integer). */
+  deviation: number;
+  inTolerance: boolean;
+}
+
 export interface ResmanSubTaskResult {
   elapsedMs: number;
   tankRecords: ResmanTankRecord[];
   pumpToggles: number;
+  /** Raw per-tick data for each target tank (one row per tank per 2 s). */
+  tickRecords: ResmanTickRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +254,12 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
   let totalElapsedMs = 0;
   let pumpToggles = 0;
   let deviationSamples: Map<string, number[]> = new Map();
+  let tickRecords: ResmanTickRecord[] = [];
+  /**
+   * Matches OpenMATB resman.py wait_before_leak = 1: skip depletion and pump
+   * flow on the very first physics tick to let the system stabilise.
+   */
+  let physicsFirstStep = true;
 
   function initState(config: ResolvedResmanConfig): void {
     tankMap = new Map();
@@ -283,15 +306,25 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         deviationSamples.set(td.id, []);
       }
     }
+    tickRecords = [];
+    physicsFirstStep = true;
   }
 
-  function updatePhysics(dtMinutes: number): void {
+  /**
+   * Core physics: depletion and pump flow.
+   * Skipped on the first tick (wait_before_leak), matching OpenMATB resman.py.
+   * Uses Math.trunc() to match Python's int() truncation behaviour.
+   */
+  function updateDepletionAndFlow(dtMinutes: number): void {
     if (!cfg) return;
 
     // Step 1: Target tank depletion (leak).
     for (const [, tank] of tankMap) {
       if (tank.def.leakPerMinute > 0 && tank.def.depletable) {
-        const loss = Math.min(tank.def.leakPerMinute * dtMinutes, tank.level);
+        const loss = Math.min(
+          Math.trunc(tank.def.leakPerMinute * dtMinutes),
+          Math.trunc(tank.level),
+        );
         tank.level -= loss;
       }
     }
@@ -303,17 +336,25 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       const dst = tankMap.get(pump.destId);
       if (!src || !dst) continue;
 
-      const volume = Math.min(pump.flowPerMinute * dtMinutes, src.def.depletable ? src.level : Infinity);
+      const rawVolume = pump.flowPerMinute * dtMinutes;
+      const volume = Math.trunc(
+        src.def.depletable ? Math.min(rawVolume, src.level) : rawVolume,
+      );
+
       if (src.def.depletable) {
         src.level = Math.max(0, src.level - volume);
       }
       dst.level = Math.min(dst.def.maxLevel, dst.level + volume);
     }
+  }
 
-    // Step 3: Auto-shutoff on overflow/underflow (skip failed pumps).
+  /**
+   * Auto-shutoff: turn off pumps when source is empty or destination is full.
+   * Always runs (even on first tick), matching OpenMATB resman.py step 3.
+   */
+  function updateAutoShutoff(): void {
     for (const pump of pumpList) {
-      if (pump.state === "failure") continue;
-      if (pump.state !== "on") continue;
+      if (pump.state === "failure" || pump.state !== "on") continue;
 
       const src = tankMap.get(pump.sourceId);
       const dst = tankMap.get(pump.destId);
@@ -324,8 +365,14 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         pump.state = "off";
       }
     }
+  }
 
-    // Step 4: Tolerance check.
+  /**
+   * Tolerance check: update inTolerance for each target tank.
+   * Always runs (even on first tick).
+   */
+  function updateToleranceCheck(): void {
+    if (!cfg) return;
     for (const [, tank] of tankMap) {
       if (tank.def.targetLevel == null) {
         tank.inTolerance = true;
@@ -343,7 +390,6 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       if (tank.def.targetLevel == null) continue;
       const samples = deviationSamples.get(tank.def.id);
       if (samples) {
-        // Signed deviation (level - target), matching OpenMATB resman.py line 340.
         samples.push(tank.level - tank.def.targetLevel);
       }
     }
@@ -361,6 +407,23 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     }
   }
 
+  /**
+   * Per-tick record for each target tank, matching OpenMATB's per-update
+   * {tank}_in_tolerance and {tank}_deviation log entries.
+   */
+  function recordTick(elapsedMs: number): void {
+    for (const [, tank] of tankMap) {
+      if (tank.def.targetLevel == null) continue;
+      tickRecords.push({
+        timeMs:      Math.round(elapsedMs),
+        tankId:      tank.def.id,
+        level:       Math.trunc(tank.level),
+        deviation:   Math.trunc(tank.level - tank.def.targetLevel),
+        inTolerance: tank.inTolerance,
+      });
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Rendering
   // -------------------------------------------------------------------------
@@ -373,15 +436,6 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     ctx.fillStyle = "#1a1a2e";
     ctx.fillRect(0, 0, W, H);
 
-    // Layout: standard MATB resman layout
-    //   Row 1:  [   A   ]  gap  [   B   ]
-    //   Row 2:  [ C ] [ E ]     [ D ] [ F ]
-    // Pumps are drawn between connected tanks.
-
-    const leftTanks = cfg.tanks.filter((t) => t.side === "left");
-    const rightTanks = cfg.tanks.filter((t) => t.side === "right");
-
-    // Identify target vs supply tanks per side.
     const tankA = tankMap.get("a");
     const tankB = tankMap.get("b");
     const tankC = tankMap.get("c");
@@ -445,7 +499,6 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         ctx, cx: pumpPos.cx, cy: pumpPos.cy, size: 8, direction: pumpPos.direction,
       });
 
-      // Draw connectors from source to pump and pump to dest.
       const srcPos = getTankEdge(pump.sourceId, pumpPos, W, leftCenter, rightCenter, topY, bottomY, bigTankW, bigTankH, smallTankW, smallTankH, leftSmallSpacing);
       const dstPos = getTankEdge(pump.destId, pumpPos, W, leftCenter, rightCenter, topY, bottomY, bigTankW, bigTankH, smallTankW, smallTankH, leftSmallSpacing);
       if (srcPos) renderConnector(ctx, srcPos.x, srcPos.y, pumpPos.cx, pumpPos.cy, pump.state === "on");
@@ -530,7 +583,6 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     const center = getTankCenter(tankId, leftCenter, rightCenter, topY, bottomY, bigTankW, bigTankH, smallTankW, smallTankH, smallSpacing);
     if (!center) return null;
 
-    // Return the point on the tank edge closest to the pump.
     const isSmall = tankId === "c" || tankId === "d" || tankId === "e" || tankId === "f";
     const hw = (isSmall ? smallTankW : bigTankW) / 2;
     const hh = (isSmall ? smallTankH : bigTankH) / 2;
@@ -539,10 +591,8 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     const dy = pumpPos.cy - center.y;
 
     if (Math.abs(dx) * hh > Math.abs(dy) * hw) {
-      // Hit side edge.
       return { x: center.x + (dx > 0 ? hw : -hw), y: center.y };
     } else {
-      // Hit top/bottom edge.
       return { x: center.x, y: center.y + (dy > 0 ? hh : -hh) };
     }
   }
@@ -581,9 +631,22 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       // Fixed-step physics at the configured interval.
       while (physicsAccMs >= cfg.updateIntervalMs) {
         const dtMinutes = cfg.updateIntervalMs / 60000;
-        updatePhysics(dtMinutes);
+
+        if (!physicsFirstStep) {
+          // Normal tick: depletion + pump flow.
+          updateDepletionAndFlow(dtMinutes);
+        } else {
+          // First tick: skip depletion/flow (wait_before_leak = 1), matching
+          // OpenMATB resman.py. Auto-shutoff and tolerance checks still run.
+          physicsFirstStep = false;
+        }
+
+        updateAutoShutoff();
+        updateToleranceCheck();
         updateToleranceTiming(cfg.updateIntervalMs);
         sampleDeviations();
+        recordTick(totalElapsedMs);
+
         physicsAccMs -= cfg.updateIntervalMs;
       }
 
@@ -601,20 +664,16 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
 
     handleScenarioEvent(event: ScenarioEvent): void {
       if (!cfg) return;
-      // Commands: set pump-{id}-state, set tank-{id}-level, etc.
       if (event.command === "set" && event.path) {
         const parts = event.path.split(".");
-        // e.g., "pump.3.state" → set pump 3 state
         if (parts[0] === "pump" && parts.length >= 3) {
           const pumpId = parts[1];
           const prop = parts[2];
           const pump = pumpList.find((p) => p.def.id === pumpId);
           if (pump && prop === "state") {
-            const newState = parsePumpState(String(event.value));
-            pump.state = newState;
+            pump.state = parsePumpState(String(event.value));
           }
         }
-        // e.g., "tank.a.level" → set tank a level
         if (parts[0] === "tank" && parts.length >= 3) {
           const tankId = parts[1];
           const prop = parts[2];
@@ -655,11 +714,11 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         elapsedMs: totalElapsedMs,
         tankRecords,
         pumpToggles,
+        tickRecords: [...tickRecords],
       };
     },
 
     getPerformance(): SubTaskPerformance {
-      // Score = average proportion in tolerance across target tanks.
       let total = 0;
       let count = 0;
       for (const [, tank] of tankMap) {

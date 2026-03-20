@@ -19,6 +19,7 @@ import {
   asObject,
   asString,
   toPositiveNumber,
+  toPositiveFloat,
   toNonNegativeNumber,
   type SubTaskHandle,
   type SubTaskPerformance,
@@ -67,6 +68,12 @@ export interface SysmonSubTaskConfig {
   feedbackDurationMs?: number;
   /** Update interval for scale arrow drift (ms). */
   driftIntervalMs?: number;
+  /**
+   * When true, any registered sysmon key can respond to any active failure —
+   * not just the specific key assigned to that gauge. Matches OpenMATB's
+   * allowanykey parameter. Default false.
+   */
+  allowAnyKey?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +139,7 @@ interface ResolvedSysmonConfig {
   alertTimeoutMs: number;
   feedbackDurationMs: number;
   driftIntervalMs: number;
+  allowAnyKey: boolean;
 }
 
 function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
@@ -161,7 +169,7 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
           id: asString(o.id) ?? `scale${i + 1}`,
           label: asString(o.label) ?? `F${i + 1}`,
           key: asString(o.key) ?? `f${i + 1}`,
-          driftSpeed: toPositiveNumber(o.driftSpeed, 1),
+          driftSpeed: toPositiveFloat(o.driftSpeed, 1),
         };
       })
     : [
@@ -177,6 +185,7 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
     alertTimeoutMs: toPositiveNumber(raw.alertTimeoutMs, 10000),
     feedbackDurationMs: toPositiveNumber(raw.feedbackDurationMs, 1500),
     driftIntervalMs: toPositiveNumber(raw.driftIntervalMs, 200),
+    allowAnyKey: raw.allowAnyKey === true || raw.allowAnyKey === "True" || raw.allowAnyKey === "true",
   };
 }
 
@@ -386,16 +395,32 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
 
     if (gauge.failure) {
       stopFailure(gauge, true);
-    } else {
-      // False alarm.
-      const now = performance.now() - startMs;
-      sdtRecords.push({
-        gaugeId: gauge.id,
-        gaugeKind: gauge.kind,
-        outcome: "FA",
-        responseTimeMs: null,
-        timestampMs: now,
-      });
+      return true;
+    }
+
+    if (config!.allowAnyKey) {
+      // allowAnyKey: any valid sysmon key responds to the first active failure,
+      // matching OpenMATB's allowanykey parameter.
+      const failingGauge = gauges.find((g) => g.failure);
+      if (failingGauge) {
+        stopFailure(failingGauge, true);
+        return true;
+      }
+    }
+
+    // False alarm — key pressed when no failure is active on this gauge.
+    const now = performance.now() - startMs;
+    sdtRecords.push({
+      gaugeId: gauge.id,
+      gaugeKind: gauge.kind,
+      outcome: "FA",
+      responseTimeMs: null,
+      timestampMs: now,
+    });
+    // Only show visual feedback for scales (lights have no feedback bar widget),
+    // matching OpenMATB sysmon.py which calls set_scale_feedback only for gauges
+    // that have a _feedbacktimer (scales only).
+    if (gauge.kind === "scale") {
       gauge.feedbackType = "negative";
       gauge.feedbackTimerMs = config!.feedbackDurationMs;
     }
