@@ -1,9 +1,12 @@
 {
   "ui": {
     "pageBackground": "linear-gradient(180deg, #DBDBDB 0%, #ADADAD 100%)",
-    "cardWidth": "480px",
-    "cardMinHeight": "380px",
-    "cardBorder": "1px solid #111111"
+    "cardWidth": "600px",
+    "cardMinHeight": "400px",
+    "cardBorder": "1px solid #111111",
+    "cardBorderRadius": "12px",
+    "cardFontSize": "1.2rem",
+    "cardFontFamily": "system-ui, -apple-system, sans-serif"
   },
   "task": {
     "implementation": "native_bricks",
@@ -15,7 +18,7 @@
         "scope": "trial",
         "key": " ",
         "audio": {
-          "volume": 0.0
+          "volume": 0
         },
         "stimMode": "border",
         "border": {
@@ -59,7 +62,7 @@
       "scrollRenderMode": "auto"
     },
     "spotlight": {
-      "snapMode": "screen",
+      "snapMode": "none",
       "cornerRadiusPx": 10,
       "ringWidthPx": 3,
       "ringAlpha": 0.95
@@ -262,14 +265,19 @@
     "preset": {
       "mode": "fixed",
       "id": "warehouse_concrete_checker"
+    },
+    "performance": {
+      "maxDevicePixelRatio": 1.5,
+      "antialias": true,
+      "imageRendering": "auto"
     }
   },
   "conveyors": {
     "nConveyors": 4,
     "lengthPx": {
       "type": "uniform",
-      "min": 520,
-      "max": 760
+      "min": 560,
+      "max": 740
     },
     "speedPxPerSec": {
       "type": "fixed",
@@ -283,9 +291,9 @@
     },
     "completionParams": {
       "target_hold_ms": 1000,
-      "progress_per_perfect": 0.33,
-      "progress_curve": 0.85,
-      "overshoot_tolerance_ms": 180,
+      "progress_per_perfect": 0.27,
+      "progress_curve": 0.8,
+      "overshoot_tolerance_ms": 200,
       "width_scaling": true,
       "width_reference_px": 50,
       "width_scaling_exponent": 1
@@ -305,8 +313,8 @@
         },
         "value": {
           "type": "poisson",
-          "lambda": 5,
-          "min": 3,
+          "lambda": 1,
+          "min": 5,
           "max": 8
         }
       },
@@ -327,7 +335,7 @@
         },
         "value": {
           "type": "poisson",
-          "lambda": 2,
+          "lambda": 1,
           "min": 1,
           "max": 4
         }
@@ -383,7 +391,7 @@
     }
   },
   "difficultyModel": {
-    "holdQualityMean": 0.5
+    "holdQualityMean": 0.8
   },
   "trial": {
     "mode": "max_bricks",
@@ -398,7 +406,7 @@
     }
   },
   "experiment": {
-    "showBetweenBlockSummary": false,
+    "showBetweenBlockSummary": true,
     "startTrialsOn": "click",
     "startOverlay": {
       "text": "Click to begin.",
@@ -420,8 +428,8 @@
     "statsPresentation": {
       "scopeByMetric": {
         "points": "experiment",
-        "cleared": "trial",
-        "dropped": "trial"
+        "cleared": "block",
+        "dropped": "block"
       },
       "reset": [
         {
@@ -635,13 +643,16 @@
             "drt": {
               "enabled": false
             }
+          },
+        "experiment": {
+          "showBetweenBlockSummary": false
           }
         },
         "display": {
           "practiceFeedback": {
-            "colorTooFast": "#FF0000",
-            "colorTooSlow": "#0000FF",
-            "colorGood": "#008000",
+            "colorTooFast": "#D71B60",
+            "colorTooSlow": "#0072B2",
+            "colorGood": "#05FE04",
             "goodThresholdMin": -0.15,
             "goodThresholdMax": 0.15
           }
@@ -662,7 +673,10 @@
         }
       },
       "preBlockScreens": [
-        "Click on the brick with the left mouse button.\nTry to hold the button for exactly {bricks.completionParams.target_hold_ms} ms and then release it.\nAfter each click you will see the actual time you held the button for.\nThis feedback will be green if you were close to the target time.\n\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow."
+        "Click on the brick with the left mouse button.\nTry to hold the button for exactly {bricks.completionParams.target_hold_ms} ms and then release it.\nAfter each click you will see the actual time you held the button for.\nThis feedback will be green if you were close to the target time.\n\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow.\n\nThe block will end after you make 20 clicks."
+      ],
+      "repeatAfterBlockScreens": [
+        "Remember:\nIf the feedback is red, you were too fast.\n\nIf the feedback is blue, you were too slow.\n\nPress continue when you are ready for the next set of trials."
       ],
       "repeatUntil": {
         "enabled": true,
@@ -693,7 +707,7 @@
         "condition_plan"
       ],
       "preBlockScreens": [
-        "Great work!\nNow, we will use this same click-and-hold strategy to open some boxes!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must click and hold for {bricks.completionParams.target_hold_ms} ms several times on each box, until it opens.\nWhen it opens, a new block will be highlighed.\nTry to open as many boxes as possible to collect more coins!\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
+        "Great work!\nNow, we will use this same click-and-hold strategy to open some boxes!\n\nIn the following trials, boxes will move slowly along the conveyor belts.\nYou must click and hold for {bricks.completionParams.target_hold_ms} ms several times on each box, until it opens.\n\nOnly the highlighted box is currently actionable.\nOnce you clear a box, another random box will be highlighted.\nBy working hard at estimating {bricks.completionParams.target_hold_ms} ms holds, you can clear the boxes faster.\nTry to open as many boxes as possible to collect more coins!\n\nAfter each trial you will be asked to rate your experienced workload on a scale of 1-10."
       ],
       "afterBlockScreens": [
         {
@@ -739,9 +753,9 @@
   "instructions": {
     "introPages": [
       {
-        "html": "Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit.<p>Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward."
+        "html": "Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit. Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward."
       },
-      "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it.\n\nYou need to try to hold the mouse button for {bricks.completionParams.target_hold_ms} ms, then release it.\nThe closer to exactly {bricks.completionParams.target_hold_ms} ms you hold the button for, the more of the box will disappear.\nIf you hold the button too long or too short, little-to-none of the box will be removed.\n\nOnly the highlighted box is currently actionable. Once you clear a box, another random box will be highlighted.\nBy working hard at estimating {bricks.completionParams.target_hold_ms} ms holds, you can clear the boxes faster.",
+      "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it. You need to try to hold the mouse button for {bricks.completionParams.target_hold_ms} ms, then release it. The closer to exactly {bricks.completionParams.target_hold_ms} ms you hold the button for, the more of the box will disappear.\n\nIf you hold the button too long or short, less of the box will be removed.",
       "We will start with a practice of the click-and-hold task."
     ],
     "blockSummary": {

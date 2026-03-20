@@ -369,15 +369,8 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockDrtPreviousStats.delete(blockIndex);
     },
     csvOptions: {
-      suffix: "bricks_drt_rows",
-      getRecords: (res) => buildBricksDrtRows(
-        res.blocks.flatMap((b: any) => b.trialResults),
-        blockPlan,
-        {
-          participantId: selection.participant.participantId,
-          variantId: selection.variantId,
-        },
-      ),
+      suffix: "bricks_trials",
+      getRecords: (res) => res.blocks.flatMap((b: any) => b.trialResults),
     },
     getTaskMetadata: (res) => ({
       drt_rows: buildBricksDrtRows(

@@ -184,8 +184,10 @@ Quota note:
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.
 
-CSV export is DRT-row oriented (`bricks_drt_rows`) and includes:
-- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation)
+CSV export now uses trial records (`bricks_trials`) as the primary CSV output.
+
+DRT long-format rows remain available via task metadata (`drt_rows`) and include:
+- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation`)
 - spotlight context at response time (`spotlight_brick_id`, `spotlight_conveyor_id`) when available
 - all flattened columns from each `drt_response_rows` entry (including dynamic transform fields in `transformColumns`)
 

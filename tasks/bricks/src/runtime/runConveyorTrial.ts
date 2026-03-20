@@ -218,6 +218,10 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   await renderer.init(container);
   renderer.toggleVisualDRT(false, legacyDrtRaw?.stim_visual_config);
 
+  // Prime the first frame so spotlight hit-area is interactive before the first RAF tick.
+  const initialFocusState = gameState.getFocusState();
+  renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, initialFocusState);
+
   let drtPresentation: ReturnType<typeof createDrtPresentationBridge> | null = null;
   let activeStimulusId: string | null = null;
 

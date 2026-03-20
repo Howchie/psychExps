@@ -764,8 +764,9 @@ Supports:
 - `maxAttempts`
 - `minAccuracy` (0..1) and `minAccuracyPct` (0..100 alias)
 - `minCorrect`, `minTotal`
+- `maxMeanMetric`, `minMeanMetric` (mean absolute value of `metrics.metricField`)
 - `where` trial-result filtering
-- `metrics.correctField`
+- `metrics.correctField`, `metrics.metricField`
 
 ### `evaluateBlockRepeatUntil(args): BlockRepeatEvaluation`
 
@@ -774,4 +775,4 @@ Returns:
 - `passed`
 - `shouldRepeat`
 - `reason` (`threshold_met`, `threshold_not_met`, `max_attempts_reached`, `disabled`)
-- attempt-local `stats` (`total`, `correct`, `accuracy`)
+- attempt-local `stats` (`total`, `correct`, `accuracy`, `meanMetric`)

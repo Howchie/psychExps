@@ -80,8 +80,13 @@
     },
     "performance": {
       "maxDevicePixelRatio": 1.5,
+      "antialias": true,
+      "imageRendering": "auto",
       "maxFrameDtMs": 50,
       "maxActiveEffects": 180
+    },
+    "spotlight": {
+      "snapMode": "none"
     }
   },
   "conveyors": {

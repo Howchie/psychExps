@@ -594,7 +594,19 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
         // Light-specific: set on/off state directly (e.g. auto-solver indicator).
         if (field === "on" && gauge.kind === "light") {
           const lg = gauge as LightRuntime;
-          lg.state.on = event.value === true || event.value === "true" || event.value === "True";
+          const newState = event.value === true || event.value === "true" || event.value === "True";
+          lg.state.on = newState;
+
+          // Semantic coupling: when a warning light (defaultOn: false) turns on,
+          // turn off all OK lights (defaultOn: true) that aren't in an active failure,
+          // and restore them when the warning clears.
+          if (!lg.defaultOn) {
+            for (const g of gauges) {
+              if (g.kind === "light" && (g as LightRuntime).defaultOn && !g.failure) {
+                (g as LightRuntime).state.on = !newState;
+              }
+            }
+          }
         }
       }
     },

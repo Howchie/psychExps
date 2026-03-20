@@ -325,8 +325,10 @@ Fields:
 - `minAccuracy` (0..1) or `minAccuracyPct` (0..100)
 - `minCorrect` (optional integer)
 - `minTotal` (optional integer)
+- `maxMeanMetric`, `minMeanMetric` (optional thresholds on the mean absolute value of `metrics.metricField`)
 - `where` (optional trial filter object, same shape as block-summary filtering)
 - `metrics.correctField` (field used for correct/incorrect scoring; `true`/`1` count as correct)
+- `metrics.metricField` (optional field used for mean-metric thresholds; array values are expanded)
 
 Example:
 ```json

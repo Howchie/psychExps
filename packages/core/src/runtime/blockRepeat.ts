@@ -89,15 +89,20 @@ export function coerceBlockRepeatUntilConfig(value: unknown): BlockRepeatUntilCo
   const maxAttempts = Math.max(1, Math.floor(toNumber(raw.maxAttempts) ?? 1));
   const minCorrect = toNumber(raw.minCorrect);
   const minTotal = toNumber(raw.minTotal);
+  const maxMeanMetric = toNumber(raw.maxMeanMetric);
+  const minMeanMetric = toNumber(raw.minMeanMetric);
   return {
     enabled: raw.enabled !== false,
     maxAttempts,
     minAccuracy: normalizeMinAccuracy(raw.minAccuracy ?? raw.minAccuracyPct),
     minCorrect: minCorrect != null ? Math.max(0, Math.floor(minCorrect)) : undefined,
     minTotal: minTotal != null ? Math.max(0, Math.floor(minTotal)) : undefined,
+    maxMeanMetric: maxMeanMetric != null ? maxMeanMetric : undefined,
+    minMeanMetric: minMeanMetric != null ? minMeanMetric : undefined,
     where: normalizeWhere(asObject(raw.where)),
     metrics: {
       correctField: asString(metricsRaw?.correctField) || "correct",
+      metricField: asString(metricsRaw?.metricField) || undefined,
     },
   };
 }

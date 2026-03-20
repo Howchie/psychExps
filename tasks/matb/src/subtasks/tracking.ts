@@ -15,6 +15,7 @@ import {
   asObject,
   asString,
   toPositiveNumber,
+  toPositiveFloat,
   toNonNegativeNumber,
   type PerturbationComponent,
   type TrackingCircleTarget,
@@ -187,7 +188,7 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       cursorColorInside: asString(cursorRaw.colorInside) ?? "#000000",
       cursorColorOutside: asString(cursorRaw.colorOutside) ?? "#ef4444",
       perturbationComponents: parsePerturbationComponents(asArray(pertRaw.components)),
-      inputGain: toPositiveNumber(pertRaw.inputGain ?? pertRaw.gainRatio, 1),
+      inputGain: toPositiveFloat(pertRaw.inputGain ?? pertRaw.gainRatio, 1),
       maxDisplacementPx: toPositiveNumber(pertRaw.maxDisplacementPx, aperturePx / 2),
       sampleIntervalMs: toPositiveNumber(raw.sampleIntervalMs, 16),
       binMs: toPositiveNumber(raw.binMs, 2000),
@@ -215,7 +216,7 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas 2D context unavailable for MATB tracking subtask.");
 
-      canvas.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mousemove", onMouseMove);
       canvas.addEventListener("click", onCanvasClick);
 
       // Init perturbation.
@@ -368,7 +369,7 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
     stop(): TrackingSubTaskResult {
       // Clean up.
       if (canvas) {
-        canvas.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mousemove", onMouseMove);
         canvas.removeEventListener("click", onCanvasClick);
         if (document.pointerLockElement === canvas) {
           document.exitPointerLock();
@@ -458,8 +459,8 @@ function parsePerturbationComponents(raw: unknown[]): PerturbationComponent[] {
     if (axis !== "x" && axis !== "y") continue;
     out.push({
       axis,
-      frequencyHz: toPositiveNumber(obj.frequencyHz, 0.05),
-      amplitude: toPositiveNumber(obj.amplitude, 40),
+      frequencyHz: toPositiveFloat(obj.frequencyHz, 0.05),
+      amplitude: toPositiveFloat(obj.amplitude, 40),
       phaseRad: toNonNegativeNumber(obj.phaseRad, 0),
     });
   }

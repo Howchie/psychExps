@@ -317,8 +317,9 @@ function createMatbDisplayElements(display: MatbDisplayConfig): {
   outer.style.alignItems     = "center";
   outer.style.justifyContent = "center";
   outer.style.width          = "100%";
-  outer.style.height         = "100%";
+  outer.style.height         = "100dvh";
   outer.style.overflow       = "hidden";
+  outer.style.cursor         = "none";
   outer.style.background     = display.background;
   outer.style.padding        = `${display.marginPx}px`;
   outer.style.boxSizing      = "border-box";
@@ -328,7 +329,7 @@ function createMatbDisplayElements(display: MatbDisplayConfig): {
   matbArea.style.maxWidth    = `${display.maxWidthPx}px`;
   matbArea.style.minWidth    = `${display.minWidthPx}px`;
   matbArea.style.aspectRatio = display.aspectRatio;
-  matbArea.style.maxHeight   = "100%";
+  matbArea.style.maxHeight   = `min(100%, ${display.maxHeightPx}px)`;
   matbArea.style.minHeight   = `${display.minHeightPx}px`;
   matbArea.style.position    = "relative";
   matbArea.style.boxSizing   = "border-box";
