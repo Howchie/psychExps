@@ -1,6 +1,0 @@
-- generic [ref=e61]:
-  - generic [ref=e62]:
-    - heading "high-reliability" [level=3] [ref=e63]
-    - paragraph [ref=e64]: Press continue when ready.
-  - paragraph [ref=e65]:
-    - button "Continue" [active] [ref=e66] [cursor=pointer]

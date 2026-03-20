@@ -103,4 +103,29 @@ describe("evaluateBlockRepeatUntil", () => {
     expect(result.passed).toBe(false);
     expect(result.shouldRepeat).toBe(true);
   });
+
+  it("supports nested metricField paths for mean-threshold rules", () => {
+    const result = evaluateBlockRepeatUntil({
+      config: {
+        enabled: true,
+        maxAttempts: 2,
+        minMeanMetric: 3,
+        metrics: {
+          correctField: "unused",
+          metricField: "game.stats.cleared",
+        },
+      },
+      trialResults: [
+        { game: { stats: { cleared: 2 } } },
+        { game: { stats: { cleared: 3 } } },
+        { game: { stats: { cleared: 4 } } },
+        { game: { stats: { cleared: 5 } } },
+      ],
+      attemptIndex: 0,
+    });
+
+    expect(result.stats.meanMetric).toBeCloseTo(3.5, 5);
+    expect(result.passed).toBe(true);
+    expect(result.shouldRepeat).toBe(false);
+  });
 });

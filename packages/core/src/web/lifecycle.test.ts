@@ -111,6 +111,24 @@ describe("finalizeTaskRun local save format", () => {
     expect(downloadJson).toHaveBeenCalledTimes(1);
   });
 
+  it("downloads extra CSV outputs when provided", async () => {
+    await finalizeTaskRun({
+      coreConfig: baseCoreConfig,
+      selection: baseSelection,
+      payload: { ok: true },
+      csv: { contents: "a,b\n1,2", suffix: "trials" },
+      extraCsvs: [
+        { contents: "x,y\n3,4", suffix: "events" },
+        { contents: "m,n\n5,6", suffix: "drt_rows" },
+      ],
+    });
+
+    expect(downloadCsv).toHaveBeenCalledTimes(3);
+    expect(downloadCsv).toHaveBeenNthCalledWith(1, "a,b\n1,2", "experiments", baseSelection, "trials");
+    expect(downloadCsv).toHaveBeenNthCalledWith(2, "x,y\n3,4", "experiments", baseSelection, "events");
+    expect(downloadCsv).toHaveBeenNthCalledWith(3, "m,n\n5,6", "experiments", baseSelection, "drt_rows");
+  });
+
   it("does not re-submit to JATOS when a sink already handled it", async () => {
     await finalizeTaskRun({
       coreConfig: baseCoreConfig,

@@ -11,6 +11,10 @@ export interface FinalizeTaskRunArgs {
     contents: string;
     suffix?: string;
   } | null;
+  extraCsvs?: Array<{
+    contents: string;
+    suffix?: string;
+  }>;
   completionStatus?: "complete" | "incomplete";
   endJatosOnSubmit?: boolean;
   jatosHandledBySink?: boolean;
@@ -45,6 +49,11 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
         args.csv?.contents ?? inferCsvFromPayload(args.payload);
       if (csvContents != null) {
         downloadCsv(csvContents, filePrefix, args.selection, args.csv?.suffix ?? "trials");
+      }
+      const extraCsvs = Array.isArray(args.extraCsvs) ? args.extraCsvs : [];
+      for (const csv of extraCsvs) {
+        if (!csv || typeof csv.contents !== "string" || csv.contents.length === 0) continue;
+        downloadCsv(csv.contents, filePrefix, args.selection, csv.suffix ?? "trials_extra");
       }
     }
 

@@ -282,6 +282,9 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   const brickQuotaEndDelayMs = Number.isFinite(brickQuotaEndDelayMsRaw)
     ? Math.max(0, Math.floor(brickQuotaEndDelayMsRaw))
     : (globalEndDelayMs > 0 ? globalEndDelayMs : 3000);
+  const stopDrtOnBrickQuotaMet =
+    resolvedDrtConfig.scope === 'trial' &&
+    (trialCfg.stopDrtOnBrickQuotaMet === true || trialCfg.endDrtOnBrickQuotaMet === true);
 
   const processPracticeHold = (brickId: string, holdDurationMs: number, x: number, y: number) => {
     if (pendingReplenish) {
@@ -618,8 +621,18 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       }
       resolve(trialData);
     };
+    const stopDrtForPendingEnd = () => {
+      if (finalizedDrtData !== null || !drtController) return;
+      finalizedDrtData = drtController.stop();
+      drtPresentation?.hideAll();
+      activeStimulusId = null;
+    };
+
     const scheduleEnd = (reason: string) => {
       if (ended || pendingEnd) return;
+      if (reason === 'brick_quota_met' && stopDrtOnBrickQuotaMet) {
+        stopDrtForPendingEnd();
+      }
       const delayMs = reason === 'brick_quota_met' ? brickQuotaEndDelayMs : globalEndDelayMs;
       pendingEnd = {
         reason,

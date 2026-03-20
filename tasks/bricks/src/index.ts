@@ -29,6 +29,7 @@ import {
   type TaskModuleAddress,
   type DrtController,
   resolveScopedModuleConfig,
+  recordsToCsv,
   TaskOrchestrator,
   createTaskAdapter,
 } from '@experiments/core';
@@ -369,8 +370,45 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockDrtPreviousStats.delete(blockIndex);
     },
     csvOptions: {
-      suffix: "bricks_trials",
-      getRecords: (res) => res.blocks.flatMap((b: any) => b.trialResults),
+      suffix: "bricks_events",
+      getRecords: (res) => buildBricksEventRows(
+        res.blocks.flatMap((b: any) => b.trialResults) as ConveyorTrialData[],
+        blockPlan,
+        {
+          participantId: selection.participant.participantId,
+          variantId: selection.variantId,
+        },
+      ),
+      getExtraCsvs: ({ sessionResult }) => {
+        const trialRows = sessionResult.blocks.flatMap((b: any) => b.trialResults) as ConveyorTrialData[];
+        const brickOutcomeRows = buildBricksBrickOutcomeRows(
+          trialRows,
+          blockPlan,
+          {
+            participantId: selection.participant.participantId,
+            variantId: selection.variantId,
+          },
+        );
+        const drtRows = buildBricksDrtRows(
+          trialRows,
+          blockPlan,
+          {
+            participantId: selection.participant.participantId,
+            variantId: selection.variantId,
+          },
+        );
+        const extras: Array<{ contents: string; suffix?: string }> = [];
+        if (trialRows.length > 0) {
+          extras.push({ contents: recordsToCsv(trialRows), suffix: "bricks_trial_summary" });
+        }
+        if (brickOutcomeRows.length > 0) {
+          extras.push({ contents: recordsToCsv(brickOutcomeRows), suffix: "bricks_brick_outcomes" });
+        }
+        if (drtRows.length > 0) {
+          extras.push({ contents: recordsToCsv(drtRows), suffix: "bricks_drt_rows" });
+        }
+        return extras;
+      },
     },
     getTaskMetadata: (res) => ({
       drt_rows: buildBricksDrtRows(
@@ -394,7 +432,8 @@ export const bricksAdapter = createTaskAdapter({
       { id: 'moray1991', label: 'Moray 1991 VPT+VDD', configPath: 'bricks/moray1991' },
       { id: 'spotlight', label: 'Spotlight + DRT', configPath: 'bricks/spotlight' },
       { id: 'evanderHons', label: 'Evander Honours', configPath: 'bricks/evanderHons' },
-      { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No SPotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
+      { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No Spotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
+      { id: 'evanderHonsHover', label: 'Evander Honours Hover', configPath: 'bricks/evanderHonsHover' },
       { id: 'drt_block_demo', label: 'DRT Block Scope Demo', configPath: 'bricks/drt_block_demo' },
     ],
   },
@@ -720,6 +759,152 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
   };
 }
 
+function buildTrialCsvContext(
+  row: ConveyorTrialData,
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string; variantId: string },
+): Record<string, string | number | boolean | null> {
+  const blockMeta = blockPlan[row.block_index];
+  return {
+    participant_id: ids.participantId,
+    variant_id: ids.variantId,
+    bricks_trial_id: `B${row.block_index}_T${row.trial_index}`,
+    block_index: row.block_index,
+    block_label: row.block_label,
+    block_phase: blockMeta?.phase ?? null,
+    block_is_practice: blockMeta?.isPractice ?? null,
+    manipulation_id: blockMeta?.manipulationId ?? null,
+    trial_index: row.trial_index,
+    trial_duration_ms: row.trial_duration_ms,
+    trial_end_reason: row.end_reason,
+  };
+}
+
+function buildBricksEventRows(
+  rows: ConveyorTrialData[],
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string; variantId: string },
+): Array<Record<string, string | number | boolean | null>> {
+  const out: Array<Record<string, string | number | boolean | null>> = [];
+  for (const row of rows) {
+    const trialContext = buildTrialCsvContext(row, blockPlan, ids);
+    const timeline = Array.isArray((row as any).timeline_events)
+      ? ((row as any).timeline_events as Array<Record<string, unknown>>)
+      : [];
+    timeline.forEach((event, eventIndex) => {
+      const flat: Record<string, string | number | boolean | null> = {
+        ...trialContext,
+        event_index: eventIndex,
+        event_time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
+        event_type: typeof event.type === "string" ? event.type : null,
+      };
+      flattenUnknown(event, "event", flat);
+      out.push(flat);
+    });
+
+    const practicePressResults = Array.isArray((row as any).practice_press_results)
+      ? ((row as any).practice_press_results as unknown[])
+      : [];
+    practicePressResults.forEach((result, pressIndex) => {
+      out.push({
+        ...trialContext,
+        event_index: timeline.length + pressIndex,
+        event_time_ms: null,
+        event_type: "practice_press",
+        practice_press_index: pressIndex,
+        practice_press_correct: result === true,
+      });
+    });
+  }
+  return out;
+}
+
+function buildBricksBrickOutcomeRows(
+  rows: ConveyorTrialData[],
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string; variantId: string },
+): Array<Record<string, string | number | boolean | null>> {
+  const out: Array<Record<string, string | number | boolean | null>> = [];
+
+  for (const row of rows) {
+    const trialContext = buildTrialCsvContext(row, blockPlan, ids);
+    const timeline = Array.isArray((row as any).timeline_events)
+      ? ((row as any).timeline_events as Array<Record<string, unknown>>)
+      : [];
+
+    type BrickState = {
+      conveyorId: string | null;
+      spawnTimeMs: number | null;
+      clickCount: number;
+      holdCount: number;
+      status: "cleared" | "dropped" | "active_at_trial_end";
+      terminalTimeMs: number | null;
+      lifetimeMs: number | null;
+      value: number | null;
+      completionMode: string | null;
+    };
+    const byBrick = new Map<string, BrickState>();
+    const ensure = (brickId: string): BrickState => {
+      const existing = byBrick.get(brickId);
+      if (existing) return existing;
+      const created: BrickState = {
+        conveyorId: null,
+        spawnTimeMs: null,
+        clickCount: 0,
+        holdCount: 0,
+        status: "active_at_trial_end",
+        terminalTimeMs: null,
+        lifetimeMs: null,
+        value: null,
+        completionMode: null,
+      };
+      byBrick.set(brickId, created);
+      return created;
+    };
+
+    for (const event of timeline) {
+      const type = String(event.type ?? "");
+      const brickId = typeof event.brick_id === "string" ? event.brick_id : null;
+      if (!brickId) continue;
+      const state = ensure(brickId);
+      if (typeof event.conveyor_id === "string") state.conveyorId = event.conveyor_id;
+      if (Number.isFinite(Number(event.value))) state.value = Number(event.value);
+      if (type === "brick_spawned") {
+        const t = Number(event.time ?? event.time_ms ?? NaN);
+        state.spawnTimeMs = Number.isFinite(t) ? t : state.spawnTimeMs;
+      } else if (type === "brick_click") {
+        if (event.valid === true) state.clickCount += 1;
+      } else if (type === "brick_hold") {
+        if (event.valid === true) state.holdCount += 1;
+      } else if (type === "brick_cleared" || type === "brick_dropped") {
+        const t = Number(event.time ?? event.time_ms ?? NaN);
+        state.status = type === "brick_cleared" ? "cleared" : "dropped";
+        state.terminalTimeMs = Number.isFinite(t) ? t : null;
+        state.lifetimeMs = Number.isFinite(Number(event.lifetime)) ? Number(event.lifetime) : null;
+        state.completionMode = typeof event.completion_mode === "string" ? event.completion_mode : null;
+      }
+    }
+
+    for (const [brickId, state] of byBrick.entries()) {
+      out.push({
+        ...trialContext,
+        brick_id: brickId,
+        conveyor_id: state.conveyorId,
+        brick_spawn_time_ms: state.spawnTimeMs,
+        brick_terminal_time_ms: state.terminalTimeMs,
+        brick_lifetime_ms: state.lifetimeMs,
+        brick_click_count: state.clickCount,
+        brick_hold_count: state.holdCount,
+        brick_value: state.value,
+        brick_completion_mode: state.completionMode,
+        brick_final_status: state.status,
+      });
+    }
+  }
+
+  return out;
+}
+
 function buildBricksDrtRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
@@ -733,7 +918,6 @@ function buildBricksDrtRows(
       : [];
     if (responseRows.length === 0) continue;
 
-    const blockMeta = blockPlan[row.block_index];
     const spotlightLookup = buildSpotlightLookup(row);
 
     for (const responseRow of responseRows) {
@@ -741,17 +925,7 @@ function buildBricksDrtRows(
       const responseTimeMs = Number(response.time ?? response.rt_ms ?? 0);
       const spotlightAtResponse = spotlightLookup.findSpotlightAtMs(responseTimeMs);
       const flat: Record<string, string | number | boolean | null> = {
-        participant_id: ids.participantId,
-        variant_id: ids.variantId,
-        bricks_trial_id: `B${row.block_index}_T${row.trial_index}`,
-        block_index: row.block_index,
-        block_label: row.block_label,
-        block_phase: blockMeta?.phase ?? null,
-        block_is_practice: blockMeta?.isPractice ?? null,
-        manipulation_id: blockMeta?.manipulationId ?? null,
-        trial_index: row.trial_index,
-        trial_duration_ms: row.trial_duration_ms,
-        trial_end_reason: row.end_reason,
+        ...buildTrialCsvContext(row, blockPlan, ids),
         spotlight_brick_id: spotlightAtResponse.spotlightBrickId,
         spotlight_conveyor_id: spotlightAtResponse.spotlightConveyorId,
       };

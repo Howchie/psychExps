@@ -160,6 +160,7 @@ Notes on `drt` outputs:
 - Trial-scoped DRT: `record.drt` reflects that trial scope snapshot (including `transform_latest` when available); response-level DRT rows are attached as `drt_response_rows`.
 - Block-scoped DRT: `record.drt.stats` is converted to per-trial deltas for accurate trial/block summaries, and cumulative snapshots are preserved in `record.drt_cumulative`.
 - For trial-scoped DRT, Bricks gates DRT onset to the active trial run window only (from trial start trigger to trial end), so post-trial survey screens are outside DRT scope.
+- Optional trial config `trial.stopDrtOnBrickQuotaMet: true` (alias `trial.endDrtOnBrickQuotaMet`) stops trial-scoped DRT immediately when `brick_quota_met` is reached, even if a post-end delay is configured.
 - Bricks does not manually start/stop DRT modules; it consumes active DRT handles exposed by core module orchestration.
 
 `drt_response_rows` now carries per-response transform data directly:
@@ -184,7 +185,14 @@ Quota note:
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.
 
-CSV export now uses trial records (`bricks_trials`) as the primary CSV output.
+CSV export now uses long-format event records (`bricks_events`) as the primary CSV output.
+- one row per timeline event/click/hold with shared trial identifiers (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial fields)
+- event payload flattened under `event_*` columns
+
+Additional CSV outputs:
+- `bricks_trial_summary`: one row per trial (compact trial-level summary payload)
+- `bricks_brick_outcomes`: one row per brick per trial, including end state (`brick_final_status`: `cleared`/`dropped`/`active_at_trial_end`)
+- `bricks_drt_rows`: one row per DRT response, with spotlight linkage at response time
 
 DRT long-format rows remain available via task metadata (`drt_rows`) and include:
 - Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation`)

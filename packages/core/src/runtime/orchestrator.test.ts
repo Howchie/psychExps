@@ -6,6 +6,7 @@ import { TaskOrchestrator } from './orchestrator';
 import { TaskModuleRunner } from '../api/taskModule';
 import * as taskUiFlow from '../web/taskUiFlow';
 import { InstructionFlowExitRequestedError } from '../web/instructionFlow';
+import { finalizeTaskRun } from '../web/lifecycle';
 
 vi.mock('../web/taskUiFlow', () => ({
   runTaskIntroFlow: vi.fn().mockResolvedValue(undefined),
@@ -102,6 +103,27 @@ describe('TaskOrchestrator', () => {
     });
 
     expect(runTrial).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes extra CSV outputs to finalizeTaskRun', async () => {
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi.fn().mockResolvedValue({ score: 1 });
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+      csvOptions: {
+        suffix: 'main',
+        getRecords: () => [{ a: 1 }],
+        getExtraCsvs: () => [{ contents: 'x,y\n1,2', suffix: 'extra' }],
+      },
+    });
+
+    expect(finalizeTaskRun).toHaveBeenCalled();
+    const call = (finalizeTaskRun as any).mock.calls.at(-1)?.[0];
+    expect(call?.extraCsvs).toEqual([{ contents: 'x,y\n1,2', suffix: 'extra' }]);
   });
 
   it('should run staircase phase before main session when enabled', async () => {

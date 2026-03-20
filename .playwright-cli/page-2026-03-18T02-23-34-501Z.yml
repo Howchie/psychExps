@@ -1,4 +1,0 @@
-- generic [ref=e25]:
-  - paragraph [ref=e27]: Press numpad keys 1–8 to toggle the corresponding pump.
-  - paragraph [ref=e28]:
-    - button "Continue" [active] [ref=e29] [cursor=pointer]

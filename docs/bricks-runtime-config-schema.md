@@ -658,6 +658,8 @@ Each field can be:
   maxTimeSec?: number | null;          // used in fixed_time
   endDelayMs?: number;                 // global post-end delay (ms), default 0
   brickQuotaEndDelayMs?: number;       // post-end delay for "brick_quota_met" (ms), default 3000
+  stopDrtOnBrickQuotaMet?: boolean;   // if true (trial-scoped DRT), stop DRT immediately when quota is met
+  endDrtOnBrickQuotaMet?: boolean;    // alias of stopDrtOnBrickQuotaMet
   holdDurationPractice?: {
     requiredPresses?: number;          // for hold-duration practice runner, forces max_bricks quota
     fullWidthConveyor?: boolean;       // default true in hold-duration practice runner

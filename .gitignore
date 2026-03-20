@@ -9,3 +9,5 @@ dist/
 **/dist/
 *.tsbuildinfo
 /test-results/.last-run.json
+
+/.playwright-cli

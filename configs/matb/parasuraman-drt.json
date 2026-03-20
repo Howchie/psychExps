@@ -1,7 +1,17 @@
 {
   "_comment": "Parasuraman et al. (1993) two-block reliability manipulation with concurrent border DRT.",
   "_comment2": "Block 1 = high reliability (most failures auto-resolve). Block 2 = low reliability (fewer auto-resolutions). A NASA-TLX survey runs once at the end. DRT uses a red border around the MATB display area; respond with Space.",
-
+  "ui": {
+    "pageBackground": "0a0a0a",
+    "cardWidth": "800px",
+    "cardMinHeight": "600px",
+    "cardBackground": "0a0a0a",
+    "cardBorder": "1px solid rgba(255, 255, 255, 0.95)",
+    "cardBorderRadius": "12px",
+    "cardColor": "rgba(255, 255, 255, 0.95)",
+    "cardFontSize": "1.2rem",
+    "cardFontFamily": "system-ui, -apple-system, sans-serif"
+  },
   "task": {
     "title": "MATB — Reliability & Workload",
     "modules": {
@@ -29,8 +39,8 @@
   },
 
   "display": {
-    "maxWidthPx": 1200,
-    "maxHeightPx": 900,
+    "maxWidthPx": 800,
+    "maxHeightPx": 600,
     "minWidthPx": 800,
     "minHeightPx": 600,
     "aspectRatio": "4/3",

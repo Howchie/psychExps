@@ -73,6 +73,10 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   csvOptions?: {
     suffix: string;
     getRecords?: (sessionResult: any) => any[];
+    getExtraCsvs?: (ctx: { sessionResult: any; records: any[] }) => Array<{
+      contents: string;
+      suffix?: string;
+    }>;
   };
   renderInstruction?: (ctx: {
     pageText: string;
@@ -737,6 +741,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     const records = args.csvOptions?.getRecords 
       ? args.csvOptions.getRecords(sessionResult) 
       : sessionResult.blocks.flatMap(b => b.trialResults);
+    const extraCsvs = args.csvOptions?.getExtraCsvs?.({ sessionResult, records }) ?? [];
 
     const taskMetadata = args.getTaskMetadata ? args.getTaskMetadata(sessionResult) : {};
     const taskEvents = args.getEvents ? args.getEvents(sessionResult) : this.context?.eventLogger?.events ?? [];
@@ -771,6 +776,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           contents: recordsToCsv(records), 
           suffix: args.csvOptions.suffix 
         } : null,
+        extraCsvs: extraCsvs,
         completionStatus: "complete",
         jatosHandledBySink: dataSinkStatus.jatosStreamingUsed && !dataSinkStatus.jatosStreamingFailed,
       });
