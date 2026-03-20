@@ -446,7 +446,12 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       runner.start();
       for (const id of SUBTASK_IDS) runner.startSubtask(id);
 
-      await new Promise<void>((r) => setTimeout(r, block.durationMs));
+      // Wait for block duration using the runner's internal clock for precision
+      // and yielding frequently to ensure the end is caught promptly even if
+      // the browser throttles timers in background tabs.
+      while (runner.elapsedMs() < block.durationMs) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
 
       const results = runner.stop();
       layout.dispose();
