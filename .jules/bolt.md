@@ -19,3 +19,7 @@
 ## 2025-03-16 - Consolidating chained array iterations in mathematical routines
 **Learning:** Found a hot path in `packages/core/src/engines/parameterTransforms.ts` (`fitWaldAnalytic`) where an array of length N was traversed multiple times through `map`, `filter`, and multiple `reduce` calls to compute intermediate values (n, s1, sInv). Because this runs many times in a loop over ~1000 items, the overhead of creating intermediate arrays and performing 4 independent O(N) passes was significant (~630ms in benchmarks). Collapsing this into a single `for` loop eliminated all array allocations and reduced execution time by ~15-20x to ~35ms.
 **Action:** In high-frequency, performance-sensitive mathematical loops, avoid chaining `.map()`, `.filter()`, and `.reduce()`. Instead, use a standard `for` loop to accumulate multiple variables simultaneously in a single O(N) pass, completely eliminating intermediate array allocations.
+
+## 2024-05-19 - Avoid Chained Array Methods in Hot Paths
+**Learning:** Chained array methods like `.map().filter().map()` are frequently used in config parsing utilities (`coerce.ts`). They generate multiple intermediate arrays which create garbage collection thrashing in hot paths (like sampling or scheduling).
+**Action:** Replace `Array.prototype.map().filter()` with a single `for...of` loop and a standard `if` statement to construct arrays directly.
