@@ -73,6 +73,17 @@ export interface ResmanSubTaskConfig {
   toleranceRadius?: number;
   /** Physics update interval in ms (default 2000 to match OpenMATB). */
   updateIntervalMs?: number;
+  /**
+   * When true, pump failures auto-resolve after `autoResolveDelayMs` and
+   * the system automatically toggles pumps to maintain target levels.
+   * Keyboard input for pump toggling is ignored.
+   */
+  automated?: boolean;
+  /**
+   * Time (ms) before a pump failure auto-resolves in automated mode.
+   * Default 5000.
+   */
+  autoResolveDelayMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +109,8 @@ interface PumpRuntime {
   sourceId: string;
   destId: string;
   flowPerMinute: number;
+  /** Elapsed time (ms) since this pump entered failure state. Used for auto-resolve. */
+  failureElapsedMs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +184,8 @@ interface ResolvedResmanConfig {
   pumps: ResmanPumpDef[];
   toleranceRadius: number;
   updateIntervalMs: number;
+  automated: boolean;
+  autoResolveDelayMs: number;
 }
 
 function resolveConfig(raw: Record<string, unknown>): ResolvedResmanConfig {
@@ -227,7 +242,10 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedResmanConfig {
     pumps = DEFAULT_PUMPS;
   }
 
-  return { tanks, pumps, toleranceRadius, updateIntervalMs };
+  const automated = raw.automated === true || raw.automated === "true";
+  const autoResolveDelayMs = toNonNegativeNumber(raw.autoResolveDelayMs, 5000);
+
+  return { tanks, pumps, toleranceRadius, updateIntervalMs, automated, autoResolveDelayMs };
 }
 
 function parsePumpState(s: string | null): PumpState {
@@ -295,6 +313,7 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         sourceId: pd.source,
         destId: pd.dest,
         flowPerMinute: pd.flowPerMinute,
+        failureElapsedMs: 0,
       };
       pumpList.push(pr);
       keyToPump.set(pr.key, pr);
@@ -428,6 +447,27 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
   // Rendering
   // -------------------------------------------------------------------------
 
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
+
   function render(): void {
     if (!ctx || !canvas || !cfg) return;
     const W = canvas.width;
@@ -435,6 +475,12 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
 
     ctx.fillStyle = "#1a1a2e";
     ctx.fillRect(0, 0, W, H);
+
+    // Automation accent: subtle left-edge bar when automated.
+    if (cfg!.automated) {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+      ctx.fillRect(0, 0, 4, H);
+    }
 
     const tankA = tankMap.get("a");
     const tankB = tankMap.get("b");
@@ -519,6 +565,8 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       const py = statusY + row * 12;
       ctx.fillText(`P${p.config.label}: ${flow}`, px, py);
     }
+
+    drawHandoverBanner(ctx, W, H);
   }
 
   // Helper: compute pump position and direction between source and dest tanks.
@@ -628,6 +676,19 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       totalElapsedMs += dt;
       physicsAccMs += dt;
 
+      // Automated mode: track pump failure durations and auto-resolve.
+      if (cfg.automated) {
+        for (const pump of pumpList) {
+          if (pump.state === "failure") {
+            pump.failureElapsedMs += dt;
+            if (pump.failureElapsedMs >= cfg.autoResolveDelayMs) {
+              pump.state = "off";
+              pump.failureElapsedMs = 0;
+            }
+          }
+        }
+      }
+
       // Fixed-step physics at the configured interval.
       while (physicsAccMs >= cfg.updateIntervalMs) {
         const dtMinutes = cfg.updateIntervalMs / 60000;
@@ -654,6 +715,7 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     },
 
     handleKeyDown(key: string, _timestamp: number): boolean {
+      if (cfg?.automated) return false;
       const pump = keyToPump.get(key.toLowerCase());
       if (!pump) return false;
       if (pump.state === "failure") return true; // consumed but no effect
@@ -671,7 +733,9 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
           const prop = parts[2];
           const pump = pumpList.find((p) => p.def.id === pumpId);
           if (pump && prop === "state") {
-            pump.state = parsePumpState(String(event.value));
+            const newState = parsePumpState(String(event.value));
+            if (newState === "failure") pump.failureElapsedMs = 0;
+            pump.state = newState;
           }
         }
         if (parts[0] === "tank" && parts.length >= 3) {
@@ -680,6 +744,13 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
           const tank = tankMap.get(tankId);
           if (tank && prop === "level") {
             tank.level = Math.max(0, Math.min(tank.def.maxLevel, Number(event.value) || 0));
+          }
+        }
+        if (parts[0] === "automated" || event.path === "automated") {
+          const newAutomated = event.value === true || event.value === "true";
+          if (cfg && newAutomated !== cfg.automated) {
+            cfg.automated = newAutomated;
+            handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
           }
         }
       }

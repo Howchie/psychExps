@@ -74,6 +74,16 @@ export interface SysmonSubTaskConfig {
    * allowanykey parameter. Default false.
    */
   allowAnyKey?: boolean;
+  /**
+   * When true, failures auto-resolve after `autoResolveDelayMs` without
+   * participant input. The panel still renders but keyboard input is ignored.
+   */
+  automated?: boolean;
+  /**
+   * Minimum elapsed time (ms) of a failure before it auto-resolves in
+   * automated mode. Default 3000.
+   */
+  autoResolveDelayMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +150,8 @@ interface ResolvedSysmonConfig {
   feedbackDurationMs: number;
   driftIntervalMs: number;
   allowAnyKey: boolean;
+  automated: boolean;
+  autoResolveDelayMs: number;
 }
 
 function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
@@ -186,6 +198,8 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
     feedbackDurationMs: toPositiveNumber(raw.feedbackDurationMs, 1500),
     driftIntervalMs: toPositiveNumber(raw.driftIntervalMs, 200),
     allowAnyKey: raw.allowAnyKey === true || raw.allowAnyKey === "True" || raw.allowAnyKey === "true",
+    automated: raw.automated === true || raw.automated === "true",
+    autoResolveDelayMs: toNonNegativeNumber(raw.autoResolveDelayMs, 3000),
   };
 }
 
@@ -433,6 +447,13 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
       if (g.failure) {
         g.failureTimerMs -= dt;
         g.responseTimeMs += dt;
+
+        // Automated mode: auto-resolve after autoResolveDelayMs.
+        if (config!.automated && g.responseTimeMs >= config!.autoResolveDelayMs) {
+          stopFailure(g, false, true); // auto-solved HIT
+          continue;
+        }
+
         if (g.failureTimerMs <= 0) {
           stopFailure(g, false); // MISS
         }
@@ -466,6 +487,27 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     }
   }
 
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
+
   function renderAll(): void {
     if (!ctx || !canvas || !config) return;
     const w = canvas.width;
@@ -474,6 +516,12 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = "#1e293b";
     ctx.fillRect(0, 0, w, h);
+
+    // Automation accent: subtle left-edge bar when automated.
+    if (config.automated) {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+      ctx.fillRect(0, 0, 4, h);
+    }
 
     // Layout regions.
     const scaleTop = Math.round(h * 0.05);
@@ -519,6 +567,8 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
         });
       }
     }
+
+    drawHandoverBanner(ctx, w, h);
   }
 
   return {
@@ -553,11 +603,20 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     },
 
     handleKeyDown(key: string, _now: number): boolean {
+      if (config?.automated) return false;
       return handleKey(key);
     },
 
     handleScenarioEvent(event: ScenarioEvent): void {
       if (event.command === "set" && event.path) {
+        if (event.path === "automated") {
+          const newAutomated = event.value === true || event.value === "true";
+          if (config && newAutomated !== config.automated) {
+            config.automated = newAutomated;
+            handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+          }
+          return;
+        }
         // Trigger a failure: e.g. path="light1.failure" value=true
         // Or path="scale1.failure" value=true
         const parts = event.path.split(".");

@@ -299,6 +299,12 @@
       {
         "id": "Target",
         "label": "High Value",
+        "weight": 1,
+        "width": {
+          "type": "uniform",
+          "min": 70,
+          "max": 110
+        },
         "textureStyle": {
           "type": "list",
           "values": [
@@ -318,6 +324,12 @@
       {
         "id": "Other",
         "label": "Distractor",
+        "weight": 3,
+        "width": {
+          "type": "uniform",
+          "min": 45,
+          "max": 85
+        },
         "textureStyle": {
           "type": "list",
           "values": [
@@ -351,13 +363,21 @@
           "values": [0, 1, 2, 3],
           "draw": "without_replacement"
         },
-        "rightEdge": 80
+        "rightEdge": {
+          "type": "uniform",
+          "min": 70,
+          "max": 130
+        },
+        "textureCategoryId": {
+          "values": ["Target", "Other", "Other", "Other"],
+          "draw": "without_replacement"
+        }
       }
     },
     "spawn": {
       "ratePerSec": {
         "type": "fixed",
-        "value": 0.35
+        "value": 0.15
       },
       "interSpawnDist": null,
       "minSpacingPx": 30,
@@ -443,7 +463,7 @@
           "spawn": {
             "ratePerSec": {
               "type": "fixed",
-              "value": 0.2
+              "value": 0.08
             }
           }
         }
@@ -463,7 +483,7 @@
           "spawn": {
             "ratePerSec": {
               "type": "fixed",
-              "value": 0.3
+              "value": 0.18
             }
           }
         }
@@ -483,7 +503,7 @@
           "spawn": {
             "ratePerSec": {
               "type": "fixed",
-              "value": 0.5
+              "value": 0.3
             }
           }
         }

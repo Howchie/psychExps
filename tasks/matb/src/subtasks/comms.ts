@@ -571,6 +571,27 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
 
   // ── Rendering ─────────────────────────────────────────────────────────
 
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
+
   function renderAll(): void {
     if (!ctx2d || !canvas || !config) return;
     const w = canvas.width;
@@ -579,6 +600,12 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
     ctx2d.clearRect(0, 0, w, h);
     ctx2d.fillStyle = "#0d1117";
     ctx2d.fillRect(0, 0, w, h);
+
+    // Automation accent: subtle left-edge bar when automated.
+    if (config.automated) {
+      ctx2d.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+      ctx2d.fillRect(0, 0, 4, h);
+    }
 
     // Header bar.
     const headerH = Math.round(h * 0.08);
@@ -629,6 +656,8 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
     ctx2d.textAlign = "center";
     ctx2d.textBaseline = "bottom";
     ctx2d.fillText("↑↓ select  ←→ tune (hold)  Enter confirm", w / 2, h - 2);
+
+    drawHandoverBanner(ctx2d, w, h);
   }
 
   // ── Public interface ───────────────────────────────────────────────────
@@ -792,6 +821,13 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       }
       if (event.command === "set" && event.path === "ownCallsign" && config) {
         config.ownCallsign = asString(event.value) ?? config.ownCallsign;
+      }
+      if (event.command === "set" && event.path === "automated") {
+        const newAutomated = event.value === true || event.value === "true";
+        if (config && newAutomated !== config.automated) {
+          config.automated = newAutomated;
+          handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+        }
       }
     },
 

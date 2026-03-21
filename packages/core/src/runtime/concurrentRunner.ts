@@ -14,7 +14,7 @@
  *   const results = runner.stop();
  */
 
-import type { ScenarioEvent, ScenarioScheduler } from "./scenarioScheduler";
+import type { ScenarioEvent, ScenarioEventSource, ScenarioScheduler, SubtaskAutomationState } from "./scenarioScheduler";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +152,7 @@ export class ConcurrentTaskRunner {
   /** Sub-task configs keyed by subtask id. */
   private subtaskConfigs = new Map<string, Record<string, unknown>>();
 
-  private scheduler: ScenarioScheduler | null = null;
+  private scheduler: ScenarioEventSource | null = null;
   private rafId: number | null = null;
   private prevNow = 0;
   private keyListener: ((event: KeyboardEvent) => void) | null = null;
@@ -199,9 +199,10 @@ export class ConcurrentTaskRunner {
   }
 
   /**
-   * Attach a ScenarioScheduler to drive timed events.
+   * Attach a scenario event source (static scheduler or dynamic source)
+   * to drive timed events.
    */
-  setScheduler(scheduler: ScenarioScheduler): void {
+  setScheduler(scheduler: ScenarioEventSource | ScenarioScheduler): void {
     this.scheduler = scheduler;
   }
 
@@ -303,6 +304,15 @@ export class ConcurrentTaskRunner {
    */
   elapsedMs(): number {
     return this.clock.elapsed();
+  }
+
+  /**
+   * Forward subtask automation/failure state to the event source.
+   * Call this from external code (e.g., adapter) when a subtask's
+   * automation or active-failure state changes.
+   */
+  notifySubtaskState(subtaskId: string, state: SubtaskAutomationState): void {
+    this.scheduler?.notifyState?.(subtaskId, state);
   }
 
   // ── rAF loop ─────────────────────────────────────────────────────────
