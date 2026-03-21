@@ -169,8 +169,8 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
         };
       })
     : [
-        { id: "light1", label: "F5", onColor: "#22c55e", offColor: "#555", defaultOn: true, key: "f5" },
-        { id: "light2", label: "F6", onColor: "#ef4444", offColor: "#555", defaultOn: false, key: "f6" },
+        { id: "light1", label: "F5", onColor: "#8edbb0", offColor: "#ffffff", defaultOn: true, key: "f5" },
+        { id: "light2", label: "F6", onColor: "#e04545", offColor: "#ffffff", defaultOn: false, key: "f6" },
       ];
 
   const scalesRaw = asArray(raw.scales);
@@ -514,24 +514,42 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     const h = canvas.height;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(0, 0, w, h);
 
     // Automation accent: subtle left-edge bar when automated.
     if (config.automated) {
-      ctx.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+      ctx.fillStyle = "rgba(56, 189, 148, 0.25)";
       ctx.fillRect(0, 0, 4, h);
     }
 
-    // Layout regions.
-    const scaleTop = Math.round(h * 0.05);
-    const scaleHeight = Math.round(h * 0.55);
-    const lightTop = Math.round(h * 0.72);
-    const lightHeight = Math.round(h * 0.18);
+    // Layout: lights at TOP (large), scales below — matching OpenMATB.
+    const lightGauges = gauges.filter((g): g is LightRuntime => g.kind === "light");
+    const lightCount = lightGauges.length;
+    const lightTop = Math.round(h * 0.06);
+    const lightHeight = Math.round(h * 0.12);
 
-    // Render scales.
-    const scaleCount = gauges.filter((g) => g.kind === "scale").length;
+    if (lightCount > 0) {
+      const lightW = Math.round(w * 0.38);
+      const gap = lightCount > 1 ? (w - lightCount * lightW) / (lightCount + 1) : (w - lightW) / 2;
+      for (let i = 0; i < lightGauges.length; i++) {
+        const lg = lightGauges[i];
+        const lx = Math.round(gap + i * (lightW + gap));
+        renderLight(lg.config, lg.state, {
+          ctx,
+          x: lx,
+          y: lightTop,
+          width: lightW,
+          height: lightHeight,
+        });
+      }
+    }
+
+    // Scales below lights.
+    const scaleTop = lightTop + lightHeight + Math.round(h * 0.06);
+    const scaleHeight = Math.round(h * 0.58);
     const scaleGauges = gauges.filter((g): g is ScaleRuntime => g.kind === "scale");
+    const scaleCount = scaleGauges.length;
     const scaleColWidth = scaleCount > 0 ? Math.round(w / scaleCount) : w;
     for (let i = 0; i < scaleGauges.length; i++) {
       const sg = scaleGauges[i];
@@ -549,24 +567,12 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
       );
     }
 
-    // Render lights.
-    const lightGauges = gauges.filter((g): g is LightRuntime => g.kind === "light");
-    const lightCount = lightGauges.length;
-    if (lightCount > 0) {
-      const lightW = Math.round(w * 0.35);
-      const gap = lightCount > 1 ? (w - lightCount * lightW) / (lightCount + 1) : (w - lightW) / 2;
-      for (let i = 0; i < lightGauges.length; i++) {
-        const lg = lightGauges[i];
-        const lx = Math.round(gap + i * (lightW + gap));
-        renderLight(lg.config, lg.state, {
-          ctx,
-          x: lx,
-          y: lightTop,
-          width: lightW,
-          height: lightHeight,
-        });
-      }
-    }
+    // "MANUAL" / "AUTO" mode label at bottom.
+    ctx.fillStyle = "#323232";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
 
     drawHandoverBanner(ctx, w, h);
   }

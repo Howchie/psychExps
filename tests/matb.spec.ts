@@ -106,14 +106,14 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
   // ── practice ─────────────────────────────────────────────────────────────
 
-  test("practice: 4-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("practice: 6-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
     const firstDl = page.waitForEvent("download", { timeout: 60_000 });
 
     await page.goto(matbUrl("practice", "e2e_practice"));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
-    await expect(page.locator("canvas")).toHaveCount(4, { timeout: 10_000 });
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
+    await expect(page.locator("canvas")).toHaveCount(6, { timeout: 10_000 });
 
     await firstDl;
     await page.waitForTimeout(1_500);
@@ -126,14 +126,14 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
   // ── basic ─────────────────────────────────────────────────────────────────
 
-  test("basic: 4-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("basic: 6-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
     const firstDl = page.waitForEvent("download", { timeout: 60_000 });
 
     await page.goto(matbUrl("basic", "e2e_basic"));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
-    await expect(page.locator("canvas")).toHaveCount(4, { timeout: 10_000 });
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
+    await expect(page.locator("canvas")).toHaveCount(6, { timeout: 10_000 });
 
     await firstDl;
     await page.waitForTimeout(1_500);
@@ -145,13 +145,13 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
   // ── low-load ──────────────────────────────────────────────────────────────
 
-  test("low-load: 4-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("low-load: 6-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
     const firstDl = page.waitForEvent("download", { timeout: 60_000 });
 
     await page.goto(matbUrl("low-load", "e2e_lowload"));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
 
     await firstDl;
     await page.waitForTimeout(1_500);
@@ -163,13 +163,13 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
   // ── high-load ─────────────────────────────────────────────────────────────
 
-  test("high-load: 4-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("high-load: 6-panel grid appears, session ends, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
     const firstDl = page.waitForEvent("download", { timeout: 60_000 });
 
     await page.goto(matbUrl("high-load", "e2e_highload"));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
 
     await firstDl;
     await page.waitForTimeout(1_500);
@@ -190,7 +190,7 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
    * completed. We watch for the NASA-TLX heading while waiting for the download
    * in parallel.
    */
-  test("parasuraman-high: 3-panel grid, no comms, NASA-TLX fires, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("parasuraman-high: 5-panel grid, no comms, NASA-TLX fires, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
 
@@ -205,10 +205,10 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
     await page.goto(matbUrl("parasuraman-high", "e2e_para_high", 15_000));
 
-    // 3-panel grid: sysmon + tracking + resman, NO comms panel
-    await waitForMatbGrid(page, ["sysmon", "tracking", "resman"]);
+    // 5-panel grid: sysmon + tracking + scheduling + resman + pumpstatus, NO comms panel
+    await waitForMatbGrid(page, ["sysmon", "tracking", "resman", "scheduling", "pumpstatus"]);
     expect(await page.locator('[data-panel-id="comms"]').count(), "no comms panel").toBe(0);
-    await expect(page.locator("canvas")).toHaveCount(3, { timeout: 10_000 });
+    await expect(page.locator("canvas")).toHaveCount(5, { timeout: 10_000 });
 
     // NASA-TLX should appear after session ends and end screen is dismissed
     await nasaTlxHeading;
@@ -224,7 +224,7 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
   // ── parasuraman-low ───────────────────────────────────────────────────────
 
-  test("parasuraman-low: 3-panel grid, no comms, NASA-TLX fires, tracking CSV downloaded", async ({ page }, testInfo) => {
+  test("parasuraman-low: 5-panel grid, no comms, NASA-TLX fires, tracking CSV downloaded", async ({ page }, testInfo) => {
     const { errors } = collectErrors(page);
     const capture = installDownloadCapture(page, testInfo);
 
@@ -236,9 +236,9 @@ test.describe("MATB – smoke tests (all variants complete without error)", () =
 
     await page.goto(matbUrl("parasuraman-low", "e2e_para_low", 15_000));
 
-    await waitForMatbGrid(page, ["sysmon", "tracking", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "resman", "scheduling", "pumpstatus"]);
     expect(await page.locator('[data-panel-id="comms"]').count(), "no comms panel").toBe(0);
-    await expect(page.locator("canvas")).toHaveCount(3, { timeout: 10_000 });
+    await expect(page.locator("canvas")).toHaveCount(5, { timeout: 10_000 });
 
     await nasaTlxHeading;
     await firstDl;
@@ -271,7 +271,7 @@ test.describe("MATB – scenario event verification", () => {
     const firstDl = page.waitForEvent("download", { timeout: 90_000 });
 
     await page.goto(matbUrl("basic", "e2e_events_35s", 35_000));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
 
     // t=12 s: scale1.failure="down" has fired; verify canvas still present
     await page.waitForTimeout(12_000);
@@ -301,7 +301,7 @@ test.describe("MATB – scenario event verification", () => {
     const nasaTlxHeading = page.waitForSelector("text=Workload Assessment", { timeout: 90_000 });
 
     await page.goto(matbUrl("parasuraman-high", "e2e_updown_40s", 40_000));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "resman", "scheduling", "pumpstatus"]);
 
     // t=32 s: auto-resolved failure cycle complete; sysmon canvas still visible
     await page.waitForTimeout(32_000);
@@ -335,7 +335,7 @@ test.describe("MATB – scenario event verification", () => {
     const url = `${BASE}/?task=matb&variant=basic&auto=true&participant=e2e_clips&overrides=${encodeURIComponent(overrides)}`;
     await page.goto(url);
 
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
     await firstDl;
     await page.waitForTimeout(1_500);
 
@@ -351,27 +351,27 @@ test.describe("MATB – scenario event verification", () => {
 
 test.describe("MATB – layout correctness", () => {
 
-  test("4-panel variants: 4 data-panel-id wrappers + 4 canvases each", async ({ page }) => {
+  test("6-panel variants: 6 data-panel-id wrappers + 6 canvases each", async ({ page }) => {
     for (const variant of ["practice", "basic", "low-load", "high-load"]) {
       await page.goto(matbUrl(variant, `e2e_layout_${variant}`));
-      await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
-      expect(await page.locator("canvas").count(), `${variant}: 4 canvases`).toBe(4);
+      await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
+      expect(await page.locator("canvas").count(), `${variant}: 6 canvases`).toBe(6);
     }
   });
 
-  test("parasuraman variants: 3 panels + 3 canvases, no comms panel", async ({ page }) => {
+  test("parasuraman variants: 5 panels + 5 canvases, no comms panel", async ({ page }) => {
     for (const variant of ["parasuraman-high", "parasuraman-low"]) {
       await page.goto(matbUrl(variant, `e2e_layout_${variant}`));
-      await waitForMatbGrid(page, ["sysmon", "tracking", "resman"]);
+      await waitForMatbGrid(page, ["sysmon", "tracking", "resman", "scheduling", "pumpstatus"]);
       expect(await page.locator('[data-panel-id="comms"]').count(), `${variant}: no comms`).toBe(0);
-      expect(await page.locator("canvas").count(), `${variant}: 3 canvases`).toBe(3);
+      expect(await page.locator("canvas").count(), `${variant}: 5 canvases`).toBe(5);
     }
   });
 
-  test("default variant: all 4 data-panel-id elements visible", async ({ page }) => {
+  test("default variant: all 6 data-panel-id elements visible", async ({ page }) => {
     await page.goto(matbUrl("default", "e2e_default_layout"));
-    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman"]);
-    for (const id of ["sysmon", "tracking", "comms", "resman"]) {
+    await waitForMatbGrid(page, ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]);
+    for (const id of ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"]) {
       await expect(page.locator(`[data-panel-id="${id}"]`), `panel ${id}`).toBeVisible();
     }
   });

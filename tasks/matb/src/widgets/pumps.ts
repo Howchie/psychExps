@@ -39,10 +39,10 @@ export interface PumpRenderOptions {
 
 const PUMP_COLOR_OFF = "#ffffff";
 const PUMP_COLOR_ON = "#8edbb0";
-const PUMP_COLOR_FAILURE = "#f16464";
-const PUMP_BORDER_COLOR = "#222";
-const PUMP_BORDER_WIDTH = 1.5;
-const PUMP_LABEL_FONT = "bold 10px monospace";
+const PUMP_COLOR_FAILURE = "#e04545";
+const PUMP_BORDER_COLOR = "#323232";
+const PUMP_BORDER_WIDTH = 1;
+const PUMP_LABEL_FONT = "bold 10px sans-serif";
 
 // ---------------------------------------------------------------------------
 // Rendering
@@ -106,7 +106,7 @@ export function renderPump(
   ctx.stroke();
 
   // Label inside the triangle.
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "#323232";
   ctx.font = PUMP_LABEL_FONT;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -124,7 +124,7 @@ export function renderConnector(
   y2: number,
   active: boolean,
 ): void {
-  ctx.strokeStyle = active ? "#8edbb0" : "#555";
+  ctx.strokeStyle = active ? "#8edbb0" : "#323232";
   ctx.lineWidth = active ? 2 : 1;
   ctx.beginPath();
   ctx.moveTo(x1, y1);

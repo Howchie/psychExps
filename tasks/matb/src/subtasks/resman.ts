@@ -259,7 +259,9 @@ function parsePumpState(s: string | null): PumpState {
 // Factory
 // ---------------------------------------------------------------------------
 
-export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> {
+export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> & {
+  getPumpStates(): Array<{ label: string; state: PumpState; flowPerMinute: number }>;
+} {
   let cfg: ResolvedResmanConfig | null = null;
   let tankMap = new Map<string, TankRuntime>();
   let pumpList: PumpRuntime[] = [];
@@ -473,12 +475,12 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
     const W = canvas.width;
     const H = canvas.height;
 
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(0, 0, W, H);
 
     // Automation accent: subtle left-edge bar when automated.
     if (cfg!.automated) {
-      ctx.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+      ctx.fillStyle = "rgba(56, 189, 148, 0.25)";
       ctx.fillRect(0, 0, 4, H);
     }
 
@@ -551,20 +553,12 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
       if (dstPos) renderConnector(ctx, pumpPos.cx, pumpPos.cy, dstPos.x, dstPos.y, pump.state === "on");
     }
 
-    // Pump status panel at bottom.
-    const statusY = bottomY + smallTankH + 20;
-    ctx.fillStyle = "#aaa";
-    ctx.font = "9px monospace";
-    ctx.textAlign = "left";
-    for (let i = 0; i < pumpList.length; i++) {
-      const p = pumpList[i];
-      const flow = p.state === "on" ? p.flowPerMinute : 0;
-      const col = i < 4 ? 0 : 1;
-      const row = i % 4;
-      const px = margin + col * (W / 2);
-      const py = statusY + row * 12;
-      ctx.fillText(`P${p.config.label}: ${flow}`, px, py);
-    }
+    // "MANUAL" / "AUTO" mode label at bottom.
+    ctx.fillStyle = "#323232";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(cfg!.automated ? "AUTO" : "MANUAL", W / 2, H - 6);
 
     drawHandoverBanner(ctx, W, H);
   }
@@ -787,6 +781,18 @@ export function createResmanSubTaskHandle(): SubTaskHandle<ResmanSubTaskResult> 
         pumpToggles,
         tickRecords: [...tickRecords],
       };
+    },
+
+    /**
+     * Expose current pump states for the pump status display panel.
+     * Returns an array of { label, state, flowPerMinute } for each pump.
+     */
+    getPumpStates(): Array<{ label: string; state: PumpState; flowPerMinute: number }> {
+      return pumpList.map((p) => ({
+        label: p.config.label,
+        state: p.state,
+        flowPerMinute: p.flowPerMinute,
+      }));
     },
 
     getPerformance(): SubTaskPerformance {

@@ -193,14 +193,14 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
 
     return {
       aperturePx,
-      canvasBackground: asString(displayRaw.canvasBackground) ?? "#e2e8f0",
+      canvasBackground: asString(displayRaw.canvasBackground) ?? "#f0f0f0",
       showCrosshair: displayRaw.showCrosshair !== false,
       reticleRadiusPx: toPositiveNumber(reticleRaw.radiusPx, 50),
-      reticleStrokeColor: asString(reticleRaw.strokeColor) ?? "#334155",
+      reticleStrokeColor: asString(reticleRaw.strokeColor) ?? "#323232",
       reticleStrokeWidthPx: toPositiveNumber(reticleRaw.strokeWidthPx, 2),
-      reticleFillColor: asString(reticleRaw.fillColor) ?? "rgba(22, 163, 74, 0.15)",
-      cursorRadiusPx: toPositiveNumber(cursorRaw.radiusPx, 4),
-      cursorColorInside: asString(cursorRaw.colorInside) ?? "#000000",
+      reticleFillColor: asString(reticleRaw.fillColor) ?? "transparent",
+      cursorRadiusPx: toPositiveNumber(cursorRaw.radiusPx, 16),
+      cursorColorInside: asString(cursorRaw.colorInside) ?? "#323232",
       cursorColorOutside: asString(cursorRaw.colorOutside) ?? "#ef4444",
       perturbationComponents: parsePerturbationComponents(asArray(pertRaw.components)),
       inputGain: toPositiveFloat(pertRaw.inputGain ?? pertRaw.gainRatio, 1),
@@ -373,7 +373,7 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
         perfRingIndex += 1;
       }
 
-      // Render.
+      // Render — OpenMATB-style reticle.
       const w = config.aperturePx;
       const h = config.aperturePx;
       ctx.clearRect(0, 0, w, h);
@@ -382,35 +382,112 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
 
       // Automation accent: subtle left-edge bar when automated.
       if (config.automated) {
-        ctx.fillStyle = "rgba(56, 189, 248, 0.35)";  // sky-400 at 35%
+        ctx.fillStyle = "rgba(56, 189, 148, 0.25)";
         ctx.fillRect(0, 0, 4, h);
       }
 
+      const axisColor = "#323232";
+      const cx = halfAperture;
+      const cy = halfAperture;
+
       if (config.showCrosshair) {
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-        ctx.lineWidth = 1;
+        // Corner brackets (L-shaped) — OpenMATB reticle.py lines 36-38
+        const cornerW = w * 0.07;
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        // Top-left
         ctx.beginPath();
-        ctx.moveTo(halfAperture, 0);
-        ctx.lineTo(halfAperture, h);
-        ctx.moveTo(0, halfAperture);
-        ctx.lineTo(w, halfAperture);
+        ctx.moveTo(0, cornerW); ctx.lineTo(0, 0); ctx.lineTo(cornerW, 0);
         ctx.stroke();
+        // Top-right
+        ctx.beginPath();
+        ctx.moveTo(w - cornerW, 0); ctx.lineTo(w, 0); ctx.lineTo(w, cornerW);
+        ctx.stroke();
+        // Bottom-right
+        ctx.beginPath();
+        ctx.moveTo(w, h - cornerW); ctx.lineTo(w, h); ctx.lineTo(w - cornerW, h);
+        ctx.stroke();
+        // Bottom-left
+        ctx.beginPath();
+        ctx.moveTo(cornerW, h); ctx.lineTo(0, h); ctx.lineTo(0, h - cornerW);
+        ctx.stroke();
+
+        // Axes — from center to edges.
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+        ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+        ctx.stroke();
+
+        // Graduation marks — 5 per half-axis, alternating long/short.
+        // Matches OpenMATB reticle.py: gw = 0.023 * w, alternating gw and 2*gw.
+        const gradW = 0.023 * w;
+        for (let quadrant = 0; quadrant < 4; quadrant++) {
+          for (let i = 0; i < 5; i++) {
+            const frac = (i / 4);
+            const tickLen = (i % 2 === 0) ? gradW * 2 : gradW;
+            if (quadrant === 0) {
+              // Right half of horizontal axis
+              const tx = cx + frac * (w - cx);
+              ctx.beginPath();
+              ctx.moveTo(tx, cy - tickLen); ctx.lineTo(tx, cy + tickLen);
+              ctx.stroke();
+            } else if (quadrant === 1) {
+              // Bottom half of vertical axis
+              const ty = cy + frac * (h - cy);
+              ctx.beginPath();
+              ctx.moveTo(cx - tickLen, ty); ctx.lineTo(cx + tickLen, ty);
+              ctx.stroke();
+            } else if (quadrant === 2) {
+              // Left half of horizontal axis
+              const tx = cx - frac * cx;
+              ctx.beginPath();
+              ctx.moveTo(tx, cy - tickLen); ctx.lineTo(tx, cy + tickLen);
+              ctx.stroke();
+            } else {
+              // Top half of vertical axis
+              const ty = cy - frac * cy;
+              ctx.beginPath();
+              ctx.moveTo(cx - tickLen, ty); ctx.lineTo(cx + tickLen, ty);
+              ctx.stroke();
+            }
+          }
+        }
       }
 
-      // Reticle.
-      ctx.fillStyle = config.reticleFillColor;
-      ctx.strokeStyle = config.reticleStrokeColor;
-      ctx.lineWidth = config.reticleStrokeWidthPx;
+      // Target circle — dashed, matching OpenMATB.
+      ctx.strokeStyle = axisColor;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.arc(halfAperture, halfAperture, Math.max(1, config.reticleRadiusPx), 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(cx, cy, Math.max(1, config.reticleRadiusPx), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Cursor — circle with internal crosshairs, matching OpenMATB reticle.py.
+      const cursorR = Math.max(3, config.cursorRadiusPx);
+      const cursorColor = inside ? config.cursorColorInside : config.cursorColorOutside;
+      ctx.strokeStyle = cursorColor;
+      ctx.lineWidth = 1.5;
+      // Circle
+      ctx.beginPath();
+      ctx.arc(absCursorX, absCursorY, cursorR, 0, Math.PI * 2);
+      ctx.stroke();
+      // Internal crosshairs
+      ctx.beginPath();
+      ctx.moveTo(absCursorX - cursorR, absCursorY);
+      ctx.lineTo(absCursorX + cursorR, absCursorY);
+      ctx.moveTo(absCursorX, absCursorY - cursorR);
+      ctx.lineTo(absCursorX, absCursorY + cursorR);
       ctx.stroke();
 
-      // Cursor dot.
-      ctx.fillStyle = inside ? config.cursorColorInside : config.cursorColorOutside;
-      ctx.beginPath();
-      ctx.arc(absCursorX, absCursorY, Math.max(1, config.cursorRadiusPx), 0, Math.PI * 2);
-      ctx.fill();
+      // "MANUAL" / "AUTO" mode label at bottom.
+      ctx.fillStyle = axisColor;
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
 
       drawHandoverBanner(ctx, w, h);
     },

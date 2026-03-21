@@ -20,5 +20,10 @@ export type { ResmanSubTaskConfig, ResmanSubTaskResult, ResmanTankRecord, Resman
 export { createCommsSubTaskHandle } from "./subtasks/comms";
 export type { CommsSubTaskConfig, CommsClipsConfig, CommsSubTaskResult, CommsPromptRecord, CommsOutcome } from "./subtasks/comms";
 
+export { createSchedulingSubTaskHandle } from "./subtasks/scheduling";
+export type { SchedulingSubTaskConfig } from "./subtasks/scheduling";
+
+export { createPumpStatusSubTaskHandle } from "./subtasks/pumpstatus";
+
 export { generateMatbScenario } from "./scenarioGenerator";
 export type { MatbScenarioConfig } from "./scenarioGenerator";

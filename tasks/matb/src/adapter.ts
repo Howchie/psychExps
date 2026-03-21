@@ -53,6 +53,8 @@ import { createSysmonSubTaskHandle, type SysmonSubTaskResult } from "./subtasks/
 import { createTrackingSubTaskHandle, type TrackingSubTaskResult } from "./subtasks/tracking";
 import { createCommsSubTaskHandle, type CommsSubTaskResult } from "./subtasks/comms";
 import { createResmanSubTaskHandle, type ResmanSubTaskResult } from "./subtasks/resman";
+import { createSchedulingSubTaskHandle } from "./subtasks/scheduling";
+import { createPumpStatusSubTaskHandle } from "./subtasks/pumpstatus";
 import { WaldOverlay, type WaldOverlayConfig } from "./widgets/waldOverlay";
 import { AdaptiveController, type AdaptiveControllerConfig } from "./adaptiveController";
 
@@ -153,6 +155,7 @@ const DEFAULT_INTRO_PAGES = [
 ];
 
 const SUBTASK_IDS = ["sysmon", "tracking", "comms", "resman"] as const;
+const ALL_PANEL_IDS = ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"] as const;
 
 function parseScenarioEvents(raw: unknown): ScenarioEvent[] {
   const obj = asObject(raw) ?? {};
@@ -261,10 +264,10 @@ function parsePanelLayout(raw: unknown): PanelLayoutConfig {
   const panelsRaw = asArray(layoutRaw.panels);
   return {
     rows: toPositiveNumber(layoutRaw.rows, 2),
-    cols: toPositiveNumber(layoutRaw.cols, 2),
+    cols: toPositiveNumber(layoutRaw.cols, 3),
     gap:  asString(layoutRaw.gap) ?? "2px",
     padding:    asString(layoutRaw.padding) ?? "0",
-    background: asString(layoutRaw.background) ?? "#1a1a1a",
+    background: asString(layoutRaw.background) ?? "#d0d0d0",
     panels: panelsRaw.length > 0
       ? panelsRaw.map((p) => {
           const o = asObject(p) ?? {};
@@ -280,10 +283,12 @@ function parsePanelLayout(raw: unknown): PanelLayoutConfig {
           };
         })
       : [
-          { id: "sysmon",   row: 0, col: 0, label: "SYSMON" },
-          { id: "tracking", row: 0, col: 1, label: "TRACKING" },
-          { id: "comms",    row: 1, col: 0, label: "COMMS" },
-          { id: "resman",   row: 1, col: 1, label: "RESMAN" },
+          { id: "sysmon",     row: 0, col: 0, label: "SYSTEM MONITORING" },
+          { id: "tracking",   row: 0, col: 1, label: "TRACKING" },
+          { id: "scheduling", row: 0, col: 2, label: "SCHEDULING" },
+          { id: "comms",      row: 1, col: 0, label: "COMMUNICATIONS" },
+          { id: "resman",     row: 1, col: 1, label: "RESOURCE MANAGEMENT" },
+          { id: "pumpstatus", row: 1, col: 2, label: "PUMP STATUS" },
         ],
   };
 }
@@ -301,13 +306,13 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
 
   const dRaw = asObject(raw.display) ?? {};
   const display: MatbDisplayConfig = {
-    maxWidthPx:  toPositiveNumber(dRaw.maxWidthPx, 1200),
+    maxWidthPx:  toPositiveNumber(dRaw.maxWidthPx, 1440),
     maxHeightPx: toPositiveNumber(dRaw.maxHeightPx, 900),
-    minWidthPx:  toPositiveNumber(dRaw.minWidthPx, 640),
+    minWidthPx:  toPositiveNumber(dRaw.minWidthPx, 800),
     minHeightPx: toPositiveNumber(dRaw.minHeightPx, 480),
-    aspectRatio: asString(dRaw.aspectRatio) ?? "4/3",
-    marginPx:    toNonNegativeNumber(dRaw.marginPx, 32),
-    background:  asString(dRaw.background) ?? "#111",
+    aspectRatio: asString(dRaw.aspectRatio) ?? "16/10",
+    marginPx:    toNonNegativeNumber(dRaw.marginPx, 16),
+    background:  asString(dRaw.background) ?? "#e0e0e0",
   };
 
   // ── Instructions ───────────────────────────────────────────────────────
@@ -561,13 +566,28 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       const blockLayout = block.layout ?? config.layout;
       const layout = new PanelLayoutManager(matbDisplay, blockLayout);
 
-      const sysmonHandle   = createSysmonSubTaskHandle();
-      const trackingHandle = createTrackingSubTaskHandle();
-      const commsHandle    = createCommsSubTaskHandle();
-      const resmanHandle   = createResmanSubTaskHandle();
+      const sysmonHandle      = createSysmonSubTaskHandle();
+      const trackingHandle    = createTrackingSubTaskHandle();
+      const commsHandle       = createCommsSubTaskHandle();
+      const resmanHandle      = createResmanSubTaskHandle();
+      const schedulingHandle  = createSchedulingSubTaskHandle();
+      const pumpstatusHandle  = createPumpStatusSubTaskHandle();
+
+      // Wire pump status to read live state from resman.
+      pumpstatusHandle.setPumpStateProvider(() => resmanHandle.getPumpStates());
+
+      // Wire scheduling to know which subtasks are active (manual mode).
+      // Note: reads static block config — does not reflect mid-block automation
+      // changes from scenario events. This matches OpenMATB's per-block design.
+      schedulingHandle.setSubtaskRunningProvider(() => ({
+        sysmon:   !block.subtasks.sysmon?.automated,
+        tracking: !block.subtasks.tracking?.automated,
+        comms:    !block.subtasks.comms?.automated,
+        resman:   !block.subtasks.resman?.automated,
+      }));
 
       const runner = new ConcurrentTaskRunner(
-        [sysmonHandle, trackingHandle, commsHandle, resmanHandle],
+        [sysmonHandle, trackingHandle, commsHandle, resmanHandle, schedulingHandle, pumpstatusHandle],
         {
           onEvent: (e) => {
             eventLogger.emit(e.type, {
@@ -578,9 +598,15 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       );
 
       for (const id of SUBTASK_IDS) {
-        try { runner.setPanel(id, layout.getPanel(id)); } catch { /* panel absent */ }
+        try { runner.setPanel(id, layout.getPanel(id)); } catch (e) { console.debug(`panel "${id}" absent in layout`, e); }
         runner.setSubtaskConfig(id, block.subtasks[id]);
       }
+      // Display-only panels (scheduling, pumpstatus).
+      try { runner.setPanel("scheduling", layout.getPanel("scheduling")); } catch (e) { console.debug('panel "scheduling" absent in layout', e); }
+      runner.setSubtaskConfig("scheduling", { durationMinutes: Math.round(block.durationMs / 60000) });
+
+      try { runner.setPanel("pumpstatus", layout.getPanel("pumpstatus")); } catch (e) { console.debug('panel "pumpstatus" absent in layout', e); }
+      runner.setSubtaskConfig("pumpstatus", {});
 
       // Set up event source: static (pre-authored events) or dynamic (runtime generation).
       let eventSource: ScenarioEventSource;
@@ -615,7 +641,7 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       });
 
       runner.start();
-      for (const id of SUBTASK_IDS) runner.startSubtask(id);
+      for (const id of ALL_PANEL_IDS) runner.startSubtask(id);
 
       // ── Wald overlay: create and poll DRT controller for estimates ──
       if (config.waldOverlay.enabled) {

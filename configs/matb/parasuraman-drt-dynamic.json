@@ -95,14 +95,16 @@
 
   "layout": {
     "rows": 2,
-    "cols": 2,
-    "gap": "3px",
-    "background": "#1a1a1a",
+    "cols": 3,
+    "gap": "2px",
+    "background": "#d0d0d0",
     "panels": [
-      { "id": "sysmon",   "row": 0, "col": 0, "label": "SYSMON" },
-      { "id": "tracking", "row": 0, "col": 1, "label": "TRACKING" },
-      { "id": "comms",    "row": 1, "col": 0, "label": "COMMS" },
-      { "id": "resman",   "row": 1, "col": 1, "label": "RESMAN" }
+      { "id": "sysmon",     "row": 0, "col": 0, "label": "SYSTEM MONITORING" },
+      { "id": "tracking",   "row": 0, "col": 1, "label": "TRACKING" },
+      { "id": "scheduling", "row": 0, "col": 2, "label": "SCHEDULING" },
+      { "id": "comms",      "row": 1, "col": 0, "label": "COMMUNICATIONS" },
+      { "id": "resman",     "row": 1, "col": 1, "label": "RESOURCE MANAGEMENT" },
+      { "id": "pumpstatus", "row": 1, "col": 2, "label": "PUMP STATUS" }
     ]
   },
 
