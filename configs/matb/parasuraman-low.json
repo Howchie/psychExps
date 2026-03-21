@@ -6,9 +6,10 @@
   "instructions": {
     "intro": [
       "You are about to begin a 10-minute monitoring session.",
-      "SYSMON (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
-      "TRACKING (top-right): Keep the red cursor inside the reticle.",
-      "RESMAN (bottom-right): Keep tanks A and B near their target levels.",
+      "SYSTEM MONITORING (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
+      "TRACKING (top-center): Keep the red cursor inside the reticle.",
+      "RESOURCE MANAGEMENT (bottom-left): Keep tanks A and B near their target levels.",
+      "Auxiliary panels for SCHEDULING (top-right) and PUMP STATUS (bottom-right) provide extra information.",
       "In this session, only some failures will be resolved automatically.",
       "Still respond as quickly and accurately as you can.",
       "Press Continue when ready."

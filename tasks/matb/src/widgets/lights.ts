@@ -53,7 +53,7 @@ export function renderLight(
   const { ctx, x, y, width, height } = opts;
 
   // Light rectangle — OpenMATB style: large rectangle with label inside.
-  ctx.fillStyle = state.on ? config.onColor : "#ffffff";
+  ctx.fillStyle = state.on ? config.onColor : config.offColor;
   ctx.fillRect(x, y, width, height);
 
   // Border.

@@ -147,10 +147,11 @@ interface ParsedCompositeConfig {
 const DEFAULT_INTRO_PAGES = [
   "The Multi-Attribute Task Battery (MATB) will now begin.",
   "You will be asked to monitor four tasks simultaneously:",
-  "SYSMON (top-left): Watch for indicator failures and press the labelled key.",
-  "TRACKING (top-right): Keep the cursor inside the central reticle using the mouse.",
-  "COMMS (bottom-left): Respond to radio prompts when you hear your own callsign.",
-  "RESMAN (bottom-right): Keep tanks A and B near their target levels using the numpad.",
+  "SYSTEM MONITORING (top-left): Watch for indicator failures and press the labelled key.",
+  "TRACKING (top-center): Keep the cursor inside the central reticle using the mouse.",
+  "COMMUNICATIONS (bottom-left): Respond to radio prompts when you hear your own callsign.",
+  "RESOURCE MANAGEMENT (bottom-center): Keep tanks A and B near their target levels using the numpad.",
+  "Two additional panels for SCHEDULING (top-right) and PUMP STATUS (bottom-right) provide auxiliary information.",
   "Press continue when you are ready to begin.",
 ];
 
@@ -312,7 +313,7 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
     minHeightPx: toPositiveNumber(dRaw.minHeightPx, 480),
     aspectRatio: asString(dRaw.aspectRatio) ?? "16/10",
     marginPx:    toNonNegativeNumber(dRaw.marginPx, 16),
-    background:  asString(dRaw.background) ?? "#e0e0e0",
+    background:  asString(dRaw.background) ?? "#d0d0d0",
   };
 
   // ── Instructions ───────────────────────────────────────────────────────
@@ -420,7 +421,7 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
 
   const woRaw = asObject(raw.waldOverlay) ?? {};
   const waldOverlay: WaldOverlayConfig = {
-    enabled:            woRaw.enabled === true || woRaw.enabled === "true",
+    enabled:            woRaw.enabled === true,
     maxSparklinePoints: woRaw.maxSparklinePoints != null ? toPositiveNumber(woRaw.maxSparklinePoints, 60) : undefined,
     position:           (asString(woRaw.position) as WaldOverlayConfig["position"]) ?? undefined,
   };

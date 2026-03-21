@@ -93,8 +93,11 @@ export class WaldOverlay {
 
     // Sparkline canvas
     this.sparklineCanvas = document.createElement("canvas");
-    this.sparklineCanvas.width = 160;
-    this.sparklineCanvas.height = 40;
+    const dpr = window.devicePixelRatio || 1;
+    this.sparklineCanvas.width = 160 * dpr;
+    this.sparklineCanvas.height = 40 * dpr;
+    this.sparklineCanvas.style.width = "160px";
+    this.sparklineCanvas.style.height = "40px";
     this.sparklineCanvas.style.marginTop = "4px";
     this.sparklineCanvas.style.display = "block";
     this.el.appendChild(this.sparklineCanvas);
@@ -172,11 +175,17 @@ export class WaldOverlay {
 
     const W = this.sparklineCanvas.width;
     const H = this.sparklineCanvas.height;
+    const dpr = window.devicePixelRatio || 1;
     const pts = this.driftHistory;
 
     ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.scale(dpr, dpr);
 
-    if (pts.length < 2) return;
+    if (pts.length < 2) {
+      ctx.restore();
+      return;
+    }
 
     // Find y range
     let yMin = Infinity;
@@ -189,8 +198,11 @@ export class WaldOverlay {
     yMin -= yPad;
     yMax += yPad;
 
-    const xStep = W / (this.maxPoints - 1);
-    const toY = (val: number) => H - ((val - yMin) / (yMax - yMin)) * H;
+    const logicalW = W / dpr;
+    const logicalH = H / dpr;
+
+    const xStep = logicalW / (this.maxPoints - 1);
+    const toY = (val: number) => logicalH - ((val - yMin) / (yMax - yMin)) * logicalH;
     const xOffset = (this.maxPoints - pts.length) * xStep;
 
     // CI band
@@ -227,5 +239,7 @@ export class WaldOverlay {
     ctx.beginPath();
     ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
   }
 }
