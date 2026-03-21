@@ -44,7 +44,14 @@ export function toFiniteNumber(value: unknown, fallback: number): number {
 }
 
 export function toNumberArray(value: unknown, fallback: number[]): number[] {
-  const out = asArray(value).map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry)) as number[];
+  // ⚡ Bolt: Replaced chained .map().filter() with single loop to avoid intermediate array allocations
+  const out: number[] = [];
+  for (const entry of asArray(value)) {
+    const num = Number(entry);
+    if (Number.isFinite(num)) {
+      out.push(num);
+    }
+  }
   return out.length > 0 ? out : fallback;
 }
 
@@ -80,15 +87,26 @@ export function resolveBlockScreenSlotValue(
 }
 
 export function asStringArray(value: unknown, fallback: string[]): string[] {
-  const list = asArray(value).map((item) => asString(item)).filter((item): item is string => Boolean(item));
+  // ⚡ Bolt: Replaced chained .map().filter() with single loop to avoid intermediate array allocations
+  const list: string[] = [];
+  for (const entry of asArray(value)) {
+    const str = asString(entry);
+    if (str) {
+      list.push(str);
+    }
+  }
   return list.length > 0 ? list : [...fallback];
 }
 
 export function asPositiveNumberArray(value: unknown, fallback: number[]): number[] {
-  const list = asArray(value)
-    .map((entry) => Number(entry))
-    .filter((entry) => Number.isFinite(entry) && entry > 0)
-    .map((entry) => Math.floor(entry));
+  // ⚡ Bolt: Replaced chained .map().filter().map() with single loop to avoid intermediate array allocations
+  const list: number[] = [];
+  for (const entry of asArray(value)) {
+    const num = Number(entry);
+    if (Number.isFinite(num) && num > 0) {
+      list.push(Math.floor(num));
+    }
+  }
   return list.length > 0 ? list : [...fallback];
 }
 
@@ -141,17 +159,28 @@ export function coerceInstructionInsertions(value: unknown): InstructionInsertio
     const pages = toInstructionScreenSpecs(raw.pages);
     if (pages.length === 0) continue;
     const whenRaw = asObject(raw.when);
-    const blockIndex = asArray(whenRaw?.blockIndex)
-      .map((item) => Number(item))
-      .filter((item) => Number.isInteger(item))
-      .map((item) => Math.floor(item));
-    const blockLabel = asArray(whenRaw?.blockLabel)
-      .map((item) => asString(item))
-      .filter((item): item is string => Boolean(item));
-    const blockType = asArray(whenRaw?.blockType)
-      .map((item) => asString(item))
-      .filter((item): item is string => Boolean(item))
-      .map((item) => item.toLowerCase());
+    // ⚡ Bolt: Replaced chained .map().filter() with single loops for blockIndex, blockLabel, and blockType to avoid intermediate array allocations
+    const blockIndex: number[] = [];
+    for (const item of asArray(whenRaw?.blockIndex)) {
+      const num = Number(item);
+      if (Number.isInteger(num)) {
+        blockIndex.push(Math.floor(num));
+      }
+    }
+    const blockLabel: string[] = [];
+    for (const item of asArray(whenRaw?.blockLabel)) {
+      const str = asString(item);
+      if (str) {
+        blockLabel.push(str);
+      }
+    }
+    const blockType: string[] = [];
+    for (const item of asArray(whenRaw?.blockType)) {
+      const str = asString(item);
+      if (str) {
+        blockType.push(str.toLowerCase());
+      }
+    }
     const isPractice = typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
     const when: InstructionInsertionWhen | undefined =
       blockIndex.length > 0 || blockLabel.length > 0 || blockType.length > 0 || typeof isPractice === "boolean"
@@ -237,20 +266,20 @@ export function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[
       const title = asString(raw.title) ?? undefined;
       const html = asString(raw.html) ?? undefined;
       const text = asString(raw.text) ?? asString(raw.body) ?? asString(raw.content) ?? undefined;
-      const actions = asArray(raw.actions)
-        .map((entry): InstructionScreenAction | null => {
-          const actionRaw = asObject(entry);
-          if (!actionRaw) return null;
-          const label = asString(actionRaw.label);
-          if (!label) return null;
-          const action = (asString(actionRaw.action) ?? "continue").toLowerCase();
-          return {
-            ...(asString(actionRaw.id) ? { id: asString(actionRaw.id) as string } : {}),
-            label,
-            action: action === "exit" ? "exit" : "continue",
-          };
-        })
-        .filter((entry): entry is InstructionScreenAction => Boolean(entry));
+      // ⚡ Bolt: Replaced chained .map().filter() for actions with a single loop to avoid intermediate array allocations
+      const actions: InstructionScreenAction[] = [];
+      for (const entry of asArray(raw.actions)) {
+        const actionRaw = asObject(entry);
+        if (!actionRaw) continue;
+        const label = asString(actionRaw.label);
+        if (!label) continue;
+        const action = (asString(actionRaw.action) ?? "continue").toLowerCase();
+        actions.push({
+          ...(asString(actionRaw.id) ? { id: asString(actionRaw.id) as string } : {}),
+          label,
+          action: action === "exit" ? "exit" : "continue",
+        });
+      }
       if (!html && !text) return null;
       return {
         ...(title ? { title } : {}),
