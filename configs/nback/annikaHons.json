@@ -43,7 +43,7 @@
             "schedule": {
               "count": "$var.pmCount",
               "minSeparation": 8,
-              "maxSeparation": 15
+              "maxSeparation": 18
             },
             "source": {
               "type": "category_in",
@@ -217,14 +217,14 @@
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
-            "cell2PmCount": 5,
+            "cell2PmCount": 10,
             "cell2PmCategories": ["animals"],
             "cell2NbackCategories": ["animals_controls"],
             "cell2Intro": "Press SPACE for PM items from the category: animals.\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
-            "cell3PmCount": 5,
+            "cell3PmCount": 10,
             "cell3PmCategories": ["three"],
             "cell3NbackCategories": ["three_controls"],
             "cell3Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
@@ -240,14 +240,14 @@
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
-            "cell2PmCount": 5,
+            "cell2PmCount": 10,
             "cell2PmCategories": ["three"],
             "cell2NbackCategories": ["three_controls"],
             "cell2Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
-            "cell3PmCount": 5,
+            "cell3PmCount": 10,
             "cell3PmCategories": ["animals"],
             "cell3NbackCategories": ["animals_controls"],
             "cell3Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
@@ -261,6 +261,13 @@
   "nbackRule": {
     "lureLagPasses": [ [4, 5], [6, 7, 8, 9] ],
     "maxInsertionAttempts": 10
+  },
+  "stimulusPools": {
+    "nbackDraw": {
+      "mode": "without_replacement",
+      "scope": "participant",
+      "shuffle": true
+    }
   },
   "plan": {
     "manipulations": [
@@ -343,12 +350,12 @@
           "where": { "trialType": ["N"] },
           "metrics": { "correctField": "responseCorrect" }}
       },
-      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100 },
-      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100 },
-      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
-      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100 },
-      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100 },
-      { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100}
+      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22},
+      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22 },
+      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
+      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22 },
+      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22 },
+      { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22}
     ]
   },
   "feedback": {

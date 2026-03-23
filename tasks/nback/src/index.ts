@@ -233,6 +233,7 @@ function computeNbackExportRows(runtime: NbackRuntimeState): any[] {
       trial_code: trial.trialType.match(/^L\d+$/) ? `lure_${trial.trialType.substring(1)}` : trial.trialType,
       item: trial.item,
       source_category: trial.sourceCategory,
+      used_as_source: trial.usedAsSource === true ? 1 : 0,
       correct_response: trial.correctResponse,
     })),
   );
@@ -364,6 +365,7 @@ interface ParsedNbackConfig {
   };
   stimuliCsv: CsvStimulusConfig | null;
   nbackPoolDraw: PoolDrawConfig;
+  nbackPoolDrawScope: "block" | "participant";
   variableDefinitions: Record<string, unknown>;
   allowedKeys: string[];
   instructions: StandardTaskInstructionConfig;
@@ -373,6 +375,10 @@ interface ParsedNbackConfig {
   nbackRule: NbackRuleConfig;
   feedbackDefaults: TrialFeedbackConfig;
   redirectCompleteTemplate: string;
+}
+
+interface ParticipantScopedNbackDrawPlan {
+  byBlockIndex: Map<number, { sequence: Array<{ item: string; category: string }> }>;
 }
 
 interface TrialRecord {
@@ -857,6 +863,7 @@ function parseNbackConfig(
   const imageAssetsRaw = asObject(config.imageAssets);
   const stimuliCsvRaw = asObject(config.stimuliCsv);
   const stimulusPoolsRaw = asObject(config.stimulusPools);
+  const nbackDrawRaw = asObject(stimulusPoolsRaw?.nbackDraw);
   const configVariables = asObject(config.variables);
   const taskVariables = asObject(asObject(config.task)?.variables);
   const variableDefinitions = {
@@ -953,10 +960,11 @@ function parseNbackConfig(
           : "with_replacement",
     },
     stimuliCsv: coerceCsvStimulusConfig(stimuliCsvRaw),
-    nbackPoolDraw: coercePoolDrawConfig(asObject(stimulusPoolsRaw?.nbackDraw), {
+    nbackPoolDraw: coercePoolDrawConfig(nbackDrawRaw, {
       mode: "without_replacement",
       shuffle: true,
     }),
+    nbackPoolDrawScope: (asString(nbackDrawRaw?.scope) || "").toLowerCase() === "participant" ? "participant" : "block",
     variableDefinitions,
     allowedKeys: finalAllowedKeys,
     instructions: instructionConfig,
@@ -1134,14 +1142,126 @@ function buildExperimentPlan(
   variableResolver: VariableResolver,
 ): PlannedBlock[] {
   const blocks = [...config.practiceBlocks, ...config.mainBlocks];
+  const participantScopedDrawPlan = config.nbackPoolDrawScope === "participant"
+    ? buildParticipantScopedNbackDrawPlan(blocks, config, rng)
+    : null;
   let mainCycleIndex = 0;
   return blocks.map((block, index) => {
     const resolvedVariant = resolveBlockStimulusVariant(config, block, rng, mainCycleIndex);
     if (!block.isPractice && config.imageAssets.mainMode === "cycle" && config.imageAssets.mainVariants.length > 0) {
       mainCycleIndex += 1;
     }
-    return buildBlockPlanWithChecks(block, index, config, rng, resolvedVariant, moduleRunner, moduleConfigs, variableResolver);
+    return buildBlockPlanWithChecks(
+      block,
+      index,
+      config,
+      rng,
+      resolvedVariant,
+      moduleRunner,
+      moduleConfigs,
+      variableResolver,
+      participantScopedDrawPlan,
+    );
   });
+}
+
+function buildParticipantScopedNbackDrawPlan(
+  blocks: NbackBlockConfig[],
+  config: ParsedNbackConfig,
+  rng: SeededRandom,
+): ParticipantScopedNbackDrawPlan {
+  type BlockSpec = {
+    blockIndex: number;
+    blockLabel: string;
+    key: string;
+    trials: number;
+  };
+  const blockSpecs: BlockSpec[] = [];
+  const keyToCandidates = new Map<string, Array<{ item: string; category: string }>>();
+  const keyToNeeded = new Map<string, number>();
+
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+    const block = blocks[blockIndex];
+    const nbackCandidates = collectPoolCandidates(config.stimuliByCategory, block.nbackSourceCategories, new Set<string>());
+    if (nbackCandidates.length === 0) {
+      nbackCandidates.push(...collectPoolCandidates(config.stimuliByCategory, ["other"], new Set<string>()));
+    }
+    if (nbackCandidates.length === 0) throw new Error(`Block '${block.label}' has no n-back candidate items.`);
+
+    const key = JSON.stringify({
+      categories: block.nbackSourceCategories,
+      mode: config.nbackPoolDraw.mode,
+      shuffle: config.nbackPoolDraw.shuffle,
+    });
+    blockSpecs.push({
+      blockIndex,
+      blockLabel: block.label,
+      key,
+      trials: block.trials,
+    });
+    if (!keyToCandidates.has(key)) {
+      keyToCandidates.set(key, nbackCandidates);
+    }
+    keyToNeeded.set(key, (keyToNeeded.get(key) ?? 0) + block.trials);
+  }
+
+  const keyToSequence = new Map<string, Array<{ item: string; category: string }>>();
+  for (const [key, candidates] of keyToCandidates.entries()) {
+    const needed = keyToNeeded.get(key) ?? 0;
+    if (needed <= 0) {
+      keyToSequence.set(key, []);
+      continue;
+    }
+    const sequence: Array<{ item: string; category: string }> = [];
+    if (config.nbackPoolDraw.mode === "with_replacement") {
+      for (let i = 0; i < needed; i += 1) {
+        const pick = candidates[rng.int(0, candidates.length - 1)];
+        sequence.push(pick);
+      }
+      keyToSequence.set(key, sequence);
+      continue;
+    }
+
+    let pool = [...candidates];
+    if (config.nbackPoolDraw.mode === "without_replacement" && config.nbackPoolDraw.shuffle) {
+      rng.shuffle(pool);
+    }
+    let cursor = 0;
+    while (sequence.length < needed) {
+      if (cursor >= pool.length) {
+        cursor = 0;
+        if (config.nbackPoolDraw.mode === "without_replacement" && config.nbackPoolDraw.shuffle) {
+          pool = [...candidates];
+          rng.shuffle(pool);
+        }
+      }
+      sequence.push(pool[cursor]);
+      cursor += 1;
+    }
+    keyToSequence.set(key, sequence);
+  }
+
+  const byBlockIndex = new Map<number, { sequence: Array<{ item: string; category: string }> }>();
+  const keyToCursor = new Map<string, number>();
+  for (const spec of blockSpecs) {
+    const sequence = keyToSequence.get(spec.key);
+    if (!sequence) {
+      throw new Error(`Missing participant-scoped sequence for block '${spec.blockLabel}'.`);
+    }
+    const start = keyToCursor.get(spec.key) ?? 0;
+    const end = start + spec.trials;
+    const slice = sequence.slice(start, end);
+    if (slice.length !== spec.trials) {
+      throw new Error(
+        `Participant-scoped sequence underflow for block '${spec.blockLabel}' ` +
+        `(${slice.length} vs ${spec.trials}).`,
+      );
+    }
+    byBlockIndex.set(spec.blockIndex, { sequence: slice });
+    keyToCursor.set(spec.key, end);
+  }
+
+  return { byBlockIndex };
 }
 
 function buildBlockPlanWithChecks(
@@ -1153,12 +1273,20 @@ function buildBlockPlanWithChecks(
   moduleRunner: TaskModuleRunner,
   moduleConfigs: Record<string, any>,
   variableResolver: VariableResolver,
+  participantScopedDrawPlan: ParticipantScopedNbackDrawPlan | null,
 ): PlannedBlock {
   const maxAttempts = Math.max(5, config.nbackRule.maxInsertionAttempts * 3);
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const purePlan = buildBlockPlanAttempt(block, blockIndex, config, rng, stimulusVariant);
+      const purePlan = buildBlockPlanAttempt(
+        block,
+        blockIndex,
+        config,
+        rng,
+        stimulusVariant,
+        participantScopedDrawPlan,
+      );
       // Allow modules to transform the block plan (e.g. inject PM)
       return moduleRunner.transformBlockPlan(purePlan, moduleConfigs, {
         rng,
@@ -1180,6 +1308,7 @@ function buildBlockPlanAttempt(
   config: ParsedNbackConfig,
   rng: SeededRandom,
   stimulusVariant: number | null,
+  participantScopedDrawPlan: ParticipantScopedNbackDrawPlan | null,
 ): PlannedBlock {
   const nbackCandidates = collectPoolCandidates(config.stimuliByCategory, block.nbackSourceCategories, new Set<string>());
   if (nbackCandidates.length === 0) {
@@ -1187,12 +1316,19 @@ function buildBlockPlanAttempt(
   }
   if (nbackCandidates.length === 0) throw new Error(`Block '${block.label}' has no n-back candidate items.`);
 
-  const drawNback = createPoolDrawer(nbackCandidates, rng, config.nbackPoolDraw);
+  const participantScopedSequence = participantScopedDrawPlan?.byBlockIndex.get(blockIndex)?.sequence ?? null;
+  if (participantScopedSequence && participantScopedSequence.length !== block.trials) {
+    throw new Error(
+      `Block '${block.label}' has mismatched participant-scoped draw plan ` +
+      `(${participantScopedSequence.length} vs ${block.trials}).`,
+    );
+  }
+  const drawNback = participantScopedSequence ? null : createPoolDrawer(nbackCandidates, rng, config.nbackPoolDraw);
   const trials: PlannedTrial[] = [];
   const nonTargetResponseSpec = config.mapping.nonTargetKey ?? "timeout";
 
   for (let i = 0; i < block.trials; i += 1) {
-    const picked = drawNback();
+    const picked = participantScopedSequence ? participantScopedSequence[i] : drawNback!();
     trials.push({
       trialIndex: i,
       blockIndex: blockIndex,

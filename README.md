@@ -33,6 +33,9 @@ npm run difficulty -w @experiments/task-bricks --config evanderHons --trials 100
 python scripts/jatos_to_long_csv.py temp/annikaHons_jatos_example.txt temp/annikaHons_jatos_example_long.csv
 # Experiments Workspace
 
+# Code to sanity-test nback stimuli
+python scripts/validate_stimuli_rules.py temp/test_stimuli.csv --max-print 10
+
 Unified experiment framework with a shared TypeScript core and task adapters.
 
 ## Documentation

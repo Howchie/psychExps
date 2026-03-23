@@ -17,8 +17,8 @@ const { injectNBackTargets, injectNBackLures } = __testing__;
 // ── Parameters to tweak ────────────────────────────────────────────────────
 
 const N_TRIALS    = 100;
-const N_TARGETS   = 18;
-const N_LURES     = 18;
+const N_TARGETS   = 22;
+const N_LURES     = 14;
 const N_LEVEL     = 2;
 const LURE_LAG_PASSES = [[4, 5], [6, 7, 8, 9]] as number[][];
 
@@ -117,12 +117,7 @@ console.log(`n-level: ${N_LEVEL} | Retry budget: ${RETRY_BUDGET}\n`);
 type Scenario = { label: string; nTrials: number; nTargets: number; nLures: number; maxSep: number; preFix?: boolean };
 
 const scenarios: Scenario[] = [
-  { label: 'Pre-fix  (100t, 18T, 18L, maxSep=15)',  nTrials: 100, nTargets: 18, nLures: 18, maxSep: 15, preFix: true },
-  { label: 'Post-fix (100t, 18T, 18L, maxSep=15)',  nTrials: 100, nTargets: 18, nLures: 18, maxSep: 15 },
-  { label: 'Post-fix (100t, 22T, 15L, maxSep=15)',  nTrials: 100, nTargets: 22, nLures: 15, maxSep: 15 },
-  { label: 'Post-fix (100t, 18T, 18L, maxSep=20)',  nTrials: 100, nTargets: 18, nLures: 18, maxSep: 20 },
-  { label: 'Post-fix (110t, 18T, 18L, maxSep=15)',  nTrials: 110, nTargets: 18, nLures: 18, maxSep: 15 },
-  { label: 'Post-fix (120t, 18T, 18L, maxSep=15)',  nTrials: 120, nTargets: 18, nLures: 18, maxSep: 15 },
+  { label: 'Pre-fix  (100t, 22T, 15L, maxSep=18)',  nTrials: 100, nTargets: 22, nLures: 15, maxSep: 18, preFix: true }
 ];
 
 console.log('Scenario                                     elig  success  Pr(all fail in 30)');

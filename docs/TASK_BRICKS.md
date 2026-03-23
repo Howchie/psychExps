@@ -141,6 +141,13 @@ Interaction targeting note:
   - `bricks.interaction.spotlightWideHitArea: true` -> `"spotlight"`
 - Cursor/hover reconciliation runs each frame using tracked pointer position, so cursor/hover state updates when moving bricks/spotlight enter a stationary pointer.
 
+Conveyor speed note:
+- `conveyors.speedPxPerSec` remains the baseline speed sampler (sampled once at trial init per conveyor).
+- Optional `conveyors.dynamicSpeed` adds runtime speed changes (off by default):
+  - each conveyor gets an independent interval timer and speed sampler
+  - supports per-conveyor overrides (`perConveyor.c0`, `perConveyor.c1`, etc.)
+  - when disabled, no runtime speed resampling logic is executed
+
 Spotlight rendering note:
 - `display.spotlight.snapMode` controls spotlight geometry snapping (`"screen"` default, `"pixel"`, `"none"`).
 - Use `"screen"` to reduce visible spotlight judder while keeping crisp edges; use `"none"` for fully subpixel motion.
