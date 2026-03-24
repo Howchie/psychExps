@@ -7,13 +7,30 @@ This document describes the exact config resolution path implemented in `apps/we
 Config objects are merged in the following order (higher items overwrite lower items):
 
 1. **Base object:** `{}`.
-2. **Task defaults:** `taskDefaults[taskId]` from `apps/web/src/taskVariantConfigs.ts`.
-3. **Variant config:** Selected by variant manifest `configPath`, unless `?config=...` is provided.
-4. **Runtime overrides:** `selection.overrides` (JATOS overrides if present, else URL `overrides`).
+2. **Variant config:** Selected by variant manifest `configPath`, unless `?config=...` is provided.
+3. **Runtime overrides:** `selection.overrides` (JATOS overrides if present, else URL `overrides`).
 
-Current repository state:
-- `taskDefaults` is currently empty for all active tasks (`sft`, `nback`, `bricks`, `stroop`, `tracking`, `change_detection`, `flanker`).
-- Effective baseline behavior therefore comes from the selected variant config JSON.
+Effective baseline behavior comes from the selected variant config JSON.
+
+### Config file bundling and access
+
+All JSON files under `configs/**/*.json` are automatically bundled at build time via `import.meta.glob` — no explicit import is needed. However, the two URL access methods have different registration requirements:
+
+| Access method | URL | Registration required? |
+| :--- | :--- | :--- |
+| Named variant | `?task=X&variant=myconfig` | Yes — must be listed in the task adapter `variants[]` manifest |
+| Explicit path | `?task=X&config=X/myconfig` | No — any bundled JSON works immediately |
+
+**To iterate quickly on a new config without touching code**, use `?config=`:
+1. Place `configs/<taskId>/myvariant.json`.
+2. Open `?task=<taskId>&config=<taskId>/myvariant`.
+
+**To publish a named variant** (so `?variant=<id>` works), add it to `tasks/<taskId>/src/index.ts`:
+```typescript
+variants: [
+  { id: "myvariant", label: "My Variant", configPath: "<taskId>/myvariant" },
+]
+```
 
 ### Merger Behavior: `buildMergedConfig`
 

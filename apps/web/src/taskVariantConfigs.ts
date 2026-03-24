@@ -4,16 +4,9 @@ type JsonModule = { default?: unknown } | unknown;
 
 const bundledConfigs = import.meta.glob("../../../configs/**/*.json", { eager: true }) as Record<string, JsonModule>;
 
-export const taskDefaults: Record<string, JSONObject> = {
-  sft: {},
-  nback: {},
-  bricks: {},
-  stroop: {},
-  tracking: {},
-  rdk: {},
-  change_detection: {},
-};
-
+// All JSON files under configs/**/*.json are auto-discovered at build time.
+// No per-task registration is needed — add a new config file and it will be
+// available as a variant configPath immediately.
 export const taskConfigsByPath: Record<string, JSONObject> = Object.fromEntries(
   Object.entries(bundledConfigs)
     .map(([modulePath, mod]) => {

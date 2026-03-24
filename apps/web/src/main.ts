@@ -34,7 +34,7 @@ import { matbCommsAdapter } from "@experiments/task-matb-comms";
 import { matbAdapter } from "@experiments/task-matb";
 
 import { coreDefaultConfig } from "./appCoreConfig";
-import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
+import { taskConfigsByPath } from "./taskVariantConfigs";
 
 async function bootstrap(): Promise<void> {
   const app = document.querySelector("#app");
@@ -92,7 +92,7 @@ async function bootstrap(): Promise<void> {
 
   const mergedTaskConfig = configManager.merge(
     {},
-    taskDefaults[selection.taskId] ?? {},
+    {},
     resolvedVariantConfig,
     selection.overrides ?? undefined,
   );
