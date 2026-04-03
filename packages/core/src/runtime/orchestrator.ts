@@ -239,23 +239,23 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
         .filter((spec) => {
           if (!spec.when) return true;
           const hasBlockFilters =
-            Array.isArray(spec.when.blockIndex) ||
-            Array.isArray(spec.when.blockLabel) ||
-            Array.isArray(spec.when.blockType) ||
+            (spec.when.blockIndex && spec.when.blockIndex.size > 0) ||
+            (spec.when.blockLabel && spec.when.blockLabel.size > 0) ||
+            (spec.when.blockType && spec.when.blockType.size > 0) ||
             typeof spec.when.isPractice === "boolean";
           if (!blockCtx && hasBlockFilters) return false;
           if (!blockCtx) return true;
           const block = asObject(blockCtx.block);
-          if (Array.isArray(spec.when.blockIndex) && spec.when.blockIndex.length > 0) {
-            if (!spec.when.blockIndex.includes(blockCtx.blockIndex)) return false;
+          if (spec.when.blockIndex && spec.when.blockIndex.size > 0) {
+            if (!spec.when.blockIndex.has(blockCtx.blockIndex)) return false;
           }
-          if (Array.isArray(spec.when.blockLabel) && spec.when.blockLabel.length > 0) {
+          if (spec.when.blockLabel && spec.when.blockLabel.size > 0) {
             const label = asString(block?.label);
-            if (!label || !spec.when.blockLabel.includes(label)) return false;
+            if (!label || !spec.when.blockLabel.has(label)) return false;
           }
-          if (Array.isArray(spec.when.blockType) && spec.when.blockType.length > 0) {
+          if (spec.when.blockType && spec.when.blockType.size > 0) {
             const blockType = (asString(block?.blockType) || "").toLowerCase();
-            if (!blockType || !spec.when.blockType.includes(blockType)) return false;
+            if (!blockType || !spec.when.blockType.has(blockType)) return false;
           }
           if (typeof spec.when.isPractice === "boolean") {
             if (Boolean(block?.isPractice) !== spec.when.isPractice) return false;

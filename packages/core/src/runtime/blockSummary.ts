@@ -3,9 +3,9 @@ import { escapeHtml } from "../web/ui";
 export type BlockSummaryPlacement = "block_end_before_post" | "block_end_after_post";
 
 export interface BlockSummaryWhen {
-  blockIndex?: number[];
-  blockLabel?: string[];
-  blockType?: string[];
+  blockIndex?: Set<number>;
+  blockLabel?: Set<string>;
+  blockType?: Set<string>;
   isPractice?: boolean;
 }
 
@@ -111,25 +111,30 @@ function toTextNumber(value: number, digits = 1): string {
 
 function normalizeWhen(raw: Record<string, unknown> | null): BlockSummaryWhen | undefined {
   if (!raw) return undefined;
-  const blockIndex = asArray(raw.blockIndex)
+  const blockIndexList = asArray(raw.blockIndex)
     .map((item) => Number(item))
     .filter((item) => Number.isInteger(item))
     .map((item) => Math.floor(item));
-  const blockLabel = asArray(raw.blockLabel)
+  const blockLabelList = asArray(raw.blockLabel)
     .map((item) => asString(item))
     .filter((item): item is string => Boolean(item));
-  const blockType = asArray(raw.blockType)
+  const blockTypeList = asArray(raw.blockType)
     .map((item) => asString(item))
     .filter((item): item is string => Boolean(item))
     .map((item) => item.toLowerCase());
   const isPractice = typeof raw.isPractice === "boolean" ? raw.isPractice : undefined;
-  if (blockIndex.length === 0 && blockLabel.length === 0 && blockType.length === 0 && typeof isPractice !== "boolean") {
+
+  const blockIndex = blockIndexList.length > 0 ? new Set(blockIndexList) : undefined;
+  const blockLabel = blockLabelList.length > 0 ? new Set(blockLabelList) : undefined;
+  const blockType = blockTypeList.length > 0 ? new Set(blockTypeList) : undefined;
+
+  if (!blockIndex && !blockLabel && !blockType && typeof isPractice !== "boolean") {
     return undefined;
   }
   return {
-    ...(blockIndex.length > 0 ? { blockIndex } : {}),
-    ...(blockLabel.length > 0 ? { blockLabel } : {}),
-    ...(blockType.length > 0 ? { blockType } : {}),
+    ...(blockIndex ? { blockIndex } : {}),
+    ...(blockLabel ? { blockLabel } : {}),
+    ...(blockType ? { blockType } : {}),
     ...(typeof isPractice === "boolean" ? { isPractice } : {}),
   };
 }
@@ -210,13 +215,13 @@ function matchesWhen(
   blockContext: { blockIndex: number; blockLabel: string; blockType: string; isPractice: boolean },
 ): boolean {
   if (!when) return true;
-  if (Array.isArray(when.blockIndex) && when.blockIndex.length > 0 && !when.blockIndex.includes(blockContext.blockIndex)) {
+  if (when.blockIndex && when.blockIndex.size > 0 && !when.blockIndex.has(blockContext.blockIndex)) {
     return false;
   }
-  if (Array.isArray(when.blockLabel) && when.blockLabel.length > 0 && !when.blockLabel.includes(blockContext.blockLabel)) {
+  if (when.blockLabel && when.blockLabel.size > 0 && !when.blockLabel.has(blockContext.blockLabel)) {
     return false;
   }
-  if (Array.isArray(when.blockType) && when.blockType.length > 0 && !when.blockType.includes(blockContext.blockType)) {
+  if (when.blockType && when.blockType.size > 0 && !when.blockType.has(blockContext.blockType)) {
     return false;
   }
   if (typeof when.isPractice === "boolean" && when.isPractice !== blockContext.isPractice) {
@@ -232,18 +237,21 @@ export function computeBlockSummaryStats(args: {
 }): { total: number; correct: number; accuracyPct: number; meanRtMs: number; validRtCount: number; meanMetric: number } {
   const { trialResults, where, metrics } = args;
   const rows = Array.isArray(trialResults) ? trialResults : [];
-  const filteredRows = rows.filter((row) => {
-    if (!where) return true;
+
+  const whereSpecs = where ? Object.entries(where).map(([field, expectedRaw]) => {
+    const expectedValues = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
+    return { field, expectedSet: new Set(expectedValues.map(v => String(v))) };
+  }) : null;
+
+  const filteredRows = whereSpecs ? rows.filter((row) => {
     const record = asObject(row);
     if (!record) return false;
-    for (const [field, expectedRaw] of Object.entries(where)) {
+    for (const { field, expectedSet } of whereSpecs) {
       const actual = getFieldValue(record, field);
-      const expectedValues = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
-      const matched = expectedValues.some((expected) => String(actual) === String(expected));
-      if (!matched) return false;
+      if (!expectedSet.has(String(actual))) return false;
     }
     return true;
-  });
+  }) : rows;
   let total = 0;
   let correct = 0;
   let rtSum = 0;

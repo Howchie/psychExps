@@ -81,7 +81,10 @@ const NAMESPACE_TOKEN_RE = /^\$([A-Za-z_][A-Za-z0-9_]*)\.(.+)$/;
 const TEMPLATE_EXPR_RE = /\$\{([^{}]+)\}/g;
 
 function hasSamplerShape(value: Record<string, unknown>): boolean {
-  return Object.keys(value).some((key) => SAMPLER_KEYS.has(key));
+  for (const key of SAMPLER_KEYS) {
+    if (key in value) return true;
+  }
+  return false;
 }
 
 function normalizeScope(scopeValue: unknown): VariableScope {

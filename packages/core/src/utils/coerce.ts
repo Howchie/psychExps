@@ -104,9 +104,9 @@ export type InstructionInsertionPoint =
   | "task_end_after";
 
 export interface InstructionInsertionWhen {
-  blockIndex?: number[];
-  blockLabel?: string[];
-  blockType?: string[];
+  blockIndex?: Set<number>;
+  blockLabel?: Set<string>;
+  blockType?: Set<string>;
   isPractice?: boolean;
 }
 
@@ -141,24 +141,29 @@ export function coerceInstructionInsertions(value: unknown): InstructionInsertio
     const pages = toInstructionScreenSpecs(raw.pages);
     if (pages.length === 0) continue;
     const whenRaw = asObject(raw.when);
-    const blockIndex = asArray(whenRaw?.blockIndex)
+    const blockIndexList = asArray(whenRaw?.blockIndex)
       .map((item) => Number(item))
       .filter((item) => Number.isInteger(item))
       .map((item) => Math.floor(item));
-    const blockLabel = asArray(whenRaw?.blockLabel)
+    const blockLabelList = asArray(whenRaw?.blockLabel)
       .map((item) => asString(item))
       .filter((item): item is string => Boolean(item));
-    const blockType = asArray(whenRaw?.blockType)
+    const blockTypeList = asArray(whenRaw?.blockType)
       .map((item) => asString(item))
       .filter((item): item is string => Boolean(item))
       .map((item) => item.toLowerCase());
     const isPractice = typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
+
+    const blockIndex = blockIndexList.length > 0 ? new Set(blockIndexList) : undefined;
+    const blockLabel = blockLabelList.length > 0 ? new Set(blockLabelList) : undefined;
+    const blockType = blockTypeList.length > 0 ? new Set(blockTypeList) : undefined;
+
     const when: InstructionInsertionWhen | undefined =
-      blockIndex.length > 0 || blockLabel.length > 0 || blockType.length > 0 || typeof isPractice === "boolean"
+      blockIndex || blockLabel || blockType || typeof isPractice === "boolean"
         ? {
-            ...(blockIndex.length > 0 ? { blockIndex } : {}),
-            ...(blockLabel.length > 0 ? { blockLabel } : {}),
-            ...(blockType.length > 0 ? { blockType } : {}),
+            ...(blockIndex ? { blockIndex } : {}),
+            ...(blockLabel ? { blockLabel } : {}),
+            ...(blockType ? { blockType } : {}),
             ...(typeof isPractice === "boolean" ? { isPractice } : {}),
           }
         : undefined;
