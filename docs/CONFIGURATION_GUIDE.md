@@ -20,10 +20,11 @@ All JSON files under `configs/**/*.json` are automatically bundled at build time
 | :--- | :--- | :--- |
 | Named variant | `?task=X&variant=myconfig` | Yes — must be listed in the task adapter `variants[]` manifest |
 | Explicit path | `?task=X&config=X/myconfig` | No — any bundled JSON works immediately |
+| Bare name (task-scoped fallback) | `?task=X&config=myconfig` | No — resolves as `X/myconfig` first; if `myconfig` matches a variant id, that variant `configPath` is tried first |
 
 **To iterate quickly on a new config without touching code**, use `?config=`:
 1. Place `configs/<taskId>/myvariant.json`.
-2. Open `?task=<taskId>&config=<taskId>/myvariant`.
+2. Open either `?task=<taskId>&config=<taskId>/myvariant` or `?task=<taskId>&config=myvariant`.
 
 **To publish a named variant** (so `?variant=<id>` works), add it to `tasks/<taskId>/src/index.ts`:
 ```typescript
@@ -116,6 +117,9 @@ Behavior:
 - jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode (`visual` by default).
 - Continue screens auto-advance with sampled delays.
 - Native tasks (`bricks`, `tracking`, `change_detection`) auto-start and apply task-specific synthetic timing guards.
+- When `task.modules.drt.enabled` is true:
+  - `auto_mode=visual`: DRT uses live runtime with synthetic key responses.
+  - `auto_mode=data-only`: DRT uses a virtual-time simulation path (same core DRT engine/output shape) so DRT data is still produced in fast data-only runs.
 
 ---
 

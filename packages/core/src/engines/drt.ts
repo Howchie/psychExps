@@ -2,6 +2,7 @@ import { asArray, asObject, asString, toNonNegativeNumber, toPositiveNumber, toU
 import { normalizeKey } from "../infrastructure/keys";
 import { SeededRandom } from "../infrastructure/random";
 import { createSampler } from "../infrastructure/sampling";
+import { getAutoResponderProfile, isAutoResponderEnabled, sampleAutoResponse } from "../runtime/autoresponder";
 import {
   OnlineParameterTransformRunner,
   type OnlineParameterTransformConfig,
@@ -242,6 +243,8 @@ export interface DrtControllerConfig {
   audio?: DrtAuditoryPresentationConfig;
   border?: DrtBorderPresentationConfig;
   parameterTransforms?: OnlineParameterTransformConfig[];
+  dataOnlySimulationDurationMs?: number;
+  dataOnlySimulationStepMs?: number;
 }
 
 export type ScopedDrtConfig = DrtControllerConfig & {
@@ -473,6 +476,8 @@ interface NormalizedControllerConfig {
   visual: Required<DrtVisualPresentationConfig>;
   audio: Required<DrtAuditoryPresentationConfig>;
   border: Required<DrtBorderPresentationConfig>;
+  dataOnlySimulationDurationMs: number | null;
+  dataOnlySimulationStepMs: number;
 }
 
 interface ActivePresentation {
@@ -535,6 +540,10 @@ function normalizeControllerConfig(config: DrtControllerConfig): NormalizedContr
       radiusPx: Math.max(0, Math.round(toPositiveNumber(config.border?.radiusPx, 0))),
       target: config.border?.target === "viewport" ? "viewport" : "display",
     },
+    dataOnlySimulationDurationMs: Number.isFinite(Number(config.dataOnlySimulationDurationMs))
+      ? Math.max(0, Math.round(Number(config.dataOnlySimulationDurationMs)))
+      : null,
+    dataOnlySimulationStepMs: Math.max(1, Math.round(toPositiveNumber(config.dataOnlySimulationStepMs, 8))),
   };
 }
 
@@ -728,6 +737,8 @@ export class DrtController {
   private started = false;
   private epochMs = 0;
   private activePresentation: ActivePresentation | null = null;
+  private autoResponseTimer: ReturnType<typeof setTimeout> | null = null;
+  private virtualNowMs: number | null = null;
 
   private readonly onKeyDownBound = (event: KeyboardEvent) => {
     if (!this.started || !this.enabled) return;
@@ -777,6 +788,7 @@ export class DrtController {
   stop(): DrtEngineData {
     if (!this.started) return this.engine.exportData();
     this.started = false;
+    this.clearAutoResponseTimer();
     this.engine.forceEnd(this.elapsedNowMs(), { onStimEnd: (stimulus) => this.handleStimEnd(stimulus) });
     this.hidePresentation();
     this.presenter.dispose();
@@ -873,7 +885,82 @@ export class DrtController {
   }
 
   private elapsedNowMs(): number {
+    if (this.virtualNowMs != null) return Math.max(0, this.virtualNowMs);
     return Math.max(0, this.now() - this.epochMs);
+  }
+
+  simulateDataOnlyWindow(durationMs: number): void {
+    if (!this.enabled) return;
+    const totalDurationMs = Math.max(0, Math.round(Number(durationMs) || 0));
+    const stepMs = Math.max(1, this.config.dataOnlySimulationStepMs);
+    if (!this.started) {
+      this.started = true;
+      this.epochMs = 0;
+      this.engine.start(0);
+    }
+
+    let pendingAutoResponse: { stimId: string; key: string; dueAtMs: number } | null = null;
+    const clearPendingForStimulus = (stimulus: DrtStimulusState) => {
+      if (!pendingAutoResponse) return;
+      if (pendingAutoResponse.stimId !== stimulus.id) return;
+      pendingAutoResponse = null;
+    };
+    const scheduleVirtualAutoResponse = (stimulus: DrtStimulusState) => {
+      if (!isAutoResponderEnabled()) return;
+      const sampled = sampleAutoResponse({
+        validResponses: [this.config.key],
+        expectedResponse: this.config.key,
+        trialDurationMs: this.config.responseWindowMs,
+      });
+      if (!sampled?.response || sampled.rtMs == null) return;
+      const delayMs = Math.max(0, Math.min(this.config.responseWindowMs, Math.round(sampled.rtMs)));
+      pendingAutoResponse = {
+        stimId: stimulus.id,
+        key: sampled.response,
+        dueAtMs: stimulus.start + delayMs,
+      };
+    };
+
+    for (let nowMs = 0; nowMs <= totalDurationMs; nowMs += stepMs) {
+      this.virtualNowMs = nowMs;
+      this.engine.step(nowMs, {
+        onStimStart: (stimulus) => {
+          this.handleStimStart(stimulus);
+          scheduleVirtualAutoResponse(stimulus);
+        },
+        onStimEnd: (stimulus) => {
+          clearPendingForStimulus(stimulus);
+          this.handleStimEnd(stimulus);
+        },
+      });
+
+      const pending = pendingAutoResponse as { stimId: string; key: string; dueAtMs: number } | null;
+      if (pending && nowMs >= pending.dueAtMs) {
+        pendingAutoResponse = null;
+        const activeStimulusId = this.activePresentation?.stim.id ?? null;
+        if (activeStimulusId === pending.stimId) {
+          const handled = this.engine.handleKey(pending.key, nowMs, {
+            onStimEnd: (stimulus) => {
+              clearPendingForStimulus(stimulus);
+              this.handleStimEnd(stimulus);
+            },
+          });
+          if (handled && this.config.responseTerminatesStimulus) {
+            this.hidePresentation();
+          }
+        }
+      }
+      this.tickPresentationTimeout();
+    }
+
+    this.virtualNowMs = totalDurationMs;
+    this.engine.forceEnd(totalDurationMs, {
+      onStimEnd: (stimulus) => {
+        clearPendingForStimulus(stimulus);
+        this.handleStimEnd(stimulus);
+      },
+    });
+    this.virtualNowMs = null;
   }
 
   private handleEngineEvent(event: DrtEvent): void {
@@ -965,6 +1052,7 @@ export class DrtController {
   }
 
   private handleStimStart(stimulus: DrtStimulusState): void {
+    this.clearAutoResponseTimer();
     this.activePresentation = {
       stim: stimulus,
       visible: true,
@@ -973,9 +1061,11 @@ export class DrtController {
     this.presenter.showPresentation(this.activePresentation);
     this.hooks.onStimStart?.(stimulus);
     this.hooks.onStimulusShown?.(stimulus);
+    this.maybeScheduleAutoResponse(stimulus);
   }
 
   private handleStimEnd(stimulus: DrtStimulusState): void {
+    this.clearAutoResponseTimer();
     this.hidePresentation();
     this.hooks.onStimEnd?.(stimulus);
   }
@@ -992,6 +1082,30 @@ export class DrtController {
     if (!active || !active.visible) return;
     if (this.elapsedNowMs() < active.hideAtMs) return;
     this.hidePresentation();
+  }
+
+  private clearAutoResponseTimer(): void {
+    if (this.autoResponseTimer == null) return;
+    clearTimeout(this.autoResponseTimer);
+    this.autoResponseTimer = null;
+  }
+
+  private maybeScheduleAutoResponse(stimulus: DrtStimulusState): void {
+    if (!isAutoResponderEnabled()) return;
+    const sampled = sampleAutoResponse({
+      validResponses: [this.config.key],
+      expectedResponse: this.config.key,
+      trialDurationMs: this.config.responseWindowMs,
+    });
+    if (!sampled?.response || sampled.rtMs == null) return;
+    const delayMs = Math.max(0, Math.min(this.config.responseWindowMs, Math.round(sampled.rtMs)));
+    this.autoResponseTimer = setTimeout(() => {
+      this.autoResponseTimer = null;
+      if (!this.started || !this.enabled) return;
+      const activeStimulusId = this.activePresentation?.stim.id ?? null;
+      if (activeStimulusId !== stimulus.id) return;
+      this.handleKey(sampled.response as string);
+    }, delayMs);
   }
 
 
@@ -1018,6 +1132,8 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
   }
 
   start(config: ScopedDrtConfig, address: TaskModuleAddress, context: TaskModuleContext): TaskModuleHandle<DrtModuleResult> {
+    const autoProfile = getAutoResponderProfile();
+    const shouldSimulateDataOnly = isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === "data-only";
     const controller = new DrtController(
       config,
       {},
@@ -1028,15 +1144,22 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
         borderTargetRect: context.borderTargetRect,
       }
     );
-
-    controller.start(0);
+    if (!shouldSimulateDataOnly) {
+      controller.start(0);
+    }
 
     return {
-      stop: () => ({
-        engine: controller.stop(),
-        transforms: controller.exportTransformData(),
-        responseRows: controller.exportResponseRows(),
-      }),
+      stop: () => {
+        if (shouldSimulateDataOnly) {
+          const durationMs = resolveDataOnlyDrtDurationMs(config, address, context);
+          controller.simulateDataOnlyWindow(durationMs);
+        }
+        return {
+          engine: controller.stop(),
+          transforms: controller.exportTransformData(),
+          responseRows: controller.exportResponseRows(),
+        };
+      },
       step: (now) => {
         // RAF loop is internal to DrtController for now
       },
@@ -1046,4 +1169,57 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
       controller,
     };
   }
+}
+
+function resolveDataOnlyDrtDurationMs(
+  config: ScopedDrtConfig,
+  address: TaskModuleAddress,
+  context: TaskModuleContext,
+): number {
+  const explicitDurationMs = Number((config as any).dataOnlySimulationDurationMs);
+  if (Number.isFinite(explicitDurationMs) && explicitDurationMs > 0) {
+    return Math.max(1, Math.round(explicitDurationMs));
+  }
+  if (address.scope === "trial") {
+    const inferredTrialDurationMs = inferDurationMsFromUnknown(context.trial);
+    if (inferredTrialDurationMs > 0) return inferredTrialDurationMs;
+    return 20_000;
+  }
+  const inferredBlockDurationMs = inferDurationMsFromUnknown(context.block);
+  if (inferredBlockDurationMs > 0) return inferredBlockDurationMs;
+  return 60_000;
+}
+
+function inferDurationMsFromUnknown(value: unknown): number {
+  if (!value || typeof value !== "object") return 0;
+  const record = value as Record<string, unknown>;
+  const fromMsFields = [
+    "durationMs",
+    "trialDurationMs",
+    "maxDurationMs",
+    "maxTimeMs",
+    "responseWindowMs",
+  ];
+  for (const field of fromMsFields) {
+    const raw = Number(record[field]);
+    if (Number.isFinite(raw) && raw > 0) return Math.round(raw);
+  }
+  const maxTimeSec = Number(record.maxTimeSec);
+  if (Number.isFinite(maxTimeSec) && maxTimeSec > 0) return Math.round(maxTimeSec * 1000);
+  const trials = Array.isArray(record.trials) ? record.trials : null;
+  if (trials && trials.length > 0) {
+    const summed = trials.reduce((acc, trial) => acc + inferDurationMsFromUnknown(trial), 0);
+    if (summed > 0) return summed;
+  }
+  const timing = (record.timing && typeof record.timing === "object")
+    ? (record.timing as Record<string, unknown>)
+    : null;
+  if (timing) {
+    const timingFields = ["responseWindowMs", "stimulusDurationMs", "trialDurationMs"];
+    for (const field of timingFields) {
+      const raw = Number(timing[field]);
+      if (Number.isFinite(raw) && raw > 0) return Math.round(raw);
+    }
+  }
+  return 0;
 }

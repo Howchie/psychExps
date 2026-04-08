@@ -17,6 +17,7 @@ The Detection Response Task (DRT) module implements ISO-standard and custom dete
 | `stimModes` | array | `[]` | Optional array to enable multiple concurrent modes (e.g., `["visual", "auditory"]`). |
 | `parameterTransforms` | array | `[]` | Online modeling configurations (e.g., `wald_conjugate`). |
 | `transformPersistence` | `"scope" \| "session"` | `"scope"` | Controls if parameter estimates persist across block boundaries. |
+| `dataOnlySimulationDurationMs` | number | inferred/fallback | Optional virtual-time duration used only when autoresponder is enabled with `auto_mode=data-only`. |
 
 ### 1.1 ISI Sampler (`isiSampler`)
 
@@ -87,3 +88,12 @@ DRT results are exported in the `moduleResults` object under the key `drt`.
 - **`engine.stats`**: Summary counts (hits, misses, false alarms).
 - **`transforms`**: Runtime data from parameter estimators.
 - **`responseRows`**: Row-level RT and parameter data for each response.
+
+## 4. Auto-Responder Integration
+
+When auto mode is enabled (`auto=true` or `autoresponder.enabled=true`), DRT generates synthetic key responses using the shared auto-response profile (RT distribution and timeout rate).
+
+- `auto_mode=visual`: normal live DRT runtime is used.
+- `auto_mode=data-only`: DRT module uses a virtual-time simulation path built on the same DRT engine/output pipeline, so module stats/events/response rows are still produced without waiting for wall-clock trial time.
+
+For data-only mode, `dataOnlySimulationDurationMs` can be set explicitly per scope. If omitted, core infers a duration from trial/block config fields where possible and otherwise uses conservative fallbacks.

@@ -22,13 +22,13 @@
     "rtTask": {
       "enabled": true,
       "timing": {
-        "trialDurationMs": 3000,
-        "fixationOnsetMs": 250,
-        "fixationDurationMs": 250,
-        "stimulusOnsetMs": 750,
-        "stimulusDurationMs": 2250,
-        "responseWindowStartMs": 750,
-        "responseWindowEndMs": 3000
+        "trialDurationMs": 30,
+        "fixationOnsetMs": 2,
+        "fixationDurationMs": 2,
+        "stimulusOnsetMs": 7,
+        "stimulusDurationMs": 22,
+        "responseWindowStartMs": 7,
+        "responseWindowEndMs": 30
       },
       "responseTerminatesTrial": false
     },
@@ -57,7 +57,7 @@
             "set": {
               "trialType": "PM",
               "itemCategory": "PM",
-              "correctResponse": "$var.keys.pm",
+              "correctResponse": "space",
               "responseCategory": "pm"
             }
           }
@@ -66,13 +66,13 @@
     }
   },
   "mapping": {
-    "targetKey": "$var.keys.target",
-    "nonTargetKey": "$var.keys.nonTarget"
+    "targetKey": "m",
+    "nonTargetKey": "z"
   },
   "instructions": {
     "pages": [
-      "Welcome to the experiment.\n\nIn this experiment you will be presented with a series of words that progress automatically.\nYou will need to remember the sequence of words to complete a '2-back' task.\nOn each trial, you need to decide whether the word is the same as the one two (2) words ago (${var.keys.target}) or not (${var.keys.nonTarget}).",
-      "Let's have a short practice. Each trial will present one word.\nYou must decide whether the word matches the one presented two (2) trials ago.\n\nIf the word matches, press the '${var.keys.target}' key.\nIf the word does not match, press the '${var.keys.nonTarget}' key.\n\n`2-back' means the word before the previous word.\nE.g. In the sequence is 'honey', 'jelly', 'honey', the second 'honey' is a 2-back target.\n\nYou will receive feedback after the block is finished.\nWords can repeat, so try to remember the sequence not just recognise words."
+      "Welcome to the experiment.\n\nIn this experiment you will be presented with a series of words that progress automatically.\nYou will need to remember the sequence of words to complete a '2-back' task.\nOn each trial, you need to decide whether the word is the same as the one two (2) words ago (M) or not (Z).",
+      "Let's have a short practice. Each trial will present one word.\nYou must decide whether the word matches the one presented two (2) trials ago.\n\nIf the word matches, press the 'm' key.\nIf the word does not match, press the 'z' key.\n\n`2-back' means the word before the previous word.\nE.g. In the sequence is 'honey', 'jelly', 'honey', the second 'honey' is a 2-back target.\n\nYou will receive feedback after the block is finished.\nWords can repeat, so try to remember the sequence not just recognise words."
     ],
     "showTaskTitleCard": false,
     "blockIntroTemplate": "$var.blockIntro",
@@ -125,11 +125,14 @@
       "at": "before_post",
       "title": "Feedback",
       "lines": [
-        "Total accuracy: {accuracyPct}% ({correct}/{total})"
+        "Target accuracy: {accuracyPct}% ({correct}/{total})"
       ],
       "metrics": {
         "correctField": "responseCorrect",
         "rtField": "responseRtMs"
+      },
+      "where": {
+        "trialType": ["N"]
       },
       "when": {
         "isPractice": true
@@ -153,22 +156,7 @@
     "pmEnabled": false,
     "pmCount": 0,
     "pmCategories": [],
-    "keys": {
-      "scope": "participant",
-      "sampler": {
-        "type": "list",
-        "values": [
-          { "target": "s", "nonTarget": "d",  "pm": "j" },
-          { "target": "d", "nonTarget": "s", "pm": "j"},
-          { "target": "s", "nonTarget": "d",  "pm": "k" },
-          { "target": "d", "nonTarget": "s", "pm": "k"},
-          { "target": "j", "nonTarget": "k",  "pm": "s" },
-          { "target": "k", "nonTarget": "j", "pm": "s"},
-          { "target": "j", "nonTarget": "k",  "pm": "d" },
-          { "target": "k", "nonTarget": "j", "pm": "d"}
-        ]
-      }
-    },
+    "blockIntro": "This is a {nLevel}-back block.",
     "between": {
       "scope": "participant",
       "sampler": {
@@ -179,21 +167,21 @@
             "cell1PmCount": 10,
             "cell1PmCategories": ["animals"],
             "cell1NbackCategories": ["animals_controls"],
-            "cell1Intro": "Press '${var.keys.pm}' for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
+            "cell1Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 10,
             "cell2PmCategories": ["three"],
             "cell2NbackCategories": ["three_controls"],
-            "cell2Intro": "Press '${var.keys.pm}' for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell2PreScreen": "In the next set of trials, you will be given a new set of categories for the PM task.\nYou will no longer need to identify animal words.",
+            "cell2Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "",
             "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
             "cell3PmCount": 0,
             "cell3PmCategories": [],
             "cell3NbackCategories": ["other_controls"],
-            "cell3Intro": "Press '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell3Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           },
@@ -202,21 +190,21 @@
             "cell1PmCount": 10,
             "cell1PmCategories": ["three"],
             "cell1NbackCategories": ["three_controls"],
-            "cell1Intro": "Press '${var.keys.pm}' for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
+            "cell1Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 10,
             "cell2PmCategories": ["animals"],
             "cell2NbackCategories": ["animals_controls"],
-            "cell2Intro": "Press '${var.keys.pm}' for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell2PreScreen": "In the next set of trials, you will be given a new category for the PM task.\nYou will no longer need to identify the other categories.",
+            "cell2Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "",
             "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
             "cell3PmCount": 0,
             "cell3PmCategories": [],
             "cell3NbackCategories": ["other_controls"],
-            "cell3Intro": "Press '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell3Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           },
@@ -225,21 +213,21 @@
             "cell1PmCount": 0,
             "cell1PmCategories": [],
             "cell1NbackCategories": ["other_controls"],
-            "cell1Intro": "Press '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell1Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 10,
             "cell2PmCategories": ["animals"],
             "cell2NbackCategories": ["animals_controls"],
-            "cell2Intro": "Press '${var.keys.pm}' for PM items from the category: animals.\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
+            "cell2Intro": "Press SPACE for PM items from the category: animals.\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
             "cell3PmCount": 10,
             "cell3PmCategories": ["three"],
             "cell3NbackCategories": ["three_controls"],
-            "cell3Intro": "Press '${var.keys.pm}' for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell3Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           },
@@ -248,21 +236,21 @@
             "cell1PmCount": 0,
             "cell1PmCategories": [],
             "cell1NbackCategories": ["other_controls"],
-            "cell1Intro": "Press '${var.keys.target}' when the word is the same as two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell1Intro": "Press 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
             "cell2PmCount": 10,
             "cell2PmCategories": ["three"],
             "cell2NbackCategories": ["three_controls"],
-            "cell2Intro": "Press '${var.keys.pm}' for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
-            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
+            "cell2Intro": "Press SPACE for PM items from any of the categories: colours, flowers, fruit/vegetables.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
+            "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\nThe PM task requires you to press the spacebar on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response before the block.\nIt is important that you remember to press the spacebar whenever you see a word belonging to those categories.",
             "cell2PostScreen": "",
             "cell3Enabled": true,
             "cell3PmCount": 10,
             "cell3PmCategories": ["animals"],
             "cell3NbackCategories": ["animals_controls"],
-            "cell3Intro": "Press '${var.keys.pm}' for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.",
+            "cell3Intro": "Press SPACE for PM items from the category: animals.\n\nFor all other words you will respond to the n-back task as usual:\n\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.",
             "cell3PreScreen": "",
             "cell3PostScreen": ""
           }
@@ -291,7 +279,7 @@
             "pmEnabled": false,
             "pmCount": 0,
             "pmCategories": [],
-            "blockIntro": "Remember, trials will proceed automatically, but you must respond to each word.\n\nPress '${var.keys.target}' if the word matches the one two (2) trials ago.\nPress '${var.keys.nonTarget}' if the word does not match.\nThe first two words will require a '${var.keys.nonTarget}' response, because there are no corresponding two-back trials."
+            "blockIntro": "Remember, trials will proceed automatically, but you must respond to each word.\n\nPress 'm' if the word matches the one two (2) trials ago.\nPress 'z' if the word does not match.\nThe first two words will require a 'z' response, because there are no corresponding two-back trials."
           },
           "beforeBlockScreens": [""],
           "nbackSourceCategories": ["practice"]
@@ -307,6 +295,8 @@
             "pmCategories": "$between.cell1PmCategories",
             "blockIntro": "$between.cell1Intro"
           },
+          "beforeBlockScreens": ["$between.cell1PreScreen"],
+          "afterBlockScreens": ["$between.cell1PostScreen"],
           "nbackSourceCategories": ["$between.cell1NbackCategories"]
         }
       },
@@ -320,6 +310,8 @@
             "pmCategories": "$between.cell2PmCategories",
             "blockIntro": "$between.cell2Intro"
           },
+          "beforeBlockScreens": ["$between.cell2PreScreen"],
+          "afterBlockScreens": ["$between.cell2PostScreen"],
           "nbackSourceCategories": ["$between.cell2NbackCategories"]
         }
       },
@@ -333,6 +325,8 @@
             "pmCategories": "$between.cell3PmCategories",
             "blockIntro": "$between.cell3Intro"
           },
+          "beforeBlockScreens": ["$between.cell3PreScreen"],
+          "afterBlockScreens": ["$between.cell3PostScreen"],
           "nbackSourceCategories": ["$between.cell3NbackCategories"]
         }
       }
@@ -340,15 +334,15 @@
     "blocks": [
       { "phase": "practice", "manipulation": "practice", "label": "Practice Block","trials": 20, "lureCount": 2, "targetCount": 4,
           "rtTask": {"timing": {
-            "trialDurationMs": 4000,
-            "fixationOnsetMs": 250,
-            "fixationDurationMs": 500,
-            "stimulusOnsetMs": 750,
-            "stimulusDurationMs": 3250,
-            "responseWindowStartMs": 750,
-            "responseWindowEndMs": 4000}},
+            "trialDurationMs": 40,
+            "fixationOnsetMs": 2,
+            "fixationDurationMs": 5,
+            "stimulusOnsetMs": 7,
+            "stimulusDurationMs": 32,
+            "responseWindowStartMs": 7,
+            "responseWindowEndMs": 40}},
         "afterBlockScreens": ["Great work! The rest of the experiment will always use this same response rule.\nYou are always responding to whether the current word matches the one from two (2) trials ago.\nWords can repeat, so try to remember the sequence not just recognise words."],
-        "repeatAfterBlockScreens": ["Remember:\nPress '${var.keys.target}' when the word is the same as it was two (2) words ago.\nOtherwise, press '${var.keys.nonTarget}'.\n\nPress continue when you are ready for the next set of trials."],
+        "repeatAfterBlockScreens": ["Remember:\nPress 'm' when the word is the same as two (2) back ago.\nOtherwise, press 'z'.\n\nPress continue when you are ready for the next set of trials."],
         "repeatUntil": {
           "enabled": true,
           "maxAttempts": 3,
@@ -356,11 +350,11 @@
           "where": { "trialType": ["N"] },
           "metrics": { "correctField": "responseCorrect" }}
       },
-      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22, "beforeBlockScreens": ["$between.cell1PreScreen"]},
-      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["$between.cell1PostScreen"]},
-      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22,  "beforeBlockScreens": ["$between.cell2PreScreen"], "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
-      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["$between.cell2PostScreen"]},
-      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22, "beforeBlockScreens": ["$between.cell3PreScreen"]},
+      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22},
+      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22 },
+      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
+      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22 },
+      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22 },
       { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22}
     ]
   },

@@ -45,7 +45,7 @@ http://localhost:5173/?task=nback&config=nback/default
 | :--- | :--- | :--- |
 | `task` | Task ID | `nback`, `sft`, `bricks`, `stroop` |
 | `variant` | Variant ID defined in the task adapter manifest | `default`, `pm_module_demo` |
-| `config` | Override the variant config path (skips manifest lookup) | `nback/nirvanaExp1` |
+| `config` | Override the variant config path (skips manifest lookup); supports `<task>/<file>` or bare `<file>` | `nback/nirvanaExp1`, `annikaHons` |
 | `overrides` | URL-encoded JSON merged on top of the config | `%7B%22mapping%22%3A%7B%22targetKey%22%3A%22k%22%7D%7D` |
 | `auto` | Enable auto-responder synthetic participant | `true`, `1` |
 | `auto_mode` | jsPsych simulation mode | `visual`, `data-only` |
@@ -56,7 +56,7 @@ http://localhost:5173/?task=nback&config=nback/default
 
 ### Quick-launch examples
 
-Prefer `?config=<taskId>/<file>` — it works for any bundled JSON without needing it registered in the task manifest. `?variant=<id>` is a shorter alias only for configs already listed in the task's `variants[]` manifest.
+Prefer `?config=<taskId>/<file>` — it works for any bundled JSON without needing it registered in the task manifest. `?config=<file>` also works and resolves to `<taskId>/<file>` for the selected task. `?variant=<id>` is a shorter alias only for configs already listed in the task's `variants[]` manifest.
 
 ```
 # NBack default
