@@ -119,42 +119,55 @@ export function generateProspectiveMemoryPositions(
   const maxSep = Math.max(minSep, Math.floor(schedule.maxSeparation));
   if (nPm <= 0) return [];
 
-  const positions: number[] = [];
-  // Match legacy PM semantics: first PM is constrained by minSeparation from trial 0.
-  let lastPos = 0;
+  const failedStates = new Set<string>();
 
-  for (let i = 0; i < nPm; i += 1) {
-    const remaining = nPm - i - 1;
+  const search = (step: number, lastPos: number): number[] | null => {
+    if (step >= nPm) return [];
+    const stateKey = `${step}|${lastPos}`;
+    if (failedStates.has(stateKey)) return null;
+
+    const remaining = nPm - step - 1;
     const minPos = lastPos + minSep;
     const latestByMaxGap = lastPos + maxSep;
     const latestByRemaining = nTrials - 1 - remaining * minSep;
     const maxPos = Math.min(latestByMaxGap, latestByRemaining);
 
     if (minPos > maxPos) {
-      throw new Error(`Cannot place PM trial ${i + 1}/${nPm}: spacing constraints impossible.`);
+      failedStates.add(stateKey);
+      return null;
     }
 
     const possiblePos: number[] = [];
-    for (let p = minPos; p <= maxPos; p++) {
+    for (let p = minPos; p <= maxPos; p += 1) {
       if (!eligibleIndices || eligibleIndices.has(p)) {
         possiblePos.push(p);
       }
     }
-
     if (possiblePos.length === 0) {
-      // If no eligible positions in current window, we have a violation of either min/max or eligible pool
-      throw new Error(
-        `Cannot place PM trial ${i + 1}/${nPm}: no eligible trials found between indices ${minPos} and ${maxPos}.`,
-      );
+      failedStates.add(stateKey);
+      return null;
     }
 
-    // Pick one of the possible positions
-    const pos = possiblePos[rng.int(0, possiblePos.length - 1)];
-    positions.push(pos);
-    lastPos = pos;
-  }
+    rng.shuffle(possiblePos);
+    for (const pos of possiblePos) {
+      const remainder = search(step + 1, pos);
+      if (remainder) {
+        return [pos, ...remainder];
+      }
+    }
 
-  return positions;
+    failedStates.add(stateKey);
+    return null;
+  };
+
+  // Match legacy PM semantics: first PM is constrained by minSeparation from trial 0.
+  const placements = search(0, 0);
+  if (!placements) {
+    throw new Error(
+      `Cannot place PM trials: spacing/eligibility constraints impossible (count=${nPm}, minSep=${minSep}, maxSep=${maxSep}, nTrials=${nTrials}).`,
+    );
+  }
+  return placements;
 }
 
 export function resolveProspectiveMemoryCueMatch(

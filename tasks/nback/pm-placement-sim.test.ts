@@ -17,14 +17,14 @@ const { injectNBackTargets, injectNBackLures } = __testing__;
 // ── Parameters to tweak ────────────────────────────────────────────────────
 
 const N_TRIALS    = 100;
-const N_TARGETS   = 22;
+const N_TARGETS   = 20;
 const N_LURES     = 14;
 const N_LEVEL     = 2;
 const LURE_LAG_PASSES = [[4, 5], [6, 7, 8, 9]] as number[][];
 
 const PM_COUNT    = 10;
 const PM_MIN_SEP  = 8;
-const PM_MAX_SEP  = 15;
+const PM_MAX_SEP  = 18;
 
 const N_SEEDS     = 2000;   // increase for tighter confidence intervals
 
@@ -117,7 +117,12 @@ console.log(`n-level: ${N_LEVEL} | Retry budget: ${RETRY_BUDGET}\n`);
 type Scenario = { label: string; nTrials: number; nTargets: number; nLures: number; maxSep: number; preFix?: boolean };
 
 const scenarios: Scenario[] = [
-  { label: 'Pre-fix  (100t, 22T, 15L, maxSep=18)',  nTrials: 100, nTargets: 22, nLures: 15, maxSep: 18, preFix: true }
+  { label: `Pre-fix  (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=${PM_MAX_SEP})`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: PM_MAX_SEP, preFix: true },
+  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=16)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 16, preFix: false },
+  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=17)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 17, preFix: false },
+  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=18)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 18, preFix: false },
+  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=19)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 19, preFix: false },
+  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=20)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 20, preFix: false },
 ];
 
 console.log('Scenario                                     elig  success  Pr(all fail in 30)');

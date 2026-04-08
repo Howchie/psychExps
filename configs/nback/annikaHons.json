@@ -356,12 +356,12 @@
           "where": { "trialType": ["N"] },
           "metrics": { "correctField": "responseCorrect" }}
       },
-      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22, "beforeBlockScreens": ["$between.cell1PreScreen"]},
-      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["$between.cell1PostScreen"]},
-      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22,  "beforeBlockScreens": ["$between.cell2PreScreen"], "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
-      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100, "lureCount": 15, "targetCount": 22, "afterBlockScreens": ["$between.cell2PostScreen"]},
-      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22, "beforeBlockScreens": ["$between.cell3PreScreen"]},
-      { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100, "lureCount": 15, "targetCount": 22}
+      { "phase": "main", "label": "Block 1", "manipulation": "cell_1", "trials": 100, "lureCount": 14, "targetCount": 20, "beforeBlockScreens": ["$between.cell1PreScreen"]},
+      { "phase": "main", "label": "Block 2", "manipulation": "cell_1", "trials": 100, "lureCount": 14, "targetCount": 20, "afterBlockScreens": ["$between.cell1PostScreen"]},
+      { "phase": "main", "label": "Block 3", "manipulation": "cell_2", "trials": 100, "lureCount": 14, "targetCount": 20,  "beforeBlockScreens": ["$between.cell2PreScreen"], "afterBlockScreens": ["You are halfway through the experiment.\nTake a short breath before continuing."]},
+      { "phase": "main", "label": "Block 4", "manipulation": "cell_2", "trials": 100, "lureCount": 14, "targetCount": 20, "afterBlockScreens": ["$between.cell2PostScreen"]},
+      { "phase": "main", "label": "Block 5", "manipulation": "cell_3", "trials": 100, "lureCount": 14, "targetCount": 20, "beforeBlockScreens": ["$between.cell3PreScreen"]},
+      { "phase": "main", "label": "Block 6", "manipulation": "cell_3", "trials": 100, "lureCount": 14, "targetCount": 20}
     ]
   },
   "feedback": {
