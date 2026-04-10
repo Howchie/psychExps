@@ -44,7 +44,14 @@ export function toFiniteNumber(value: unknown, fallback: number): number {
 }
 
 export function toNumberArray(value: unknown, fallback: number[]): number[] {
-  const out = asArray(value).map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry)) as number[];
+  const arr = asArray(value);
+  const out: number[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const entry = Number(arr[i]);
+    if (Number.isFinite(entry)) {
+      out.push(entry);
+    }
+  }
   return out.length > 0 ? out : fallback;
 }
 
@@ -53,7 +60,15 @@ export function toStringScreens(value: unknown): string[] {
     const text = value.trim();
     return text ? [text] : [];
   }
-  return asArray(value).map((item) => asString(item)).filter((item): item is string => Boolean(item));
+  const arr = asArray(value);
+  const out: string[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const item = asString(arr[i]);
+    if (item) {
+      out.push(item);
+    }
+  }
+  return out;
 }
 
 export type BlockScreenSlot = "before" | "after" | "repeatAfter";
@@ -80,15 +95,29 @@ export function resolveBlockScreenSlotValue(
 }
 
 export function asStringArray(value: unknown, fallback: string[]): string[] {
-  const list = asArray(value).map((item) => asString(item)).filter((item): item is string => Boolean(item));
+  const arr = asArray(value);
+  const list: string[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const item = asString(arr[i]);
+    if (item) {
+      list.push(item);
+    }
+  }
   return list.length > 0 ? list : [...fallback];
 }
 
-export function asPositiveNumberArray(value: unknown, fallback: number[]): number[] {
-  const list = asArray(value)
-    .map((entry) => Number(entry))
-    .filter((entry) => Number.isFinite(entry) && entry > 0)
-    .map((entry) => Math.floor(entry));
+export function asPositiveNumberArray(
+  value: unknown,
+  fallback: number[],
+): number[] {
+  const arr = asArray(value);
+  const list: number[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const entry = Number(arr[i]);
+    if (Number.isFinite(entry) && entry > 0) {
+      list.push(Math.floor(entry));
+    }
+  }
   return list.length > 0 ? list : [...fallback];
 }
 
@@ -129,12 +158,15 @@ const INSTRUCTION_INSERTION_POINTS = new Set<InstructionInsertionPoint>([
   "task_end_after",
 ]);
 
-export function coerceInstructionInsertions(value: unknown): InstructionInsertion[] {
+export function coerceInstructionInsertions(
+  value: unknown,
+): InstructionInsertion[] {
   const out: InstructionInsertion[] = [];
   for (const entry of asArray(value)) {
     const raw = asObject(entry);
     if (!raw) continue;
-    const rawPoint = asString(raw.at) ?? asString(raw.point) ?? asString(raw.target);
+    const rawPoint =
+      asString(raw.at) ?? asString(raw.point) ?? asString(raw.target);
     if (!rawPoint) continue;
     const at = rawPoint.toLowerCase() as InstructionInsertionPoint;
     if (!INSTRUCTION_INSERTION_POINTS.has(at)) continue;
@@ -152,9 +184,13 @@ export function coerceInstructionInsertions(value: unknown): InstructionInsertio
       .map((item) => asString(item))
       .filter((item): item is string => Boolean(item))
       .map((item) => item.toLowerCase());
-    const isPractice = typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
+    const isPractice =
+      typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
     const when: InstructionInsertionWhen | undefined =
-      blockIndex.length > 0 || blockLabel.length > 0 || blockType.length > 0 || typeof isPractice === "boolean"
+      blockIndex.length > 0 ||
+      blockLabel.length > 0 ||
+      blockType.length > 0 ||
+      typeof isPractice === "boolean"
         ? {
             ...(blockIndex.length > 0 ? { blockIndex } : {}),
             ...(blockLabel.length > 0 ? { blockLabel } : {}),
@@ -197,7 +233,8 @@ export function resolveInstructionPageSlots(
   defaults?: Partial<InstructionPageSlots>,
 ): InstructionPageSlots {
   const raw = asObject(instructions);
-  const hasOwn = (key: string): boolean => Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
+  const hasOwn = (key: string): boolean =>
+    Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
   const pickFirstScreens = (keys: string[], fallback?: string[]): string[] => {
     for (const key of keys) {
       if (!hasOwn(key)) continue;
@@ -207,10 +244,22 @@ export function resolveInstructionPageSlots(
     return toStringScreens(fallback);
   };
   return {
-    intro: pickFirstScreens(["pages", "introPages", "intro", "screens"], defaults?.intro),
-    preBlock: pickFirstScreens(["preBlockPages", "beforeBlockPages", "beforeBlockScreens"], defaults?.preBlock),
-    postBlock: pickFirstScreens(["postBlockPages", "afterBlockPages", "afterBlockScreens"], defaults?.postBlock),
-    end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
+    intro: pickFirstScreens(
+      ["pages", "introPages", "intro", "screens"],
+      defaults?.intro,
+    ),
+    preBlock: pickFirstScreens(
+      ["preBlockPages", "beforeBlockPages", "beforeBlockScreens"],
+      defaults?.preBlock,
+    ),
+    postBlock: pickFirstScreens(
+      ["postBlockPages", "afterBlockPages", "afterBlockScreens"],
+      defaults?.postBlock,
+    ),
+    end: pickFirstScreens(
+      ["endPages", "outroPages", "end", "outro"],
+      defaults?.end,
+    ),
   };
 }
 
@@ -221,7 +270,9 @@ export interface InstructionScreenSlots {
   end: InstructionScreenSpec[];
 }
 
-export function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[] {
+export function toInstructionScreenSpecs(
+  value: unknown,
+): InstructionScreenSpec[] {
   if (typeof value === "string") {
     const text = value.trim();
     return text ? [{ text }] : [];
@@ -236,16 +287,24 @@ export function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[
       if (!raw) return null;
       const title = asString(raw.title) ?? undefined;
       const html = asString(raw.html) ?? undefined;
-      const text = asString(raw.text) ?? asString(raw.body) ?? asString(raw.content) ?? undefined;
+      const text =
+        asString(raw.text) ??
+        asString(raw.body) ??
+        asString(raw.content) ??
+        undefined;
       const actions = asArray(raw.actions)
         .map((entry): InstructionScreenAction | null => {
           const actionRaw = asObject(entry);
           if (!actionRaw) return null;
           const label = asString(actionRaw.label);
           if (!label) return null;
-          const action = (asString(actionRaw.action) ?? "continue").toLowerCase();
+          const action = (
+            asString(actionRaw.action) ?? "continue"
+          ).toLowerCase();
           return {
-            ...(asString(actionRaw.id) ? { id: asString(actionRaw.id) as string } : {}),
+            ...(asString(actionRaw.id)
+              ? { id: asString(actionRaw.id) as string }
+              : {}),
             label,
             action: action === "exit" ? "exit" : "continue",
           };
@@ -267,8 +326,12 @@ export function resolveInstructionScreenSlots(
   defaults?: Partial<InstructionScreenSlots>,
 ): InstructionScreenSlots {
   const raw = asObject(instructions);
-  const hasOwn = (key: string): boolean => Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
-  const pickFirstScreens = (keys: string[], fallback?: InstructionScreenSpec[]): InstructionScreenSpec[] => {
+  const hasOwn = (key: string): boolean =>
+    Boolean(raw && Object.prototype.hasOwnProperty.call(raw, key));
+  const pickFirstScreens = (
+    keys: string[],
+    fallback?: InstructionScreenSpec[],
+  ): InstructionScreenSpec[] => {
     for (const key of keys) {
       if (!hasOwn(key)) continue;
       return toInstructionScreenSpecs(raw?.[key]);
@@ -276,9 +339,21 @@ export function resolveInstructionScreenSlots(
     return Array.isArray(fallback) ? [...fallback] : [];
   };
   return {
-    intro: pickFirstScreens(["pages", "introPages", "intro", "screens"], defaults?.intro),
-    preBlock: pickFirstScreens(["preBlockPages", "beforeBlockPages", "beforeBlockScreens"], defaults?.preBlock),
-    postBlock: pickFirstScreens(["postBlockPages", "afterBlockPages", "afterBlockScreens"], defaults?.postBlock),
-    end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
+    intro: pickFirstScreens(
+      ["pages", "introPages", "intro", "screens"],
+      defaults?.intro,
+    ),
+    preBlock: pickFirstScreens(
+      ["preBlockPages", "beforeBlockPages", "beforeBlockScreens"],
+      defaults?.preBlock,
+    ),
+    postBlock: pickFirstScreens(
+      ["postBlockPages", "afterBlockPages", "afterBlockScreens"],
+      defaults?.postBlock,
+    ),
+    end: pickFirstScreens(
+      ["endPages", "outroPages", "end", "outro"],
+      defaults?.end,
+    ),
   };
 }
