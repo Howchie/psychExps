@@ -23,3 +23,6 @@
 ## 2024-05-19 - Avoid Chained Array Methods in Hot Paths
 **Learning:** Chained array methods like `.map().filter().map()` are frequently used in config parsing utilities (`coerce.ts`). They generate multiple intermediate arrays which create garbage collection thrashing in hot paths (like sampling or scheduling).
 **Action:** Replace `Array.prototype.map().filter()` with a single `for...of` loop and a standard `if` statement to construct arrays directly.
+## 2026-03-19 - Consolidating chained array iterations
+**Learning:** Found several utility methods across `coerce.ts`, `surveys.ts`, `stimulusInjector.ts`, and `prospectiveMemory.ts` chaining `.map().filter().map()` or `.map().filter().reduce()`. Chained array methods allocate a new intermediate array at every step, which creates unnecessary memory allocations and garbage collection overhead, particularly for loops that run frequently on arrays of data.
+**Action:** Replace chained array operations with a single `for` loop to significantly reduce intermediate array memory allocations and increase overall execution speed.

@@ -6,10 +6,11 @@
   "instructions": {
     "intro": [
       "This is a 3-minute practice session to familiarise you with all four tasks.",
-      "SYSMON (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
-      "TRACKING (top-right): Keep the red cursor inside the reticle. Click the canvas to lock the mouse.",
-      "COMMS (bottom-left): Listen for your callsign (NASA504). Use ↑↓ to select a radio, ←→ to tune, Enter to confirm.",
-      "RESMAN (bottom-right): Keep tanks A and B near 2500 units using numpad keys 1–8.",
+      "SYSTEM MONITORING (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
+      "TRACKING (top-center): Keep the red cursor inside the reticle. Click the canvas to lock the mouse.",
+      "COMMUNICATIONS (bottom-left): Listen for your callsign (NASA504). Use ↑↓ to select a radio, ←→ to tune, Enter to confirm.",
+      "RESOURCE MANAGEMENT (bottom-center): Keep tanks A and B near 2500 units using numpad keys 1–8.",
+      "Auxiliary panels for SCHEDULING (top-right) and PUMP STATUS (bottom-right) provide extra information.",
       "Events occur slowly during practice. Press Continue when ready."
     ],
     "end": [
@@ -19,14 +20,16 @@
   },
   "layout": {
     "rows": 2,
-    "cols": 2,
+    "cols": 3,
     "gap": "2px",
-    "background": "#111",
+    "background": "#d0d0d0",
     "panels": [
-      { "id": "sysmon",   "row": 0, "col": 0, "label": "SYSMON" },
-      { "id": "tracking", "row": 0, "col": 1, "label": "TRACKING" },
-      { "id": "comms",    "row": 1, "col": 0, "label": "COMMS" },
-      { "id": "resman",   "row": 1, "col": 1, "label": "RESMAN" }
+      { "id": "sysmon",     "row": 0, "col": 0, "label": "SYSTEM MONITORING" },
+      { "id": "tracking",   "row": 0, "col": 1, "label": "TRACKING" },
+      { "id": "scheduling", "row": 0, "col": 2, "label": "SCHEDULING" },
+      { "id": "comms",      "row": 1, "col": 0, "label": "COMMUNICATIONS" },
+      { "id": "resman",     "row": 1, "col": 1, "label": "RESOURCE MANAGEMENT" },
+      { "id": "pumpstatus", "row": 1, "col": 2, "label": "PUMP STATUS" }
     ]
   },
   "subtasks": {

@@ -57,6 +57,12 @@ interface ConveyorRecord {
   interSpawnSampler: () => number;
   nextSpawnAt: number;
   activeIds: string[];
+  dynamicSpeed: {
+    enabled: boolean;
+    speedSampler: (() => unknown) | null;
+    intervalSamplerMs: (() => number) | null;
+    nextChangeAtMs: number | null;
+  } | null;
 }
 
 interface CategoryEntry {
@@ -137,6 +143,7 @@ export class GameState {
   categoryPalettes: CategoryPalettes;
   brickCategories: CategoryEntry[];
   forcedControl: ForcedControlState;
+  hasDynamicConveyorSpeed: boolean;
 
   constructor(config: Record<string, any>, { onEvent, seed }: { onEvent?: (event: GameEvent) => void; seed?: unknown } = {}) {
     this.config = config;
@@ -168,6 +175,7 @@ export class GameState {
     this.categoryPalettes = this._prepareBrickCategories();
     this.brickCategories = this.categoryPalettes.color;
     this.forcedControl = this._buildForcedControlConfig();
+    this.hasDynamicConveyorSpeed = false;
     this._initConveyors();
     this._initBricks();
     this._initForcedControl();
@@ -193,6 +201,7 @@ export class GameState {
     const explicitLengths = Array.isArray(cfg.conveyors.lengthPx) ? cfg.conveyors.lengthPx : null;
     const lengthSampler = explicitLengths ? null : this._makeLengthSampler(cfg.conveyors.lengthPx);
     const speedSampler = createSampler(cfg.conveyors.speedPxPerSec, this.rng);
+    const dynamicSpeedCfg = this._resolveDynamicConveyorSpeedConfig();
     const interSpawnSampler = this._makeInterSpawnSampler(cfg.bricks.spawn);
     const configuredBrickWidth = Number(cfg.display?.brickWidth);
     const brickWidth = Number.isFinite(configuredBrickWidth) ? Math.max(8, configuredBrickWidth) : 80;
@@ -209,7 +218,7 @@ export class GameState {
         ? Math.max(minLength, sampledLength)
         : fallbackLength;
       const speed = Math.max(0, Number(speedSampler()));
-      const conveyor = {
+      const conveyor: ConveyorRecord = {
         id: `c${i}`,
         index: i,
         y: topOffset + i * (beltHeight + gap),
@@ -217,8 +226,13 @@ export class GameState {
         speed,
         interSpawnSampler,
         nextSpawnAt: 0,
-        activeIds: []
+        activeIds: [],
+        dynamicSpeed: null
       };
+      conveyor.dynamicSpeed = this._buildConveyorDynamicSpeedState(conveyor, dynamicSpeedCfg, cfg.conveyors.speedPxPerSec);
+      if (conveyor.dynamicSpeed?.enabled) {
+        this.hasDynamicConveyorSpeed = true;
+      }
       if (defaultLength === null) {
         defaultLength = length;
       }
@@ -227,6 +241,143 @@ export class GameState {
     }
     if (defaultLength !== null) {
       this.defaultConveyorLength = defaultLength;
+    }
+  }
+
+  _resolveDynamicConveyorSpeedConfig(): Record<string, any> | null {
+    const raw = this.config?.conveyors?.dynamicSpeed ?? this.config?.conveyors?.dynamic_speed;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return null;
+    }
+    return raw as Record<string, any>;
+  }
+
+  _resolvePerConveyorDynamicSpeedOverride(
+    dynamicCfg: Record<string, any> | null,
+    conveyor: ConveyorRecord
+  ): Record<string, any> | null {
+    if (!dynamicCfg) {
+      return null;
+    }
+    const map = dynamicCfg.perConveyor ?? dynamicCfg.per_conveyor;
+    if (!map || typeof map !== 'object' || Array.isArray(map)) {
+      return null;
+    }
+    const byId = map[conveyor.id];
+    if (byId && typeof byId === 'object' && !Array.isArray(byId)) {
+      return byId as Record<string, any>;
+    }
+    const byIndex = map[String(conveyor.index)] ?? map[conveyor.index];
+    if (byIndex && typeof byIndex === 'object' && !Array.isArray(byIndex)) {
+      return byIndex as Record<string, any>;
+    }
+    return null;
+  }
+
+  _makeIntervalSamplerMs(spec: unknown): (() => number) | null {
+    if (typeof spec === 'number' && Number.isFinite(spec)) {
+      const fixed = Number(spec);
+      return () => fixed;
+    }
+    if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+      try {
+        const sampler = createSampler(spec as Record<string, unknown>, this.rng);
+        return () => Number(sampler());
+      } catch (error) {
+        console.warn('Invalid dynamic conveyor interval sampler spec; ignoring dynamic conveyor speed.', spec, error);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  _buildConveyorDynamicSpeedState(
+    conveyor: ConveyorRecord,
+    dynamicCfg: Record<string, any> | null,
+    fallbackSpeedSpec: unknown,
+  ): ConveyorRecord['dynamicSpeed'] {
+    if (!dynamicCfg) {
+      return null;
+    }
+    const override = this._resolvePerConveyorDynamicSpeedOverride(dynamicCfg, conveyor);
+    const globalEnable = dynamicCfg.enable === true;
+    const localEnable = override && typeof override.enable === 'boolean' ? override.enable : null;
+    const enabled = localEnable ?? globalEnable;
+    if (!enabled) {
+      return null;
+    }
+
+    const intervalSpec = override?.intervalMs ?? override?.interval_ms ?? dynamicCfg.intervalMs ?? dynamicCfg.interval_ms;
+    const intervalSamplerMs = this._makeIntervalSamplerMs(intervalSpec);
+    if (!intervalSamplerMs) {
+      return null;
+    }
+
+    const speedSpec = override?.speedPxPerSec
+      ?? override?.speed_px_per_sec
+      ?? dynamicCfg.speedPxPerSec
+      ?? dynamicCfg.speed_px_per_sec
+      ?? fallbackSpeedSpec;
+    let speedSampler: (() => unknown) | null = null;
+    try {
+      speedSampler = createSampler(speedSpec, this.rng);
+    } catch (error) {
+      console.warn('Invalid dynamic conveyor speed sampler spec; ignoring dynamic conveyor speed.', speedSpec, error);
+      return null;
+    }
+
+    const initialDelayMs = Number(intervalSamplerMs());
+    if (!Number.isFinite(initialDelayMs)) {
+      return null;
+    }
+    return {
+      enabled: true,
+      speedSampler,
+      intervalSamplerMs,
+      nextChangeAtMs: this.elapsed + Math.max(1, initialDelayMs),
+    };
+  }
+
+  _updateDynamicConveyorSpeeds() {
+    if (!this.hasDynamicConveyorSpeed) {
+      return;
+    }
+    for (const conveyor of this.conveyors) {
+      const dynamic = conveyor.dynamicSpeed;
+      if (!dynamic?.enabled || dynamic.nextChangeAtMs === null) {
+        continue;
+      }
+      let guard = 0;
+      while (dynamic.nextChangeAtMs !== null && this.elapsed >= dynamic.nextChangeAtMs && guard < 8) {
+        const prevSpeed = conveyor.speed;
+        let sampledSpeed = prevSpeed;
+        try {
+          const next = Number(dynamic.speedSampler ? dynamic.speedSampler() : prevSpeed);
+          if (Number.isFinite(next)) {
+            sampledSpeed = Math.max(0, next);
+          }
+        } catch (error) {
+          console.warn('Dynamic conveyor speed sampling failed; keeping previous speed.', error);
+        }
+        conveyor.speed = sampledSpeed;
+        this._log('conveyor_speed_changed', {
+          conveyor_id: conveyor.id,
+          conveyor_index: conveyor.index,
+          speed_px_s_prev: prevSpeed,
+          speed_px_s_next: sampledSpeed,
+        });
+
+        const delayMs = Number(dynamic.intervalSamplerMs ? dynamic.intervalSamplerMs() : Number.POSITIVE_INFINITY);
+        if (!Number.isFinite(delayMs)) {
+          dynamic.nextChangeAtMs = null;
+          break;
+        }
+        dynamic.nextChangeAtMs += Math.max(1, delayMs);
+        guard += 1;
+      }
+      if (guard >= 8 && dynamic.nextChangeAtMs !== null && this.elapsed >= dynamic.nextChangeAtMs) {
+        dynamic.nextChangeAtMs = this.elapsed + 1;
+      }
     }
   }
 
@@ -1363,6 +1514,7 @@ export class GameState {
     const dt = dtMs / 1000;
     this.elapsed += dtMs;
     const completionMode = this.config.bricks.completionMode;
+    this._updateDynamicConveyorSpeeds();
 
     // Update brick positions and check for drops.
     this.bricks.forEach((brick: BrickRecord) => {

@@ -74,6 +74,16 @@ export interface SysmonSubTaskConfig {
    * allowanykey parameter. Default false.
    */
   allowAnyKey?: boolean;
+  /**
+   * When true, failures auto-resolve after `autoResolveDelayMs` without
+   * participant input. The panel still renders but keyboard input is ignored.
+   */
+  automated?: boolean;
+  /**
+   * Minimum elapsed time (ms) of a failure before it auto-resolves in
+   * automated mode. Default 3000.
+   */
+  autoResolveDelayMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +150,8 @@ interface ResolvedSysmonConfig {
   feedbackDurationMs: number;
   driftIntervalMs: number;
   allowAnyKey: boolean;
+  automated: boolean;
+  autoResolveDelayMs: number;
 }
 
 function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
@@ -157,8 +169,8 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
         };
       })
     : [
-        { id: "light1", label: "F5", onColor: "#22c55e", offColor: "#555", defaultOn: true, key: "f5" },
-        { id: "light2", label: "F6", onColor: "#ef4444", offColor: "#555", defaultOn: false, key: "f6" },
+        { id: "light1", label: "F5", onColor: "#8edbb0", offColor: "#ffffff", defaultOn: true, key: "f5" },
+        { id: "light2", label: "F6", onColor: "#e04545", offColor: "#ffffff", defaultOn: false, key: "f6" },
       ];
 
   const scalesRaw = asArray(raw.scales);
@@ -186,6 +198,8 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedSysmonConfig {
     feedbackDurationMs: toPositiveNumber(raw.feedbackDurationMs, 1500),
     driftIntervalMs: toPositiveNumber(raw.driftIntervalMs, 200),
     allowAnyKey: raw.allowAnyKey === true || raw.allowAnyKey === "True" || raw.allowAnyKey === "true",
+    automated: raw.automated === true || raw.automated === "true",
+    autoResolveDelayMs: toNonNegativeNumber(raw.autoResolveDelayMs, 3000),
   };
 }
 
@@ -433,6 +447,13 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
       if (g.failure) {
         g.failureTimerMs -= dt;
         g.responseTimeMs += dt;
+
+        // Automated mode: auto-resolve after autoResolveDelayMs.
+        if (config!.automated && g.responseTimeMs >= config!.autoResolveDelayMs) {
+          stopFailure(g, false, true); // auto-solved HIT
+          continue;
+        }
+
         if (g.failureTimerMs <= 0) {
           stopFailure(g, false); // MISS
         }
@@ -466,24 +487,69 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     }
   }
 
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
+
   function renderAll(): void {
     if (!ctx || !canvas || !config) return;
     const w = canvas.width;
     const h = canvas.height;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(0, 0, w, h);
 
-    // Layout regions.
-    const scaleTop = Math.round(h * 0.05);
-    const scaleHeight = Math.round(h * 0.55);
-    const lightTop = Math.round(h * 0.72);
-    const lightHeight = Math.round(h * 0.18);
+    // Automation accent: subtle left-edge bar when automated.
+    if (config.automated) {
+      ctx.fillStyle = "rgba(56, 189, 148, 0.25)";
+      ctx.fillRect(0, 0, 4, h);
+    }
 
-    // Render scales.
-    const scaleCount = gauges.filter((g) => g.kind === "scale").length;
+    // Layout: lights at TOP (large), scales below — matching OpenMATB.
+    const lightGauges = gauges.filter((g): g is LightRuntime => g.kind === "light");
+    const lightCount = lightGauges.length;
+    const lightTop = Math.round(h * 0.06);
+    const lightHeight = Math.round(h * 0.12);
+
+    if (lightCount > 0) {
+      const lightW = Math.round(w * 0.38);
+      const gap = lightCount > 1 ? (w - lightCount * lightW) / (lightCount + 1) : (w - lightW) / 2;
+      for (let i = 0; i < lightGauges.length; i++) {
+        const lg = lightGauges[i];
+        const lx = Math.round(gap + i * (lightW + gap));
+        renderLight(lg.config, lg.state, {
+          ctx,
+          x: lx,
+          y: lightTop,
+          width: lightW,
+          height: lightHeight,
+        });
+      }
+    }
+
+    // Scales below lights.
+    const scaleTop = lightTop + lightHeight + Math.round(h * 0.06);
+    const scaleHeight = Math.round(h * 0.58);
     const scaleGauges = gauges.filter((g): g is ScaleRuntime => g.kind === "scale");
+    const scaleCount = scaleGauges.length;
     const scaleColWidth = scaleCount > 0 ? Math.round(w / scaleCount) : w;
     for (let i = 0; i < scaleGauges.length; i++) {
       const sg = scaleGauges[i];
@@ -501,24 +567,14 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
       );
     }
 
-    // Render lights.
-    const lightGauges = gauges.filter((g): g is LightRuntime => g.kind === "light");
-    const lightCount = lightGauges.length;
-    if (lightCount > 0) {
-      const lightW = Math.round(w * 0.35);
-      const gap = lightCount > 1 ? (w - lightCount * lightW) / (lightCount + 1) : (w - lightW) / 2;
-      for (let i = 0; i < lightGauges.length; i++) {
-        const lg = lightGauges[i];
-        const lx = Math.round(gap + i * (lightW + gap));
-        renderLight(lg.config, lg.state, {
-          ctx,
-          x: lx,
-          y: lightTop,
-          width: lightW,
-          height: lightHeight,
-        });
-      }
-    }
+    // "MANUAL" / "AUTO" mode label at bottom.
+    ctx.fillStyle = "#323232";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
+
+    drawHandoverBanner(ctx, w, h);
   }
 
   return {
@@ -553,11 +609,20 @@ export function createSysmonSubTaskHandle(): SubTaskHandle<SysmonSubTaskResult> 
     },
 
     handleKeyDown(key: string, _now: number): boolean {
+      if (config?.automated) return false;
       return handleKey(key);
     },
 
     handleScenarioEvent(event: ScenarioEvent): void {
       if (event.command === "set" && event.path) {
+        if (event.path === "automated") {
+          const newAutomated = event.value === true || event.value === "true";
+          if (config && newAutomated !== config.automated) {
+            config.automated = newAutomated;
+            handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+          }
+          return;
+        }
         // Trigger a failure: e.g. path="light1.failure" value=true
         // Or path="scale1.failure" value=true
         const parts = event.path.split(".");

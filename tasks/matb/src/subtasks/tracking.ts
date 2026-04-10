@@ -52,6 +52,19 @@ export interface TrackingSubTaskConfig {
   };
   sampleIntervalMs?: number;
   binMs?: number;
+  /**
+   * When true, the system automatically counteracts the perturbation,
+   * keeping the cursor near the reticle center. The display still renders
+   * (the task is visible) but no mouse input is required. Useful for
+   * reducing task load without removing the display entirely.
+   */
+  automated?: boolean;
+  /**
+   * How well the automation tracks: 0 = no tracking, 1 = perfect.
+   * Values < 1 add proportional noise, simulating imperfect automation.
+   * Default 0.95.
+   */
+  automationGain?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +136,8 @@ interface ResolvedConfig {
   maxDisplacementPx: number;
   sampleIntervalMs: number;
   binMs: number;
+  automated: boolean;
+  automationGain: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,21 +193,44 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
 
     return {
       aperturePx,
-      canvasBackground: asString(displayRaw.canvasBackground) ?? "#e2e8f0",
+      canvasBackground: asString(displayRaw.canvasBackground) ?? "#f0f0f0",
       showCrosshair: displayRaw.showCrosshair !== false,
       reticleRadiusPx: toPositiveNumber(reticleRaw.radiusPx, 50),
-      reticleStrokeColor: asString(reticleRaw.strokeColor) ?? "#334155",
+      reticleStrokeColor: asString(reticleRaw.strokeColor) ?? "#323232",
       reticleStrokeWidthPx: toPositiveNumber(reticleRaw.strokeWidthPx, 2),
-      reticleFillColor: asString(reticleRaw.fillColor) ?? "rgba(22, 163, 74, 0.15)",
-      cursorRadiusPx: toPositiveNumber(cursorRaw.radiusPx, 4),
-      cursorColorInside: asString(cursorRaw.colorInside) ?? "#000000",
+      reticleFillColor: asString(reticleRaw.fillColor) ?? "transparent",
+      cursorRadiusPx: toPositiveNumber(cursorRaw.radiusPx, 16),
+      cursorColorInside: asString(cursorRaw.colorInside) ?? "#323232",
       cursorColorOutside: asString(cursorRaw.colorOutside) ?? "#ef4444",
       perturbationComponents: parsePerturbationComponents(asArray(pertRaw.components)),
       inputGain: toPositiveFloat(pertRaw.inputGain ?? pertRaw.gainRatio, 1),
       maxDisplacementPx: toPositiveNumber(pertRaw.maxDisplacementPx, aperturePx / 2),
       sampleIntervalMs: toPositiveNumber(raw.sampleIntervalMs, 16),
       binMs: toPositiveNumber(raw.binMs, 2000),
+      automated: raw.automated === true || raw.automated === "true",
+      automationGain: toPositiveFloat(raw.automationGain, 0.95),
     };
+  }
+
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
   }
 
   return {
@@ -216,8 +254,10 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas 2D context unavailable for MATB tracking subtask.");
 
-      document.addEventListener("mousemove", onMouseMove);
-      canvas.addEventListener("click", onCanvasClick);
+      if (!config.automated) {
+        document.addEventListener("mousemove", onMouseMove);
+        canvas.addEventListener("click", onCanvasClick);
+      }
 
       // Init perturbation.
       perturbation = new PerturbationController({
@@ -256,10 +296,27 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
       if (!config || !perturbation || !ctx || !canvas || !reticleTarget || !binner) return;
 
       // Consume mouse delta and advance perturbation.
-      const dx = accDx;
-      const dy = accDy;
-      accDx = 0;
-      accDy = 0;
+      let dx: number;
+      let dy: number;
+
+      if (config.automated) {
+        // Automated mode: compute virtual input that drives cursor toward center.
+        // First, peek at current perturbation state to determine corrective input.
+        // We want cursor ≈ 0, so compensation ≈ -perturbation.
+        // Input delta should drive compensation in that direction.
+        // Use negative cursor position scaled by automation gain as virtual input.
+        const peek = perturbation.step(0, 0, 0); // zero-time peek for position
+        dx = -peek.cursorX * config.automationGain / config.inputGain;
+        dy = -peek.cursorY * config.automationGain / config.inputGain;
+        accDx = 0;
+        accDy = 0;
+      } else {
+        dx = accDx;
+        dy = accDy;
+        accDx = 0;
+        accDy = 0;
+      }
+
       const state = perturbation.step(dt, dx, dy);
 
       const halfAperture = config.aperturePx / 2;
@@ -316,38 +373,123 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
         perfRingIndex += 1;
       }
 
-      // Render.
+      // Render — OpenMATB-style reticle.
       const w = config.aperturePx;
       const h = config.aperturePx;
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = config.canvasBackground;
       ctx.fillRect(0, 0, w, h);
 
-      if (config.showCrosshair) {
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(halfAperture, 0);
-        ctx.lineTo(halfAperture, h);
-        ctx.moveTo(0, halfAperture);
-        ctx.lineTo(w, halfAperture);
-        ctx.stroke();
+      // Automation accent: subtle left-edge bar when automated.
+      if (config.automated) {
+        ctx.fillStyle = "rgba(56, 189, 148, 0.25)";
+        ctx.fillRect(0, 0, 4, h);
       }
 
-      // Reticle.
-      ctx.fillStyle = config.reticleFillColor;
-      ctx.strokeStyle = config.reticleStrokeColor;
-      ctx.lineWidth = config.reticleStrokeWidthPx;
+      const axisColor = "#323232";
+      const cx = halfAperture;
+      const cy = halfAperture;
+
+      if (config.showCrosshair) {
+        // Corner brackets (L-shaped) — OpenMATB reticle.py lines 36-38
+        const cornerW = w * 0.07;
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        // Top-left
+        ctx.beginPath();
+        ctx.moveTo(0, cornerW); ctx.lineTo(0, 0); ctx.lineTo(cornerW, 0);
+        ctx.stroke();
+        // Top-right
+        ctx.beginPath();
+        ctx.moveTo(w - cornerW, 0); ctx.lineTo(w, 0); ctx.lineTo(w, cornerW);
+        ctx.stroke();
+        // Bottom-right
+        ctx.beginPath();
+        ctx.moveTo(w, h - cornerW); ctx.lineTo(w, h); ctx.lineTo(w - cornerW, h);
+        ctx.stroke();
+        // Bottom-left
+        ctx.beginPath();
+        ctx.moveTo(cornerW, h); ctx.lineTo(0, h); ctx.lineTo(0, h - cornerW);
+        ctx.stroke();
+
+        // Axes — from center to edges.
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+        ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+        ctx.stroke();
+
+        // Graduation marks — 5 per half-axis, alternating long/short.
+        // Matches OpenMATB reticle.py: gw = 0.023 * w, alternating gw and 2*gw.
+        const gradW = 0.023 * w;
+        for (let quadrant = 0; quadrant < 4; quadrant++) {
+          for (let i = 0; i < 5; i++) {
+            const frac = (i / 4);
+            const tickLen = (i % 2 === 0) ? gradW * 2 : gradW;
+            if (quadrant === 0) {
+              // Right half of horizontal axis
+              const tx = cx + frac * (w - cx);
+              ctx.beginPath();
+              ctx.moveTo(tx, cy - tickLen); ctx.lineTo(tx, cy + tickLen);
+              ctx.stroke();
+            } else if (quadrant === 1) {
+              // Bottom half of vertical axis
+              const ty = cy + frac * (h - cy);
+              ctx.beginPath();
+              ctx.moveTo(cx - tickLen, ty); ctx.lineTo(cx + tickLen, ty);
+              ctx.stroke();
+            } else if (quadrant === 2) {
+              // Left half of horizontal axis
+              const tx = cx - frac * cx;
+              ctx.beginPath();
+              ctx.moveTo(tx, cy - tickLen); ctx.lineTo(tx, cy + tickLen);
+              ctx.stroke();
+            } else {
+              // Top half of vertical axis
+              const ty = cy - frac * cy;
+              ctx.beginPath();
+              ctx.moveTo(cx - tickLen, ty); ctx.lineTo(cx + tickLen, ty);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      // Target circle — dashed, matching OpenMATB.
+      ctx.strokeStyle = axisColor;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.arc(halfAperture, halfAperture, Math.max(1, config.reticleRadiusPx), 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(cx, cy, Math.max(1, config.reticleRadiusPx), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Cursor — circle with internal crosshairs, matching OpenMATB reticle.py.
+      const cursorR = Math.max(3, config.cursorRadiusPx);
+      const cursorColor = inside ? config.cursorColorInside : config.cursorColorOutside;
+      ctx.strokeStyle = cursorColor;
+      ctx.lineWidth = 1.5;
+      // Circle
+      ctx.beginPath();
+      ctx.arc(absCursorX, absCursorY, cursorR, 0, Math.PI * 2);
+      ctx.stroke();
+      // Internal crosshairs
+      ctx.beginPath();
+      ctx.moveTo(absCursorX - cursorR, absCursorY);
+      ctx.lineTo(absCursorX + cursorR, absCursorY);
+      ctx.moveTo(absCursorX, absCursorY - cursorR);
+      ctx.lineTo(absCursorX, absCursorY + cursorR);
       ctx.stroke();
 
-      // Cursor dot.
-      ctx.fillStyle = inside ? config.cursorColorInside : config.cursorColorOutside;
-      ctx.beginPath();
-      ctx.arc(absCursorX, absCursorY, Math.max(1, config.cursorRadiusPx), 0, Math.PI * 2);
-      ctx.fill();
+      // "MANUAL" / "AUTO" mode label at bottom.
+      ctx.fillStyle = axisColor;
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
+
+      drawHandoverBanner(ctx, w, h);
     },
 
     handleScenarioEvent(event: ScenarioEvent): void {
@@ -355,6 +497,21 @@ export function createTrackingSubTaskHandle(): SubTaskHandle<TrackingSubTaskResu
 
       // Support runtime parameter changes via "set" commands.
       if (event.command === "set" && event.path) {
+        if (event.path === "automated") {
+          const newAutomated = event.value === true || event.value === "true";
+          if (config && newAutomated !== config.automated) {
+            const wasAuto = config.automated;
+            config.automated = newAutomated;
+            handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+            // Manage mouse listeners
+            if (!wasAuto && newAutomated) {
+              document.removeEventListener("mousemove", onMouseMove);
+            } else if (wasAuto && !newAutomated) {
+              document.addEventListener("mousemove", onMouseMove);
+            }
+          }
+          return;
+        }
         if (event.path.startsWith("perturbation.")) {
           applyPerturbationOverride(config, event.path, event.value);
           perturbation = new PerturbationController({

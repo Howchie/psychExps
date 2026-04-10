@@ -2919,7 +2919,8 @@ export class ConveyorRenderer {
     if (!['hold_duration', 'hover_to_clear', 'hold_to_clear'].includes(completionMode)) {
       return false;
     }
-    return shape === 'rect' || shape === 'rounded_rect';
+    // Circles should deplete via the same right-edge clipping path as rectangles.
+    return shape === 'rect' || shape === 'rounded_rect' || shape === 'circle';
   }
 
   _createBrickSprite(brick: any) {

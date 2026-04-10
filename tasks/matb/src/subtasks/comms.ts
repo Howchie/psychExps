@@ -571,64 +571,75 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
 
   // ── Rendering ─────────────────────────────────────────────────────────
 
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
+
   function renderAll(): void {
     if (!ctx2d || !canvas || !config) return;
     const w = canvas.width;
     const h = canvas.height;
 
     ctx2d.clearRect(0, 0, w, h);
-    ctx2d.fillStyle = "#0d1117";
+    ctx2d.fillStyle = "#f0f0f0";
     ctx2d.fillRect(0, 0, w, h);
 
-    // Header bar.
-    const headerH = Math.round(h * 0.08);
-    ctx2d.fillStyle = "#334155";
-    ctx2d.fillRect(0, 0, w, headerH);
-    ctx2d.fillStyle = "#94a3b8";
-    ctx2d.font = `bold ${Math.round(headerH * 0.55)}px monospace`;
-    ctx2d.textAlign = "center";
-    ctx2d.textBaseline = "middle";
-    ctx2d.fillText("COMMUNICATIONS", w / 2, headerH / 2);
-
-    // "INCOMING" indicator when a prompt is active.
-    if (activePrompt) {
-      ctx2d.fillStyle = activePrompt.isOwn ? "#ef4444" : "#f59e0b";
-      ctx2d.font = `bold ${Math.round(headerH * 0.45)}px monospace`;
-      ctx2d.textAlign = "right";
-      ctx2d.fillText("INCOMING", w - 8, headerH / 2);
+    // Automation accent: subtle left-edge bar when automated.
+    if (config.automated) {
+      ctx2d.fillStyle = "rgba(56, 189, 148, 0.25)";
+      ctx2d.fillRect(0, 0, 4, h);
     }
 
-    // Callsign display — matches OpenMATB COMMS panel "Callsign: {owncallsign}" widget.
-    const callsignBarH = Math.round(h * 0.06);
-    ctx2d.fillStyle = "#1e293b";
-    ctx2d.fillRect(0, headerH, w, callsignBarH);
-    ctx2d.fillStyle = "#64748b";
-    ctx2d.font = `${Math.round(callsignBarH * 0.55)}px monospace`;
+    // Callsign display — matching OpenMATB "Indicatif   {callsign}".
+    const callsignY = Math.round(h * 0.12);
+    ctx2d.fillStyle = "#323232";
+    ctx2d.font = `14px sans-serif`;
     ctx2d.textAlign = "left";
     ctx2d.textBaseline = "middle";
-    ctx2d.fillText(`Callsign: ${config.ownCallsign}`, 8, headerH + callsignBarH / 2);
+    ctx2d.fillText("Callsign", w * 0.12, callsignY);
+    ctx2d.textAlign = "right";
+    ctx2d.fillText(config.ownCallsign, w * 0.88, callsignY);
 
-    // Radios.
-    const radioAreaTop = headerH + callsignBarH + 4;
-    const radioAreaH = h - radioAreaTop - 24; // leave space for key hint
+    // Radios — matching OpenMATB: label + frequency, with arrows on selected.
+    const radioAreaTop = callsignY + 20;
+    const radioAreaH = h - radioAreaTop - 36;
     const radioH = Math.round(radioAreaH / radios.length);
-    const radioW = w - 4;
+    const radioW = w - 16;
 
     for (let i = 0; i < radios.length; i++) {
       const r = radios[i];
       renderRadio(
         r.config,
         { frequencyMhz: r.frequencyMhz, selected: i === selectedIdx },
-        { ctx: ctx2d, x: 2, y: radioAreaTop + i * radioH, width: radioW, height: radioH - 3 },
+        { ctx: ctx2d, x: 8, y: radioAreaTop + i * radioH, width: radioW, height: radioH - 4 },
       );
     }
 
-    // Key hint at bottom.
-    ctx2d.fillStyle = "#475569";
-    ctx2d.font = `${Math.max(9, Math.round(h * 0.035))}px monospace`;
+    // "MANUAL" / "AUTO" mode label at bottom.
+    ctx2d.fillStyle = "#323232";
+    ctx2d.font = "12px sans-serif";
     ctx2d.textAlign = "center";
     ctx2d.textBaseline = "bottom";
-    ctx2d.fillText("↑↓ select  ←→ tune (hold)  Enter confirm", w / 2, h - 2);
+    ctx2d.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
+
+    drawHandoverBanner(ctx2d, w, h);
   }
 
   // ── Public interface ───────────────────────────────────────────────────
@@ -792,6 +803,13 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       }
       if (event.command === "set" && event.path === "ownCallsign" && config) {
         config.ownCallsign = asString(event.value) ?? config.ownCallsign;
+      }
+      if (event.command === "set" && event.path === "automated") {
+        const newAutomated = event.value === true || event.value === "true";
+        if (config && newAutomated !== config.automated) {
+          config.automated = newAutomated;
+          handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+        }
       }
     },
 

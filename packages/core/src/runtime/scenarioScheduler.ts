@@ -34,10 +34,47 @@ export interface ScenarioEvent {
 }
 
 // ---------------------------------------------------------------------------
-// ScenarioScheduler
+// ScenarioEventSource — common interface for all event sources
 // ---------------------------------------------------------------------------
 
-export class ScenarioScheduler {
+/**
+ * Automation state for a subtask, used by dynamic sources to decide
+ * whether/when to generate events for a given subtask.
+ */
+export interface SubtaskAutomationState {
+  /** Whether the subtask is currently automated (failures auto-resolve). */
+  automated: boolean;
+  /** Whether a failure is currently active (unresolved) on this subtask. */
+  activeFailure: boolean;
+  /** Elapsed time (ms) when the last event on this subtask resolved. */
+  lastEventEndMs: number;
+}
+
+/**
+ * Common interface for scenario event sources. Both static (pre-authored)
+ * and dynamic (runtime-generated) sources implement this so the
+ * ConcurrentTaskRunner can consume them interchangeably.
+ */
+export interface ScenarioEventSource {
+  /** Advance to the given elapsed time and return all newly due events. */
+  tick(elapsedMs: number): ScenarioEvent[];
+
+  /**
+   * Notify the source about subtask automation / failure state.
+   * Dynamic sources use this for cooldown and cross-task blocking.
+   * Static sources may ignore it.
+   */
+  notifyState?(subtaskId: string, state: SubtaskAutomationState): void;
+
+  /** Reset to the beginning (for replay). */
+  reset?(): void;
+}
+
+// ---------------------------------------------------------------------------
+// ScenarioScheduler (static source — backward compatible)
+// ---------------------------------------------------------------------------
+
+export class ScenarioScheduler implements ScenarioEventSource {
   /** Events sorted ascending by timeMs. */
   private readonly events: ScenarioEvent[];
   /** Index of the next event to consider. */

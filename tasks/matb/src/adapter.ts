@@ -34,6 +34,7 @@ import {
   PanelLayoutManager,
   ConcurrentTaskRunner,
   ScenarioScheduler,
+  DynamicScenarioSource,
   TaskOrchestrator,
   recordsToCsv,
   downloadCsv,
@@ -42,6 +43,8 @@ import {
   type TaskAdapterContext,
   type PanelLayoutConfig,
   type ScenarioEvent,
+  type ScenarioEventSource,
+  type DynamicScenarioSourceConfig,
   type StandardTaskInstructionConfig,
   type SurveyRunResult,
 } from "@experiments/core";
@@ -50,6 +53,10 @@ import { createSysmonSubTaskHandle, type SysmonSubTaskResult } from "./subtasks/
 import { createTrackingSubTaskHandle, type TrackingSubTaskResult } from "./subtasks/tracking";
 import { createCommsSubTaskHandle, type CommsSubTaskResult } from "./subtasks/comms";
 import { createResmanSubTaskHandle, type ResmanSubTaskResult } from "./subtasks/resman";
+import { createSchedulingSubTaskHandle } from "./subtasks/scheduling";
+import { createPumpStatusSubTaskHandle } from "./subtasks/pumpstatus";
+import { WaldOverlay, type WaldOverlayConfig } from "./widgets/waldOverlay";
+import { AdaptiveController, type AdaptiveControllerConfig } from "./adaptiveController";
 
 // ---------------------------------------------------------------------------
 // Adapter registration
@@ -68,6 +75,7 @@ export const matbAdapter = createTaskAdapter({
       { id: "parasuraman-high",   label: "Parasuraman High Reliability",  configPath: "matb/parasuraman-high" },
       { id: "parasuraman-low",    label: "Parasuraman Low Reliability",   configPath: "matb/parasuraman-low" },
       { id: "parasuraman-drt",    label: "Parasuraman + DRT (2-block)",   configPath: "matb/parasuraman-drt" },
+      { id: "parasuraman-drt-dynamic", label: "Parasuraman + DRT Dynamic", configPath: "matb/parasuraman-drt-dynamic" },
     ],
   },
   run: (context) => runMatbCompositeTask(context),
@@ -99,7 +107,12 @@ interface MatbBlock {
     comms:    Record<string, unknown>;
     resman:   Record<string, unknown>;
   };
+  /** Static events (used when scenarioMode is "static" or absent). */
   scenario: ScenarioEvent[];
+  /** Dynamic scenario config (used when scenarioMode is "dynamic"). */
+  dynamicScenario: DynamicScenarioSourceConfig | null;
+  /** "static" (default) or "dynamic". */
+  scenarioMode: "static" | "dynamic";
   layout: PanelLayoutConfig | null;
   beforeBlockScreens: string[];
   afterBlockScreens: string[];
@@ -123,6 +136,8 @@ interface ParsedCompositeConfig {
   layout: PanelLayoutConfig;
   blocks: MatbBlock[];
   endSurvey: { preset: string; [key: string]: unknown } | null;
+  waldOverlay: WaldOverlayConfig;
+  adaptive: AdaptiveControllerConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,14 +147,16 @@ interface ParsedCompositeConfig {
 const DEFAULT_INTRO_PAGES = [
   "The Multi-Attribute Task Battery (MATB) will now begin.",
   "You will be asked to monitor four tasks simultaneously:",
-  "SYSMON (top-left): Watch for indicator failures and press the labelled key.",
-  "TRACKING (top-right): Keep the cursor inside the central reticle using the mouse.",
-  "COMMS (bottom-left): Respond to radio prompts when you hear your own callsign.",
-  "RESMAN (bottom-right): Keep tanks A and B near their target levels using the numpad.",
+  "SYSTEM MONITORING (top-left): Watch for indicator failures and press the labelled key.",
+  "TRACKING (top-center): Keep the cursor inside the central reticle using the mouse.",
+  "COMMUNICATIONS (bottom-left): Respond to radio prompts when you hear your own callsign.",
+  "RESOURCE MANAGEMENT (bottom-center): Keep tanks A and B near their target levels using the numpad.",
+  "Two additional panels for SCHEDULING (top-right) and PUMP STATUS (bottom-right) provide auxiliary information.",
   "Press continue when you are ready to begin.",
 ];
 
 const SUBTASK_IDS = ["sysmon", "tracking", "comms", "resman"] as const;
+const ALL_PANEL_IDS = ["sysmon", "tracking", "comms", "resman", "scheduling", "pumpstatus"] as const;
 
 function parseScenarioEvents(raw: unknown): ScenarioEvent[] {
   const obj = asObject(raw) ?? {};
@@ -156,15 +173,102 @@ function parseScenarioEvents(raw: unknown): ScenarioEvent[] {
   });
 }
 
+function parseScenarioMode(raw: unknown): "static" | "dynamic" {
+  const obj = asObject(raw) ?? {};
+  const mode = asString(obj.mode);
+  return mode === "dynamic" ? "dynamic" : "static";
+}
+
+function parseDynamicScenarioConfig(raw: unknown, durationMs: number): DynamicScenarioSourceConfig | null {
+  const obj = asObject(raw) ?? {};
+  if (asString(obj.mode) !== "dynamic") return null;
+
+  const sysmonRaw   = asObject(obj.sysmon) ?? {};
+  const commsRaw    = asObject(obj.comms) ?? {};
+  const resmanRaw   = asObject(obj.resman) ?? {};
+  const trackingRaw = asObject(obj.tracking) ?? {};
+
+  return {
+    durationMs,
+    seed:                  obj.seed != null ? toPositiveNumber(obj.seed, 1) : undefined,
+    warmupMs:              obj.warmupMs != null ? toNonNegativeNumber(obj.warmupMs, 20000) : undefined,
+    cooldownMs:            obj.cooldownMs != null ? toNonNegativeNumber(obj.cooldownMs, 15000) : undefined,
+    maxConcurrentFailures: obj.maxConcurrentFailures != null ? toNonNegativeNumber(obj.maxConcurrentFailures, 0) : undefined,
+    sysmon: {
+      intervalMs:         sysmonRaw.intervalMs != null ? toPositiveNumber(sysmonRaw.intervalMs, 30000) : undefined,
+      minGapMs:           sysmonRaw.minGapMs != null ? toPositiveNumber(sysmonRaw.minGapMs, 8000) : undefined,
+      reliability:        sysmonRaw.reliability != null ? Number(sysmonRaw.reliability) || 0 : undefined,
+      autoResolveDelayMs: sysmonRaw.autoResolveDelayMs != null ? toNonNegativeNumber(sysmonRaw.autoResolveDelayMs, 4000) : undefined,
+      scaleIds:           asArray(sysmonRaw.scaleIds).length > 0 ? asArray(sysmonRaw.scaleIds).map(String) : undefined,
+      lightIds:           asArray(sysmonRaw.lightIds).length > 0 ? asArray(sysmonRaw.lightIds).map(String) : undefined,
+    },
+    comms: {
+      intervalMs:      commsRaw.intervalMs != null ? toPositiveNumber(commsRaw.intervalMs, 40000) : undefined,
+      minGapMs:        commsRaw.minGapMs != null ? toPositiveNumber(commsRaw.minGapMs, 15000) : undefined,
+      ownRatio:        commsRaw.ownRatio != null ? Number(commsRaw.ownRatio) || 0.5 : undefined,
+      ownCallsign:     asString(commsRaw.ownCallsign) ?? undefined,
+      otherCallsigns:  asArray(commsRaw.otherCallsigns).length > 0 ? asArray(commsRaw.otherCallsigns).map(String) : undefined,
+      radioIds:        asArray(commsRaw.radioIds).length > 0 ? asArray(commsRaw.radioIds).map(String) : undefined,
+    },
+    resman: {
+      intervalMs:        resmanRaw.intervalMs != null ? toPositiveNumber(resmanRaw.intervalMs, 60000) : undefined,
+      minGapMs:          resmanRaw.minGapMs != null ? toPositiveNumber(resmanRaw.minGapMs, 15000) : undefined,
+      failureDurationMs: resmanRaw.failureDurationMs != null ? toPositiveNumber(resmanRaw.failureDurationMs, 30000) : undefined,
+      reliability:       resmanRaw.reliability != null ? Number(resmanRaw.reliability) || 0 : undefined,
+      pumpIds:           asArray(resmanRaw.pumpIds).length > 0 ? asArray(resmanRaw.pumpIds).map(String) : undefined,
+    },
+    tracking: {
+      automated:      trackingRaw.automated !== undefined ? trackingRaw.automated === true || trackingRaw.automated === "true" : undefined,
+      automationGain: trackingRaw.automationGain != null ? Number(trackingRaw.automationGain) || 0.95 : undefined,
+    },
+  };
+}
+
+/**
+ * When scenario mode is "dynamic", merge automation-relevant fields from the
+ * scenario sub-configs into the respective subtask configs. This lets
+ * researchers specify `automated: true` once in the scenario block rather than
+ * repeating it in a separate subtasks block.
+ * Explicit subtask config values always win (they are applied first; scenario
+ * values only fill in keys that aren't already set).
+ */
+function mergeScenarioAutomation(
+  scenarioRaw: unknown,
+  subtasks: { sysmon: Record<string, unknown>; tracking: Record<string, unknown>; comms: Record<string, unknown>; resman: Record<string, unknown> },
+): void {
+  const obj = asObject(scenarioRaw) ?? {};
+
+  const scen = {
+    sysmon:   asObject(obj.sysmon)   ?? {},
+    comms:    asObject(obj.comms)    ?? {},
+    resman:   asObject(obj.resman)   ?? {},
+    tracking: asObject(obj.tracking) ?? {},
+  };
+
+  // Fields to propagate from scenario sub-config → subtask config (only if not already set).
+  const mergeIfAbsent = (target: Record<string, unknown>, source: Record<string, unknown>, keys: string[]): void => {
+    for (const k of keys) {
+      if (source[k] !== undefined && target[k] === undefined) {
+        target[k] = source[k];
+      }
+    }
+  };
+
+  mergeIfAbsent(subtasks.sysmon,   scen.sysmon,   ["automated", "autoResolveDelayMs"]);
+  mergeIfAbsent(subtasks.comms,    scen.comms,    ["automated", "muteAudio", "automatedResponseDelayMs"]);
+  mergeIfAbsent(subtasks.resman,   scen.resman,   ["automated", "autoResolveDelayMs"]);
+  mergeIfAbsent(subtasks.tracking, scen.tracking, ["automated", "automationGain"]);
+}
+
 function parsePanelLayout(raw: unknown): PanelLayoutConfig {
   const layoutRaw = asObject(raw) ?? {};
   const panelsRaw = asArray(layoutRaw.panels);
   return {
     rows: toPositiveNumber(layoutRaw.rows, 2),
-    cols: toPositiveNumber(layoutRaw.cols, 2),
+    cols: toPositiveNumber(layoutRaw.cols, 3),
     gap:  asString(layoutRaw.gap) ?? "2px",
     padding:    asString(layoutRaw.padding) ?? "0",
-    background: asString(layoutRaw.background) ?? "#1a1a1a",
+    background: asString(layoutRaw.background) ?? "#d0d0d0",
     panels: panelsRaw.length > 0
       ? panelsRaw.map((p) => {
           const o = asObject(p) ?? {};
@@ -180,10 +284,12 @@ function parsePanelLayout(raw: unknown): PanelLayoutConfig {
           };
         })
       : [
-          { id: "sysmon",   row: 0, col: 0, label: "SYSMON" },
-          { id: "tracking", row: 0, col: 1, label: "TRACKING" },
-          { id: "comms",    row: 1, col: 0, label: "COMMS" },
-          { id: "resman",   row: 1, col: 1, label: "RESMAN" },
+          { id: "sysmon",     row: 0, col: 0, label: "SYSTEM MONITORING" },
+          { id: "tracking",   row: 0, col: 1, label: "TRACKING" },
+          { id: "scheduling", row: 0, col: 2, label: "SCHEDULING" },
+          { id: "comms",      row: 1, col: 0, label: "COMMUNICATIONS" },
+          { id: "resman",     row: 1, col: 1, label: "RESOURCE MANAGEMENT" },
+          { id: "pumpstatus", row: 1, col: 2, label: "PUMP STATUS" },
         ],
   };
 }
@@ -201,13 +307,13 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
 
   const dRaw = asObject(raw.display) ?? {};
   const display: MatbDisplayConfig = {
-    maxWidthPx:  toPositiveNumber(dRaw.maxWidthPx, 1200),
+    maxWidthPx:  toPositiveNumber(dRaw.maxWidthPx, 1440),
     maxHeightPx: toPositiveNumber(dRaw.maxHeightPx, 900),
-    minWidthPx:  toPositiveNumber(dRaw.minWidthPx, 640),
+    minWidthPx:  toPositiveNumber(dRaw.minWidthPx, 800),
     minHeightPx: toPositiveNumber(dRaw.minHeightPx, 480),
-    aspectRatio: asString(dRaw.aspectRatio) ?? "4/3",
-    marginPx:    toNonNegativeNumber(dRaw.marginPx, 32),
-    background:  asString(dRaw.background) ?? "#111",
+    aspectRatio: asString(dRaw.aspectRatio) ?? "16/10",
+    marginPx:    toNonNegativeNumber(dRaw.marginPx, 16),
+    background:  asString(dRaw.background) ?? "#d0d0d0",
   };
 
   // ── Instructions ───────────────────────────────────────────────────────
@@ -235,7 +341,9 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
 
   // ── Default scenario ───────────────────────────────────────────────────
 
+  const defaultScenarioMode = parseScenarioMode(raw.scenario);
   const defaultScenario = parseScenarioEvents(raw.scenario);
+  const defaultDynamicScenario = parseDynamicScenarioConfig(raw.scenario, defaultDurMs);
 
   // ── Blocks ─────────────────────────────────────────────────────────────
 
@@ -248,20 +356,30 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
     blocks = blocksRaw.map((b, i) => {
       const o    = asObject(b) ?? {};
       const bSub = asObject(o.subtasks);
+      const blockDurMs = toPositiveNumber(o.durationMs, defaultDurMs);
+      const blockScenarioMode = o.scenario ? parseScenarioMode(o.scenario) : defaultScenarioMode;
+      const blockSubtasks: MatbBlock["subtasks"] = bSub
+        ? {
+            sysmon:   asObject(bSub.sysmon)   ?? defaultSubtasks.sysmon,
+            tracking: asObject(bSub.tracking) ?? defaultSubtasks.tracking,
+            comms:    asObject(bSub.comms)    ?? defaultSubtasks.comms,
+            resman:   asObject(bSub.resman)   ?? defaultSubtasks.resman,
+          }
+        : { ...defaultSubtasks };
+      if (blockScenarioMode === "dynamic" && o.scenario) {
+        mergeScenarioAutomation(o.scenario, blockSubtasks);
+      }
       return {
         label:              asString(o.label) ?? `Block ${i + 1}`,
         blockType:          asString(o.blockType) ?? "experimental",
         isPractice:         o.isPractice === true,
-        durationMs:         toPositiveNumber(o.durationMs, defaultDurMs),
-        subtasks: bSub
-          ? {
-              sysmon:   asObject(bSub.sysmon)   ?? defaultSubtasks.sysmon,
-              tracking: asObject(bSub.tracking) ?? defaultSubtasks.tracking,
-              comms:    asObject(bSub.comms)    ?? defaultSubtasks.comms,
-              resman:   asObject(bSub.resman)   ?? defaultSubtasks.resman,
-            }
-          : { ...defaultSubtasks },
+        durationMs:         blockDurMs,
+        subtasks:           blockSubtasks,
         scenario:           o.scenario ? parseScenarioEvents(o.scenario) : defaultScenario,
+        dynamicScenario:    o.scenario
+          ? parseDynamicScenarioConfig(o.scenario, blockDurMs)
+          : (defaultDynamicScenario ? { ...defaultDynamicScenario, durationMs: blockDurMs } : null),
+        scenarioMode:       blockScenarioMode,
         layout:             o.layout ? parsePanelLayout(o.layout) : null,
         beforeBlockScreens: asStringArray(o.beforeBlockScreens, []),
         afterBlockScreens:  asStringArray(o.afterBlockScreens, []),
@@ -270,14 +388,20 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
     });
   } else {
     // Legacy flat config → single block (preserves backward compatibility).
+    const legacySubtasks: MatbBlock["subtasks"] = { ...defaultSubtasks };
+    if (defaultScenarioMode === "dynamic" && raw.scenario) {
+      mergeScenarioAutomation(raw.scenario, legacySubtasks);
+    }
     blocks = [
       {
         label:              "Session",
         blockType:          "experimental",
         isPractice:         false,
         durationMs:         defaultDurMs,
-        subtasks:           { ...defaultSubtasks },
+        subtasks:           legacySubtasks,
         scenario:           defaultScenario,
+        dynamicScenario:    defaultDynamicScenario,
+        scenarioMode:       defaultScenarioMode,
         layout:             null,
         beforeBlockScreens: [],
         afterBlockScreens:  [],
@@ -293,7 +417,30 @@ function parseConfig(raw: Record<string, unknown>): ParsedCompositeConfig {
     ? { preset: asString(endSurveyRaw.preset) ?? "nasa_tlx", ...endSurveyRaw }
     : null;
 
-  return { title, display, instructions, layout, blocks, endSurvey };
+  // ── Wald overlay ──────────────────────────────────────────────────────
+
+  const woRaw = asObject(raw.waldOverlay) ?? {};
+  const waldOverlay: WaldOverlayConfig = {
+    enabled:            woRaw.enabled === true,
+    maxSparklinePoints: woRaw.maxSparklinePoints != null ? toPositiveNumber(woRaw.maxSparklinePoints, 60) : undefined,
+    position:           (asString(woRaw.position) as WaldOverlayConfig["position"]) ?? undefined,
+  };
+
+  // ── Adaptive controller ─────────────────────────────────────────────
+
+  const adRaw = asObject(raw.adaptive) ?? {};
+  const adaptive: AdaptiveControllerConfig = {
+    enabled:              adRaw.enabled === true || adRaw.enabled === "true",
+    targetDriftRateBand:  Array.isArray(adRaw.targetDriftRateBand) && adRaw.targetDriftRateBand.length === 2
+      ? [Number(adRaw.targetDriftRateBand[0]) || 2.0, Number(adRaw.targetDriftRateBand[1]) || 4.0]
+      : undefined,
+    minSampleSize:        adRaw.minSampleSize != null ? toPositiveNumber(adRaw.minSampleSize, 15) : undefined,
+    adjustmentCooldownMs: adRaw.adjustmentCooldownMs != null ? toPositiveNumber(adRaw.adjustmentCooldownMs, 30000) : undefined,
+    intervalStepFraction: adRaw.intervalStepFraction != null ? Number(adRaw.intervalStepFraction) || 0.15 : undefined,
+    reliabilityStep:      adRaw.reliabilityStep != null ? Number(adRaw.reliabilityStep) || 0.1 : undefined,
+  };
+
+  return { title, display, instructions, layout, blocks, endSurvey, waldOverlay, adaptive };
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +493,7 @@ function createMatbDisplayElements(display: MatbDisplayConfig): {
 async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknown> {
   const config = parseConfig(context.taskConfig);
   const root   = context.container;
-  const { eventLogger, selection, coreConfig } = context;
+  const { eventLogger, selection, coreConfig, moduleRunner } = context;
 
   // Apply instruction config so the orchestrator can read intro/end pages.
   applyTaskInstructionConfig(context.taskConfig, config.instructions);
@@ -365,6 +512,10 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
   const allTrackingBins:       Record<string, unknown>[] = [];
   const allTrackingExcursions: Record<string, unknown>[] = [];
   const blockResults: MatbBlockResult[] = [];
+
+  // ── Wald overlay (persists across blocks) ─────────────────────────────
+
+  let waldOverlay: WaldOverlay | null = null;
 
   // ── Orchestrator ──────────────────────────────────────────────────────
 
@@ -416,13 +567,28 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       const blockLayout = block.layout ?? config.layout;
       const layout = new PanelLayoutManager(matbDisplay, blockLayout);
 
-      const sysmonHandle   = createSysmonSubTaskHandle();
-      const trackingHandle = createTrackingSubTaskHandle();
-      const commsHandle    = createCommsSubTaskHandle();
-      const resmanHandle   = createResmanSubTaskHandle();
+      const sysmonHandle      = createSysmonSubTaskHandle();
+      const trackingHandle    = createTrackingSubTaskHandle();
+      const commsHandle       = createCommsSubTaskHandle();
+      const resmanHandle      = createResmanSubTaskHandle();
+      const schedulingHandle  = createSchedulingSubTaskHandle();
+      const pumpstatusHandle  = createPumpStatusSubTaskHandle();
+
+      // Wire pump status to read live state from resman.
+      pumpstatusHandle.setPumpStateProvider(() => resmanHandle.getPumpStates());
+
+      // Wire scheduling to know which subtasks are active (manual mode).
+      // Note: reads static block config — does not reflect mid-block automation
+      // changes from scenario events. This matches OpenMATB's per-block design.
+      schedulingHandle.setSubtaskRunningProvider(() => ({
+        sysmon:   !block.subtasks.sysmon?.automated,
+        tracking: !block.subtasks.tracking?.automated,
+        comms:    !block.subtasks.comms?.automated,
+        resman:   !block.subtasks.resman?.automated,
+      }));
 
       const runner = new ConcurrentTaskRunner(
-        [sysmonHandle, trackingHandle, commsHandle, resmanHandle],
+        [sysmonHandle, trackingHandle, commsHandle, resmanHandle, schedulingHandle, pumpstatusHandle],
         {
           onEvent: (e) => {
             eventLogger.emit(e.type, {
@@ -433,28 +599,92 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
       );
 
       for (const id of SUBTASK_IDS) {
-        try { runner.setPanel(id, layout.getPanel(id)); } catch { /* panel absent */ }
+        try { runner.setPanel(id, layout.getPanel(id)); } catch (e) { console.debug(`panel "${id}" absent in layout`, e); }
         runner.setSubtaskConfig(id, block.subtasks[id]);
       }
+      // Display-only panels (scheduling, pumpstatus).
+      try { runner.setPanel("scheduling", layout.getPanel("scheduling")); } catch (e) { console.debug('panel "scheduling" absent in layout', e); }
+      runner.setSubtaskConfig("scheduling", { durationMinutes: Math.round(block.durationMs / 60000) });
 
-      runner.setScheduler(new ScenarioScheduler(block.scenario));
+      try { runner.setPanel("pumpstatus", layout.getPanel("pumpstatus")); } catch (e) { console.debug('panel "pumpstatus" absent in layout', e); }
+      runner.setSubtaskConfig("pumpstatus", {});
+
+      // Set up event source: static (pre-authored events) or dynamic (runtime generation).
+      let eventSource: ScenarioEventSource;
+      let dynSource: DynamicScenarioSource | null = null;
+      if (block.scenarioMode === "dynamic" && block.dynamicScenario) {
+        dynSource = new DynamicScenarioSource(block.dynamicScenario);
+        eventSource = dynSource;
+        eventLogger.emit("matb_dynamic_scenario_init", {
+          blockIndex, blockLabel: block.label,
+          params: dynSource.getParams(),
+        });
+      } else {
+        eventSource = new ScenarioScheduler(block.scenario);
+      }
+      runner.setScheduler(eventSource);
+
+      // Set up adaptive controller if dynamic mode + adaptive enabled.
+      let adaptiveCtrl: AdaptiveController | null = null;
+      if (config.adaptive.enabled && dynSource) {
+        adaptiveCtrl = new AdaptiveController(config.adaptive);
+        adaptiveCtrl.attach(dynSource, (adj) => {
+          eventLogger.emit("matb_adaptive_adjustment", {
+            blockIndex, blockLabel: block.label, ...adj,
+          });
+        });
+      }
 
       // Run session
       eventLogger.emit("matb_block_start", {
         blockIndex, blockLabel: block.label, durationMs: block.durationMs,
+        scenarioMode: block.scenarioMode,
       });
 
       runner.start();
-      for (const id of SUBTASK_IDS) runner.startSubtask(id);
+      for (const id of ALL_PANEL_IDS) runner.startSubtask(id);
+
+      // ── Wald overlay: create and poll DRT controller for estimates ──
+      if (config.waldOverlay.enabled) {
+        if (waldOverlay) waldOverlay.dispose();
+        waldOverlay = new WaldOverlay(matbDisplay, config.waldOverlay);
+      }
+      let lastResponseRowCount = 0;
 
       // Wait for block duration using the runner's internal clock for precision
       // and yielding frequently to ensure the end is caught promptly even if
       // the browser throttles timers in background tabs.
       while (runner.elapsedMs() < block.durationMs) {
         await new Promise((resolve) => setTimeout(resolve, 250));
+
+        // Poll DRT transform estimates for Wald overlay and adaptive controller.
+        if ((waldOverlay || adaptiveCtrl) && moduleRunner) {
+          const drtHandle = moduleRunner.getActiveHandle({
+            scope: "block",
+            blockIndex,
+            trialIndex: null,
+            moduleId: "drt",
+          });
+          if (drtHandle?.controller) {
+            const ctrl = drtHandle.controller as { exportResponseRows?: () => Array<{ estimate: unknown }> };
+            if (ctrl.exportResponseRows) {
+              const rows = ctrl.exportResponseRows();
+              for (let i = lastResponseRowCount; i < rows.length; i++) {
+                const est = rows[i]?.estimate as import("@experiments/core").OnlineParameterTransformEstimate | null;
+                if (est) {
+                  waldOverlay?.update(est);
+                  adaptiveCtrl?.onEstimate(est, runner.elapsedMs());
+                }
+              }
+              lastResponseRowCount = rows.length;
+            }
+          }
+        }
       }
 
       const results = runner.stop();
+      if (waldOverlay) { waldOverlay.dispose(); waldOverlay = null; }
+      if (adaptiveCtrl) { adaptiveCtrl.detach(); }
       layout.dispose();
 
       eventLogger.emit("matb_block_end", {

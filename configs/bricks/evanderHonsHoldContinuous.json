@@ -59,7 +59,8 @@
     "brickCornerRadius": 3,
     "beltTexture": {
       "scrollSnapMode": "screen",
-      "scrollRenderMode": "auto"
+      "scrollRenderMode": "auto",
+      "pixelSnap": "true"
     },
     "spotlight": {
       "snapMode": "none",

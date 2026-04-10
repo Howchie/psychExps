@@ -145,7 +145,7 @@ export class PanelLayoutManager {
     s.gridTemplateColumns = `repeat(${Math.max(1, config.cols)}, 1fr)`;
     s.gap = config.gap ?? "2px";
     s.padding = config.padding ?? "0";
-    s.background = config.background ?? "#1a1a1a";
+    s.background = config.background ?? "#d0d0d0";
     s.overflow = "hidden";
   }
 
@@ -163,8 +163,8 @@ export class PanelLayoutManager {
       ws.flexDirection = "column";
       ws.overflow = "hidden";
       ws.position = "relative";
-      ws.background = panelConfig.background ?? "transparent";
-      ws.border = panelConfig.border ?? "1px solid #444";
+      ws.background = panelConfig.background ?? "#f0f0f0";
+      ws.border = panelConfig.border ?? "1px solid #c8c8c8";
       ws.boxSizing = "border-box";
 
       // CSS grid placement (1-based)
@@ -178,14 +178,14 @@ export class PanelLayoutManager {
         const label = document.createElement("div");
         const ls = label.style;
         ls.textAlign = "center";
-        ls.fontSize = "11px";
+        ls.fontSize = "12px";
         ls.fontWeight = "700";
-        ls.fontFamily = "monospace";
+        ls.fontFamily = "sans-serif";
         ls.letterSpacing = "1px";
         ls.textTransform = "uppercase";
-        ls.padding = "2px 4px";
-        ls.color = "#ccc";
-        ls.background = "#222";
+        ls.padding = "3px 4px";
+        ls.color = "#323232";
+        ls.background = "#e0e0e0";
         ls.flexShrink = "0";
         ls.userSelect = "none";
         label.textContent = panelConfig.label;

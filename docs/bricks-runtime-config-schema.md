@@ -482,8 +482,26 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
   lengthPx: number | number[] | SamplerSpec;
   runtimeLengths?: number[]; // optional renderer override
   speedPxPerSec: number | SamplerSpec;
+  dynamicSpeed?: {
+    enable?: boolean;                 // default false
+    intervalMs?: number | SamplerSpec; // ms between speed changes (sampled per conveyor)
+    speedPxPerSec?: number | SamplerSpec; // sampled speed for each change event
+    perConveyor?: Record<string, {
+      enable?: boolean;
+      intervalMs?: number | SamplerSpec;
+      speedPxPerSec?: number | SamplerSpec;
+    }>;
+  };
 }
 ```
+
+`conveyors.dynamicSpeed` behavior:
+- Off by default (`enable: false`): conveyor speed is sampled once at trial init and reused; no runtime speed resampling occurs.
+- When enabled, each conveyor keeps its own independent timer and speed sampler.
+- On each sampled interval boundary, the conveyor speed is resampled and applied immediately.
+- `perConveyor` overrides are keyed by conveyor id (`"c0"`, `"c1"`, …) or string index (`"0"`, `"1"`, …).
+- `perConveyor[*].enable` can turn dynamic speed on/off for individual conveyors while global `enable` remains unchanged.
+- If `speedPxPerSec` is omitted inside `dynamicSpeed`, it falls back to `conveyors.speedPxPerSec`.
 
 ## 4.3 `bricks`
 

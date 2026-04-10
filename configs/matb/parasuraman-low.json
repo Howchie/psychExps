@@ -6,9 +6,10 @@
   "instructions": {
     "intro": [
       "You are about to begin a 10-minute monitoring session.",
-      "SYSMON (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
-      "TRACKING (top-right): Keep the red cursor inside the reticle.",
-      "RESMAN (bottom-right): Keep tanks A and B near their target levels.",
+      "SYSTEM MONITORING (top-left): Watch for indicator failures. Press F1–F4 for scale gauges; F5–F6 for lights.",
+      "TRACKING (top-center): Keep the red cursor inside the reticle.",
+      "RESOURCE MANAGEMENT (bottom-left): Keep tanks A and B near their target levels.",
+      "Auxiliary panels for SCHEDULING (top-right) and PUMP STATUS (bottom-right) provide extra information.",
       "In this session, only some failures will be resolved automatically.",
       "Still respond as quickly and accurately as you can.",
       "Press Continue when ready."
@@ -42,13 +43,15 @@
   },
   "layout": {
     "rows": 2,
-    "cols": 2,
+    "cols": 3,
     "gap": "2px",
-    "background": "#111",
+    "background": "#d0d0d0",
     "panels": [
-      { "id": "sysmon",   "row": 0, "col": 0, "label": "SYSMON" },
-      { "id": "tracking", "row": 0, "col": 1, "label": "TRACKING" },
-      { "id": "resman",   "row": 1, "col": 1, "label": "RESMAN" }
+      { "id": "sysmon",     "row": 0, "col": 0, "label": "SYSTEM MONITORING" },
+      { "id": "tracking",   "row": 0, "col": 1, "label": "TRACKING" },
+      { "id": "scheduling", "row": 0, "col": 2, "label": "SCHEDULING" },
+      { "id": "resman",     "row": 1, "col": 0, "colSpan": 2, "label": "RESOURCE MANAGEMENT" },
+      { "id": "pumpstatus", "row": 1, "col": 2, "label": "PUMP STATUS" }
     ]
   },
   "subtasks": {
