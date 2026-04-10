@@ -232,15 +232,24 @@ export function computeBlockSummaryStats(args: {
 }): { total: number; correct: number; accuracyPct: number; meanRtMs: number; validRtCount: number; meanMetric: number } {
   const { trialResults, where, metrics } = args;
   const rows = Array.isArray(trialResults) ? trialResults : [];
+
+  // ⚡ Bolt: Hoist Object.entries and Set creation outside the filter loop
+  // to avoid redundant O(N) allocations for every trial row.
+  let whereEntries: Array<[string, Set<string>]> | null = null;
+  if (where) {
+    whereEntries = Object.entries(where).map(([field, expectedRaw]) => {
+      const expectedArray = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
+      return [field, new Set(expectedArray.map(String))];
+    });
+  }
+
   const filteredRows = rows.filter((row) => {
-    if (!where) return true;
+    if (!whereEntries) return true;
     const record = asObject(row);
     if (!record) return false;
-    for (const [field, expectedRaw] of Object.entries(where)) {
+    for (const [field, expectedSet] of whereEntries) {
       const actual = getFieldValue(record, field);
-      const expectedValues = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
-      const matched = expectedValues.some((expected) => String(actual) === String(expected));
-      if (!matched) return false;
+      if (!expectedSet.has(String(actual))) return false;
     }
     return true;
   });
