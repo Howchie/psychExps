@@ -1,4 +1,0 @@
-- generic [ref=e13]:
-  - paragraph [ref=e15]: Keep the cursor dot centred inside the target circle by moving your mouse.
-  - paragraph [ref=e16]:
-    - button "Continue" [active] [ref=e17] [cursor=pointer]

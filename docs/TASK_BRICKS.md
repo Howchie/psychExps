@@ -110,6 +110,8 @@ Important: `parameterTransforms` must be an array of objects. A string value lik
 - object page: `{ "title": "How To Process", "html": "<p>...</p>" }`
 - shared slots: `pages|introPages|intro|screens`, `preBlockPages|beforeBlockPages|beforeBlockScreens`, `postBlockPages|afterBlockPages|afterBlockScreens`, `endPages|outroPages|end|outro`
 - block flow controls: `blockIntroTemplate`, `showBlockLabel`, `preBlockBeforeBlockIntro`
+- optional: `showBlockIntro` (default `true`) to include/skip the automatic block-intro continue card
+- block-level pre-screen aliases in `blocks[]`: `beforeBlockScreens` and `preBlockScreens` (legacy: `preBlockInstructions`)
 
 Instruction text/html supports `{dot.path}` interpolation against the merged Bricks config (and resolver-backed variables), for example:
 - `{bricks.completionParams.target_hold_ms}`
@@ -122,6 +124,12 @@ Completion-mode note (`hover_to_clear`):
 - Bricks keep moving while hovered, and visible width is depleted from the right edge at a processing rate (`completionParams.hover_process_rate_px_s`).
 - If that config key is omitted, the runtime default is the brick/conveyor progress-rate variable `brick.speed` (not a fixed constant).
 
+Completion-mode note (`hold_to_clear`):
+- Hold processing is rate-based while the pointer is held down.
+- Bricks keep moving while held, and visible width is depleted at `completionParams.hold_process_rate_px_s`.
+- Supports all interaction targeting areas (`brick`, `conveyor`, `spotlight`).
+- If that key is omitted, runtime falls back to `brick.speed`.
+
 Interaction targeting note:
 - Default targeting is direct brick hit-testing.
 - Preferred selector is `bricks.interaction.targetingArea`:
@@ -132,6 +140,13 @@ Interaction targeting note:
   - `bricks.interaction.conveyorWideHitArea: true` -> `"conveyor"`
   - `bricks.interaction.spotlightWideHitArea: true` -> `"spotlight"`
 - Cursor/hover reconciliation runs each frame using tracked pointer position, so cursor/hover state updates when moving bricks/spotlight enter a stationary pointer.
+
+Conveyor speed note:
+- `conveyors.speedPxPerSec` remains the baseline speed sampler (sampled once at trial init per conveyor).
+- Optional `conveyors.dynamicSpeed` adds runtime speed changes (off by default):
+  - each conveyor gets an independent interval timer and speed sampler
+  - supports per-conveyor overrides (`perConveyor.c0`, `perConveyor.c1`, etc.)
+  - when disabled, no runtime speed resampling logic is executed
 
 Spotlight rendering note:
 - `display.spotlight.snapMode` controls spotlight geometry snapping (`"screen"` default, `"pixel"`, `"none"`).
@@ -158,6 +173,7 @@ Notes on `drt` outputs:
 - Trial-scoped DRT: `record.drt` reflects that trial scope snapshot (including `transform_latest` when available); response-level DRT rows are attached as `drt_response_rows`.
 - Block-scoped DRT: `record.drt.stats` is converted to per-trial deltas for accurate trial/block summaries, and cumulative snapshots are preserved in `record.drt_cumulative`.
 - For trial-scoped DRT, Bricks gates DRT onset to the active trial run window only (from trial start trigger to trial end), so post-trial survey screens are outside DRT scope.
+- Optional trial config `trial.stopDrtOnBrickQuotaMet: true` (alias `trial.endDrtOnBrickQuotaMet`) stops trial-scoped DRT immediately when `brick_quota_met` is reached, even if a post-end delay is configured.
 - Bricks does not manually start/stop DRT modules; it consumes active DRT handles exposed by core module orchestration.
 
 `drt_response_rows` now carries per-response transform data directly:
@@ -166,12 +182,33 @@ Notes on `drt` outputs:
 
 Notes on runtime performance outputs:
 - Each trial record now includes `record.performance` with frame pacing summary (`avg_fps`, frame overrun ratios, tick cost) and renderer counters (active/peak effects, skipped effects at cap, clear-point effects queued, active/peak brick sprites).
+- Hold-duration practice records also include `practice_press_results` (boolean per registered hold), `practice_press_count`, `practice_correct_count`, and `practice_required_presses`.
+
+Hold-duration practice helper config (`trial.holdDurationPractice`):
+- `requiredPresses`: force press-count quota by switching practice run logic to `max_bricks`.
+- `fullWidthConveyor`: when true (default), practice conveyor uses full canvas width.
+- `centerBrick`: when true (default), practice brick is placed at conveyor midpoint.
+- `replenishDelayMs` (aliases: `trialTimeMs`, `nextTrialDelayMs`): after each hold release, keep the visible clear-progress state for this many ms, then refill to full to start the next practice press-trial.
+- `useSpotlightWindow` (alias: `spotlightWindow`): enable the spotlight window / forced-order focus frame in hold-duration practice.
+- `hideHud`: when true (default), hides HUD counters/timer during hold-duration practice.
+
+Quota note:
+- Hold-duration `requiredPresses` now uses the internal count of registered practice hold trials (same source as `practice_press_results`), not `game.stats.cleared`.
 
 Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.
 
-CSV export is DRT-row oriented (`bricks_drt_rows`) and includes:
-- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation)
+CSV export now uses long-format event records (`bricks_events`) as the primary CSV output.
+- one row per timeline event/click/hold with shared trial identifiers (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial fields)
+- event payload flattened under `event_*` columns
+
+Additional CSV outputs:
+- `bricks_trial_summary`: one row per trial (compact trial-level summary payload)
+- `bricks_brick_outcomes`: one row per brick per trial, including end state (`brick_final_status`: `cleared`/`dropped`/`active_at_trial_end`)
+- `bricks_drt_rows`: one row per DRT response, with spotlight linkage at response time
+
+DRT long-format rows remain available via task metadata (`drt_rows`) and include:
+- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation`)
 - spotlight context at response time (`spotlight_brick_id`, `spotlight_conveyor_id`) when available
 - all flattened columns from each `drt_response_rows` entry (including dynamic transform fields in `transformColumns`)
 

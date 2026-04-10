@@ -88,6 +88,22 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function getFieldValue(record: Record<string, unknown> | null, fieldPath: string): unknown {
+  if (!record) return undefined;
+  const direct = record[fieldPath];
+  if (direct !== undefined) return direct;
+  if (!fieldPath.includes(".")) return direct;
+  const segments = fieldPath.split(".").map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+  if (segments.length === 0) return undefined;
+  let cursor: unknown = record;
+  for (const segment of segments) {
+    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+    cursor = (cursor as Record<string, unknown>)[segment];
+    if (cursor === undefined) return undefined;
+  }
+  return cursor;
+}
+
 function toTextNumber(value: number, digits = 1): string {
   if (!Number.isFinite(value)) return "0";
   return value.toFixed(digits);
@@ -221,14 +237,14 @@ export function computeBlockSummaryStats(args: {
     const record = asObject(row);
     if (!record) return false;
     for (const [field, expectedRaw] of Object.entries(where)) {
-      const actual = record[field];
+      const actual = getFieldValue(record, field);
       const expectedValues = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
       const matched = expectedValues.some((expected) => String(actual) === String(expected));
       if (!matched) return false;
     }
     return true;
   });
-  const total = filteredRows.length;
+  let total = 0;
   let correct = 0;
   let rtSum = 0;
   let validRtCount = 0;
@@ -236,16 +252,25 @@ export function computeBlockSummaryStats(args: {
   let validMetricCount = 0;
   for (const row of filteredRows) {
     const record = asObject(row);
-    const correctRaw = record ? record[metrics.correctField] : null;
-    if (correctRaw === true || Number(correctRaw) === 1) correct += 1;
-    const rtRaw = record ? record[metrics.rtField] : null;
+    const correctRaw = getFieldValue(record, metrics.correctField);
+    if (Array.isArray(correctRaw)) {
+      for (const value of correctRaw) {
+        if (value === null || value === undefined) continue;
+        total += 1;
+        if (value === true || Number(value) === 1) correct += 1;
+      }
+    } else {
+      total += 1;
+      if (correctRaw === true || Number(correctRaw) === 1) correct += 1;
+    }
+    const rtRaw = getFieldValue(record, metrics.rtField);
     const rt = toFiniteNumber(rtRaw);
     if (rt != null && rt >= 0) {
       rtSum += rt;
       validRtCount += 1;
     }
     if (metrics.metricField) {
-      const metricRaw = record ? record[metrics.metricField] : null;
+      const metricRaw = getFieldValue(record, metrics.metricField);
       if (Array.isArray(metricRaw)) {
         for (const val of metricRaw) {
           const metricValue = toFiniteNumber(val);
@@ -305,6 +330,25 @@ export function buildBlockSummaryModel(args: {
     ? fromTrials.meanRtMs
     : (Number.isFinite(Number(args.fallbackStats?.meanRtMs)) ? Number(args.fallbackStats?.meanRtMs) : 0);
 
+  const latestRecord = asObject((args.trialResults ?? [])[Math.max(0, (args.trialResults ?? []).length - 1)]);
+  const latestScopeTotals = asObject(latestRecord?.stats_scope_totals);
+  const latestBlockTotals = asObject(latestScopeTotals?.block);
+  const latestExperimentTotals = asObject(latestScopeTotals?.experiment);
+  const pickTotal = (source: Record<string, unknown> | null, key: string, fallback = 0): number => {
+    const direct = toFiniteNumber(source?.[key]);
+    if (direct != null) return Math.max(0, direct);
+    return Math.max(0, fallback);
+  };
+
+  const blockSpawned = pickTotal(latestBlockTotals, "spawned", 0);
+  const blockCleared = pickTotal(latestBlockTotals, "cleared", 0);
+  const blockDropped = pickTotal(latestBlockTotals, "dropped", 0);
+  const blockPoints = pickTotal(latestBlockTotals, "points", 0);
+  const experimentSpawned = pickTotal(latestExperimentTotals, "spawned", blockSpawned);
+  const experimentCleared = pickTotal(latestExperimentTotals, "cleared", blockCleared);
+  const experimentDropped = pickTotal(latestExperimentTotals, "dropped", blockDropped);
+  const experimentPoints = pickTotal(latestExperimentTotals, "points", blockPoints);
+
   const vars: Record<string, string> = {
     blockLabel,
     blockIndex: String(args.blockIndex),
@@ -317,6 +361,14 @@ export function buildBlockSummaryModel(args: {
     accuracyPct: toTextNumber(accuracyPct, 1),
     meanRtMs: toTextNumber(meanRtMs, 1),
     validRtCount: String(validRtCount),
+    blockSpawned: toTextNumber(blockSpawned, 0),
+    blockCleared: toTextNumber(blockCleared, 0),
+    blockDropped: toTextNumber(blockDropped, 0),
+    blockPoints: toTextNumber(blockPoints, 0),
+    experimentSpawned: toTextNumber(experimentSpawned, 0),
+    experimentCleared: toTextNumber(experimentCleared, 0),
+    experimentDropped: toTextNumber(experimentDropped, 0),
+    experimentPoints: toTextNumber(experimentPoints, 0),
   };
 
   const title = applyTemplate(cfg.title, vars);

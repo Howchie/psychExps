@@ -10,7 +10,7 @@
  * Signal detection scoring:
  *   HIT  = own callsign, confirmed before timeout
  *   MISS = own callsign, timed out without confirmation
- *   FA   = other callsign, confirmed (pressed Enter during prompt)
+ *   FA   = confirmed while audio is still playing, or other callsign confirmed
  *   CR   = other callsign, timed out without pressing Enter
  *
  * This file contains:
@@ -94,6 +94,26 @@ export interface CommsSubTaskConfig {
   /** When present, use clip-based audio instead of speech synthesis. */
   clips?: CommsClipsConfig;
   keys?: CommsKeysConfig;
+  /**
+   * When true, the panel is displayed and audio plays but no key input is
+   * accepted. Prompts are resolved automatically once audio finishes:
+   * own-callsign prompts auto-select the correct radio/frequency (HIT),
+   * other-callsign prompts resolve immediately as CR.
+   */
+  automated?: boolean;
+  /**
+   * When true, no audio is played. The panel still renders and, if
+   * `automated` is also true, prompts resolve visually.
+   * Combine with `automatedResponseDelayMs` to keep the INCOMING indicator
+   * visible for a realistic duration before auto-resolving.
+   */
+  muteAudio?: boolean;
+  /**
+   * Minimum milliseconds to wait after audio finishes (or immediately, if
+   * muted) before auto-resolving in automated mode. Default 0.
+   * Set to e.g. 3000 when muted to give participants time to see the panel.
+   */
+  automatedResponseDelayMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +127,7 @@ export interface CommsSubTaskConfig {
  *   BAD_RADIO     = own callsign, responded but wrong radio (correct freq)
  *   BAD_FREQ      = own callsign, responded with correct radio but wrong freq
  *   BAD_RADIO_FREQ = own callsign, responded with wrong radio AND wrong freq
- *   FA            = other callsign, confirmed (false alarm)
+ *   FA            = confirmed when no target waiting (audio still playing OR other callsign)
  *   CR            = other callsign, no response (correct rejection)
  */
 export type CommsOutcome = "HIT" | "MISS" | "BAD_RADIO" | "BAD_FREQ" | "BAD_RADIO_FREQ" | "FA" | "CR";
@@ -123,14 +143,18 @@ export interface CommsPromptRecord {
   /** Frequency entered when participant confirmed (null = no response). */
   enteredFreqMhz: number | null;
   /**
-   * Signed deviation from target frequency in MHz (null = no response).
+   * Signed deviation from target frequency in MHz (null = no response or FA).
    * Positive = tuned above target, negative = below. Rounded to 0.1 MHz.
    * Matches OpenMATB: round(currentfreq - targetfreq, 1).
    */
   freqDeviationMhz: number | null;
   responded: boolean;
   outcome: CommsOutcome;
-  /** Response time in ms from prompt start. Null if no response. */
+  /**
+   * Response time in ms from audio playback end to confirmation.
+   * Matches OpenMATB: response_time is accumulated only after is_prompting = False.
+   * Null if no response or if the confirmation occurred during audio playback.
+   */
   rtMs: number | null;
 }
 
@@ -164,6 +188,9 @@ interface ResolvedCommsConfig {
     freqDown: string;
     confirm: string;
   };
+  automated: boolean;
+  muteAudio: boolean;
+  automatedResponseDelayMs: number;
 }
 
 interface RadioRuntime {
@@ -178,10 +205,23 @@ interface ActivePrompt {
   isOwn: boolean;
   startMs: number;
   promptIdx: number;
-  /** Accumulated elapsed time since prompt started (ms). */
-  elapsedMs: number;
+  /**
+   * True once audio playback has finished.
+   * Timeout and RT are measured from this point, matching OpenMATB's
+   * is_prompting = False transition.
+   */
+  audioFinished: boolean;
+  /**
+   * Elapsed ms counted only after audioFinished = true.
+   * Used for both timeout detection and RT logging.
+   */
+  audioElapsedMs: number;
+  /**
+   * Total elapsed ms since prompt started (used as fallback in case audio
+   * completion callback never fires, e.g. synthesis failure).
+   */
+  totalElapsedMs: number;
   speechHandle: ReturnType<AudioService["speakText"]> | null;
-  /** Set to true when using clip-based playback (no speechHandle). */
   usingClips: boolean;
 }
 
@@ -202,7 +242,6 @@ function digitWord(d: string): string {
 /**
  * Convert a MHz frequency to aviation-style spoken words.
  * e.g. 118.3 → "one one eight decimal three"
- *      135.0 → "one three five decimal zero"
  */
 function toSpokenFrequency(mhz: number): string {
   const str = mhz.toFixed(3);
@@ -216,7 +255,6 @@ function toSpokenFrequency(mhz: number): string {
 
 /**
  * Build the spoken text for a full comms prompt.
- * e.g. "NASA five zero four, COM one, one one eight decimal three"
  */
 function buildPromptText(callsign: string, radioLabel: string, freqMhz: number): string {
   return `${callsign}, ${radioLabel}, ${toSpokenFrequency(freqMhz)}`;
@@ -224,20 +262,11 @@ function buildPromptText(callsign: string, radioLabel: string, freqMhz: number):
 
 /**
  * Build the clip ID sequence for a comms prompt (OpenMATB-style).
- * Callsign characters → letter/digit clip IDs.
- * Radio label → "com_1", "com_2", "nav_1", "nav_2".
- * Frequency → digit + "point" clips.
- *
- * e.g. callsign="NASA504", radio="com1", freq=118.3
- *   → ["n","a","s","a","5","0","4", "com_1", "frequency", "1","1","8","point","3"]
  */
 function buildPromptClipSequence(callsign: string, radioId: string, freqMhz: number): string[] {
-  // Matches OpenMATB communications.py group_audio_files():
-  //   ["empty"]*20 + callsign*2 + ["radio"] + [radio_name] + ["frequency"] + freq_digits + ["empty"]
-
   const ids: string[] = [];
 
-  // 20 silence clips (inter-prompt gap / attention buffer).
+  // 20 silence clips.
   for (let i = 0; i < 20; i++) ids.push("empty");
 
   // Callsign announced twice.
@@ -248,7 +277,6 @@ function buildPromptClipSequence(callsign: string, radioId: string, freqMhz: num
   ids.push(...callsignClips, ...callsignClips);
 
   // "radio" cue word then the radio clip ID.
-  // Radio: map "com1"→"com_1", "com2"→"com_2", "nav1"→"nav_1", "nav2"→"nav_2".
   const radioClipId = radioId
     .toLowerCase()
     .replace(/^(com|nav)(\d)$/, "$1_$2");
@@ -275,7 +303,6 @@ function buildPromptClipSequence(callsign: string, radioId: string, freqMhz: num
 
 /**
  * Build the AudioClipManifest for the English-male clip set.
- * Maps each clip ID to its URL under `baseUrl`.
  */
 function buildAudioClipManifest(baseUrl: string): Record<string, string> {
   const base = baseUrl.replace(/\/$/, "");
@@ -365,6 +392,9 @@ function resolveConfig(raw: Record<string, unknown>): ResolvedCommsConfig {
     speech,
     clips,
     keys,
+    automated: raw.automated === true || raw.automated === "true",
+    muteAudio: raw.muteAudio === true || raw.muteAudio === "true",
+    automatedResponseDelayMs: toNonNegativeNumber(raw.automatedResponseDelayMs, 0),
   };
 }
 
@@ -385,6 +415,17 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
   let container: HTMLElement | null = null;
   let startMs = 0;
 
+  // Continuous frequency modulation — matches OpenMATB's held-key behaviour
+  // (0.1 MHz per 80 ms update cycle).
+  const heldKeys = new Set<string>();
+  let freqModAccMs = 0;
+  const MODULATION_INTERVAL_MS = 80;
+  let keyUpListener: ((e: KeyboardEvent) => void) | null = null;
+
+  // Maximum time to wait for audio completion before treating it as done.
+  // Guards against speech-synthesis onEnd never firing (e.g. context suspend).
+  const MAX_AUDIO_WAIT_MS = 15000;
+
   // ── Prompt helpers ──────────────────────────────────────────────────────
 
   function startPrompt(value: unknown): void {
@@ -395,90 +436,104 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
     const targetFreq   = toPositiveFloat(v.frequency, config.radios[0]?.defaultFreqMhz ?? 118.0);
     const isOwn        = callsign.toLowerCase() === config.ownCallsign.toLowerCase();
 
-    let speechHandle: ReturnType<AudioService["speakText"]> | null = null;
-    let usingClips = false;
-
-    if (config.clips && audio) {
-      // Clip-based playback: fire-and-forget (sequence is async but we don't await).
-      usingClips = true;
-      const clipIds = buildPromptClipSequence(callsign, radioId, targetFreq);
-      const gapMs = config.clips.gapMs ?? 0;
-      audio.playSequence(clipIds, gapMs).catch(() => {});
-    } else if (audio) {
-      // Find the radio label for the spoken prompt.
-      const radioDef = config.radios.find((r) => r.id === radioId);
-      const radioLabel = radioDef?.label ?? radioId.toUpperCase();
-      const promptText = buildPromptText(callsign, radioLabel, targetFreq);
-      speechHandle = audio.speakText(promptText, {
-        voiceNames: config.speech.voiceNames,
-        lang:       config.speech.lang,
-        rate:       config.speech.rate,
-        pitch:      config.speech.pitch,
-      });
-    }
-
-    activePrompt = {
+    const prompt: ActivePrompt = {
       callsign,
       targetRadioId: radioId,
       targetFreqMhz: targetFreq,
       isOwn,
-      startMs:    performance.now() - startMs,
-      promptIdx:  promptIdxCounter++,
-      elapsedMs:  0,
-      speechHandle,
-      usingClips,
+      startMs:       performance.now() - startMs,
+      promptIdx:     promptIdxCounter++,
+      audioFinished: false,
+      audioElapsedMs: 0,
+      totalElapsedMs: 0,
+      speechHandle:  null,
+      usingClips:    false,
     };
+    activePrompt = prompt;
+
+    // Mark audio as finished on completion — timer and RT start from this point,
+    // matching OpenMATB's response_time accumulation after is_prompting = False.
+    const markAudioDone = (): void => {
+      if (activePrompt === prompt) {
+        prompt.audioFinished = true;
+      }
+    };
+
+    if (config.muteAudio) {
+      // Audio disabled — treat as immediately finished; visual display is
+      // driven by automatedResponseDelayMs in step() when automated.
+      prompt.audioFinished = true;
+    } else if (config.clips && audio) {
+      prompt.usingClips = true;
+      const clipIds = buildPromptClipSequence(callsign, radioId, targetFreq);
+      const gapMs = config.clips.gapMs ?? 0;
+      audio.playSequence(clipIds, gapMs).then(markAudioDone).catch(markAudioDone);
+    } else if (audio) {
+      const radioDef = config.radios.find((r) => r.id === radioId);
+      const radioLabel = radioDef?.label ?? radioId.toUpperCase();
+      const promptText = buildPromptText(callsign, radioLabel, targetFreq);
+      prompt.speechHandle = audio.speakText(promptText, {
+        voiceNames: config.speech.voiceNames,
+        lang:       config.speech.lang,
+        rate:       config.speech.rate,
+        pitch:      config.speech.pitch,
+        onEnd:      markAudioDone,
+      });
+    } else {
+      // No audio service — treat as immediately done.
+      prompt.audioFinished = true;
+    }
   }
 
+  /**
+   * Called when the participant confirms (Enter) after audio has finished.
+   * Scores the response as HIT/MISS/BAD_RADIO/BAD_FREQ/FA/CR and closes the prompt.
+   */
   function resolvePrompt(respondedNow: boolean): void {
     if (!activePrompt || !config) return;
 
     const p = activePrompt;
-    const responded = respondedNow;
     const currentRadio = radios[selectedIdx];
-    const rt = responded ? (performance.now() - startMs) - p.startMs : null;
+    // RT is time from audio end to confirmation, matching OpenMATB.
+    const rt = respondedNow ? Math.round(p.audioElapsedMs) : null;
 
-    // Determine outcome.
     let outcome: CommsOutcome;
     let freqDeviation: number | null = null;
 
     if (p.isOwn) {
-      if (responded) {
+      if (respondedNow) {
         const selectedRadioId = currentRadio?.config.id ?? null;
-        const enteredFreqMhz = currentRadio?.frequencyMhz ?? null;
+        const enteredFreqMhz  = currentRadio?.frequencyMhz ?? null;
         const radioMatch = selectedRadioId === p.targetRadioId;
-        // Signed deviation rounded to 0.1 MHz precision, matching OpenMATB:
-        // round(currentfreq - targetfreq, 1)
         freqDeviation = enteredFreqMhz !== null
           ? Math.round((enteredFreqMhz - p.targetFreqMhz) * 10) / 10
           : null;
         const freqMatch = freqDeviation === 0;
-        if (radioMatch && freqMatch) outcome = "HIT";
+        if (radioMatch && freqMatch)       outcome = "HIT";
         else if (!radioMatch && freqMatch) outcome = "BAD_RADIO";
         else if (radioMatch && !freqMatch) outcome = "BAD_FREQ";
-        else outcome = "BAD_RADIO_FREQ";
+        else                               outcome = "BAD_RADIO_FREQ";
       } else {
         outcome = "MISS";
       }
     } else {
-      outcome = responded ? "FA" : "CR";
+      outcome = respondedNow ? "FA" : "CR";
     }
 
     records.push({
-      promptIdx:       p.promptIdx,
-      callsign:        p.callsign,
-      isOwnCallsign:   p.isOwn,
-      targetRadio:     p.targetRadioId,
-      targetFreqMhz:   p.targetFreqMhz,
-      selectedRadio:   responded ? (currentRadio?.config.id ?? null) : null,
-      enteredFreqMhz:  responded ? (currentRadio?.frequencyMhz ?? null) : null,
+      promptIdx:        p.promptIdx,
+      callsign:         p.callsign,
+      isOwnCallsign:    p.isOwn,
+      targetRadio:      p.targetRadioId,
+      targetFreqMhz:    p.targetFreqMhz,
+      selectedRadio:    respondedNow ? (currentRadio?.config.id ?? null) : null,
+      enteredFreqMhz:   respondedNow ? (currentRadio?.frequencyMhz ?? null) : null,
       freqDeviationMhz: freqDeviation,
-      responded,
+      responded:        respondedNow,
       outcome,
-      rtMs: rt !== null ? Math.round(rt) : null,
+      rtMs: rt,
     });
 
-    // Stop audio if still playing.
     if (p.usingClips) {
       audio?.stopAll();
     } else {
@@ -487,7 +542,55 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
     activePrompt = null;
   }
 
+  /**
+   * Called when Enter is pressed while audio is still playing.
+   * Matches OpenMATB behaviour: pressing Enter before is_prompting transitions
+   * to False is scored as a FA (no target is "waiting" yet), and the prompt
+   * remains open so the participant can still respond correctly after audio ends.
+   */
+  function handleEarlyConfirm(): void {
+    if (!activePrompt || !config) return;
+    const p = activePrompt;
+    const currentRadio = radios[selectedIdx];
+
+    records.push({
+      promptIdx:        p.promptIdx,
+      callsign:         p.callsign,
+      isOwnCallsign:    p.isOwn,
+      targetRadio:      p.targetRadioId,
+      targetFreqMhz:    p.targetFreqMhz,
+      selectedRadio:    currentRadio?.config.id ?? null,
+      enteredFreqMhz:   currentRadio?.frequencyMhz ?? null,
+      freqDeviationMhz: null,
+      responded:        true,
+      outcome:          "FA",
+      rtMs:             null,
+    });
+    // Prompt stays open — participant can still respond after audio ends.
+  }
+
   // ── Rendering ─────────────────────────────────────────────────────────
+
+  let handoverBanner: { text: string; isAuto: boolean; startMs: number } | null = null;
+  const BANNER_MS = 2500;
+
+  function drawHandoverBanner(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    if (!handoverBanner) return;
+    const elapsed = performance.now() - handoverBanner.startMs;
+    if (elapsed >= BANNER_MS) { handoverBanner = null; return; }
+    const alpha = Math.max(0, 1 - elapsed / BANNER_MS);
+    const color = handoverBanner.isAuto ? "rgba(56, 189, 248, 0.9)" : "rgba(251, 146, 60, 0.9)";
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, Math.round(h * 0.38), w, Math.round(h * 0.24));
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(h * 0.1)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(handoverBanner.text, w / 2, Math.round(h / 2));
+    ctx.restore();
+  }
 
   function renderAll(): void {
     if (!ctx2d || !canvas || !config) return;
@@ -495,48 +598,48 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
     const h = canvas.height;
 
     ctx2d.clearRect(0, 0, w, h);
-    ctx2d.fillStyle = "#0d1117";
+    ctx2d.fillStyle = "#f0f0f0";
     ctx2d.fillRect(0, 0, w, h);
 
-    // Header.
-    const headerH = Math.round(h * 0.08);
-    ctx2d.fillStyle = "#334155";
-    ctx2d.fillRect(0, 0, w, headerH);
-    ctx2d.fillStyle = "#94a3b8";
-    ctx2d.font = `bold ${Math.round(headerH * 0.55)}px monospace`;
-    ctx2d.textAlign = "center";
-    ctx2d.textBaseline = "middle";
-    ctx2d.fillText("COMMUNICATIONS", w / 2, headerH / 2);
-
-    // "INCOMING" indicator when a prompt is active.
-    if (activePrompt) {
-      ctx2d.fillStyle = activePrompt.isOwn ? "#ef4444" : "#f59e0b";
-      ctx2d.font = `bold ${Math.round(headerH * 0.45)}px monospace`;
-      ctx2d.textAlign = "right";
-      ctx2d.fillText("INCOMING", w - 8, headerH / 2);
+    // Automation accent: subtle left-edge bar when automated.
+    if (config.automated) {
+      ctx2d.fillStyle = "rgba(56, 189, 148, 0.25)";
+      ctx2d.fillRect(0, 0, 4, h);
     }
 
-    // Radios.
-    const radioAreaTop = headerH + 4;
-    const radioAreaH = h - radioAreaTop - 4;
+    // Callsign display — matching OpenMATB "Indicatif   {callsign}".
+    const callsignY = Math.round(h * 0.12);
+    ctx2d.fillStyle = "#323232";
+    ctx2d.font = `14px sans-serif`;
+    ctx2d.textAlign = "left";
+    ctx2d.textBaseline = "middle";
+    ctx2d.fillText("Callsign", w * 0.12, callsignY);
+    ctx2d.textAlign = "right";
+    ctx2d.fillText(config.ownCallsign, w * 0.88, callsignY);
+
+    // Radios — matching OpenMATB: label + frequency, with arrows on selected.
+    const radioAreaTop = callsignY + 20;
+    const radioAreaH = h - radioAreaTop - 36;
     const radioH = Math.round(radioAreaH / radios.length);
-    const radioW = w - 4;
+    const radioW = w - 16;
 
     for (let i = 0; i < radios.length; i++) {
       const r = radios[i];
       renderRadio(
         r.config,
         { frequencyMhz: r.frequencyMhz, selected: i === selectedIdx },
-        { ctx: ctx2d, x: 2, y: radioAreaTop + i * radioH, width: radioW, height: radioH - 3 },
+        { ctx: ctx2d, x: 8, y: radioAreaTop + i * radioH, width: radioW, height: radioH - 4 },
       );
     }
 
-    // Key hint at bottom (small text).
-    ctx2d.fillStyle = "#475569";
-    ctx2d.font = `${Math.max(9, Math.round(h * 0.035))}px monospace`;
+    // "MANUAL" / "AUTO" mode label at bottom.
+    ctx2d.fillStyle = "#323232";
+    ctx2d.font = "12px sans-serif";
     ctx2d.textAlign = "center";
     ctx2d.textBaseline = "bottom";
-    ctx2d.fillText("↑↓ select radio  ←→ tune  Enter confirm", w / 2, h - 2);
+    ctx2d.fillText(config.automated ? "AUTO" : "MANUAL", w / 2, h - 6);
+
+    drawHandoverBanner(ctx2d, w, h);
   }
 
   // ── Public interface ───────────────────────────────────────────────────
@@ -560,7 +663,6 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       ctx2d = canvas.getContext("2d");
       if (!ctx2d) throw new Error("Canvas 2D context unavailable for comms.");
 
-      // Initialise radio runtimes.
       radios = config.radios.map((def) => ({
         config: { id: def.id, label: def.label },
         frequencyMhz: def.defaultFreqMhz,
@@ -569,7 +671,6 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
 
       audio = new AudioService();
 
-      // Preload clips if clip-based audio is configured.
       if (config.clips) {
         const manifest = buildAudioClipManifest(config.clips.baseUrl);
         audio.preloadClips(manifest).catch((err) => {
@@ -577,61 +678,116 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
         });
       }
 
+      // Track key-up events to support continuous held-key frequency tuning,
+      // matching OpenMATB's modulate_frequency() called every 80 ms while held.
+      heldKeys.clear();
+      freqModAccMs = 0;
+      keyUpListener = (e: KeyboardEvent): void => {
+        heldKeys.delete(e.key.toLowerCase());
+      };
+      document.addEventListener("keyup", keyUpListener);
+
       startMs = performance.now();
     },
 
     step(_now: number, dt: number): void {
-      if (!config || !activePrompt) {
+      if (!config) {
         renderAll();
         return;
       }
 
-      // Count down response window.
-      activePrompt.elapsedMs += dt;
-      if (activePrompt.elapsedMs >= config.responseTimeoutMs) {
-        resolvePrompt(false); // MISS or CR
+      // Tick active prompt timers.
+      if (activePrompt) {
+        activePrompt.totalElapsedMs += dt;
+
+        // Fallback: if audio completion never fires within MAX_AUDIO_WAIT_MS,
+        // treat audio as done so the response window still opens.
+        if (!activePrompt.audioFinished && activePrompt.totalElapsedMs >= MAX_AUDIO_WAIT_MS) {
+          activePrompt.audioFinished = true;
+        }
+
+        if (activePrompt.audioFinished) {
+          activePrompt.audioElapsedMs += dt;
+
+          if (config.automated && activePrompt.audioElapsedMs >= config.automatedResponseDelayMs) {
+            // Auto-respond: set correct state for own-callsign then resolve.
+            if (activePrompt.isOwn) {
+              const targetIdx = radios.findIndex((r) => r.config.id === activePrompt!.targetRadioId);
+              if (targetIdx !== -1) {
+                selectedIdx = targetIdx;
+                radios[targetIdx]!.frequencyMhz = activePrompt.targetFreqMhz;
+              }
+            }
+            resolvePrompt(activePrompt.isOwn); // HIT for own, CR for others
+          } else if (!config.automated && activePrompt.audioElapsedMs >= config.responseTimeoutMs) {
+            // Timeout: matches OpenMATB maxresponsedelay from audio-end.
+            resolvePrompt(false); // MISS or CR
+          }
+        }
+      }
+
+      // Continuous frequency modulation — 0.1 MHz per 80 ms while key held,
+      // matching OpenMATB's modulate_frequency() polled each update cycle.
+      if (heldKeys.has(config.keys.freqUp) || heldKeys.has(config.keys.freqDown)) {
+        freqModAccMs += dt;
+        while (freqModAccMs >= MODULATION_INTERVAL_MS) {
+          freqModAccMs -= MODULATION_INTERVAL_MS;
+          const r = radios[selectedIdx];
+          if (r) {
+            if (heldKeys.has(config.keys.freqUp)) {
+              r.frequencyMhz = Math.min(
+                config.frequencyRange.maxMhz,
+                Math.round((r.frequencyMhz + config.frequencyRange.stepMhz) * 1000) / 1000,
+              );
+            }
+            if (heldKeys.has(config.keys.freqDown)) {
+              r.frequencyMhz = Math.max(
+                config.frequencyRange.minMhz,
+                Math.round((r.frequencyMhz - config.frequencyRange.stepMhz) * 1000) / 1000,
+              );
+            }
+          }
+        }
+      } else {
+        freqModAccMs = 0;
       }
 
       renderAll();
     },
 
     handleKeyDown(key: string, _now: number): boolean {
-      if (!config) return false;
+      if (!config || config.automated) return false;
       const k = key.toLowerCase();
 
+      // Track all key presses for continuous modulation.
+      heldKeys.add(k);
+
+      // Radio selection — clamped (not wrapped), matching OpenMATB's
+      // keep_value_between(pos + delta, down=min_pos, up=max_pos).
       if (k === config.keys.radioUp) {
-        selectedIdx = (selectedIdx - 1 + radios.length) % radios.length;
+        selectedIdx = Math.max(0, selectedIdx - 1);
         return true;
       }
       if (k === config.keys.radioDown) {
-        selectedIdx = (selectedIdx + 1) % radios.length;
+        selectedIdx = Math.min(radios.length - 1, selectedIdx + 1);
         return true;
       }
 
-      if (k === config.keys.freqUp) {
-        const r = radios[selectedIdx];
-        if (r) {
-          r.frequencyMhz = Math.min(
-            config.frequencyRange.maxMhz,
-            Math.round((r.frequencyMhz + config.frequencyRange.stepMhz) * 1000) / 1000,
-          );
-        }
-        return true;
-      }
-      if (k === config.keys.freqDown) {
-        const r = radios[selectedIdx];
-        if (r) {
-          r.frequencyMhz = Math.max(
-            config.frequencyRange.minMhz,
-            Math.round((r.frequencyMhz - config.frequencyRange.stepMhz) * 1000) / 1000,
-          );
-        }
+      // Frequency keys: held-key modulation is handled in step(); just consume
+      // the event here so the runner doesn't route it elsewhere.
+      if (k === config.keys.freqUp || k === config.keys.freqDown) {
         return true;
       }
 
       if (k === config.keys.confirm) {
         if (activePrompt) {
-          resolvePrompt(true); // HIT or FA
+          if (!activePrompt.audioFinished) {
+            // Audio still playing: FA, prompt stays open (matches OpenMATB
+            // pressing Enter while is_prompting = True → no waiting radio → FA).
+            handleEarlyConfirm();
+          } else {
+            resolvePrompt(true);
+          }
         }
         return true;
       }
@@ -648,6 +804,13 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       if (event.command === "set" && event.path === "ownCallsign" && config) {
         config.ownCallsign = asString(event.value) ?? config.ownCallsign;
       }
+      if (event.command === "set" && event.path === "automated") {
+        const newAutomated = event.value === true || event.value === "true";
+        if (config && newAutomated !== config.automated) {
+          config.automated = newAutomated;
+          handoverBanner = { text: newAutomated ? "→ AUTO" : "→ MANUAL", isAuto: newAutomated, startMs: performance.now() };
+        }
+      }
     },
 
     stop(): CommsSubTaskResult {
@@ -657,19 +820,25 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       audio?.dispose();
       audio = null;
 
+      if (keyUpListener) {
+        document.removeEventListener("keyup", keyUpListener);
+        keyUpListener = null;
+      }
+      heldKeys.clear();
+
       if (container) container.innerHTML = "";
 
       const elapsed = performance.now() - startMs;
       const result: CommsSubTaskResult = {
         elapsedMs: Math.round(elapsed),
         records: [...records],
-        hitCount:         records.filter((r) => r.outcome === "HIT").length,
-        missCount:        records.filter((r) => r.outcome === "MISS").length,
-        badRadioCount:    records.filter((r) => r.outcome === "BAD_RADIO").length,
-        badFreqCount:     records.filter((r) => r.outcome === "BAD_FREQ").length,
+        hitCount:          records.filter((r) => r.outcome === "HIT").length,
+        missCount:         records.filter((r) => r.outcome === "MISS").length,
+        badRadioCount:     records.filter((r) => r.outcome === "BAD_RADIO").length,
+        badFreqCount:      records.filter((r) => r.outcome === "BAD_FREQ").length,
         badRadioFreqCount: records.filter((r) => r.outcome === "BAD_RADIO_FREQ").length,
-        faCount:          records.filter((r) => r.outcome === "FA").length,
-        crCount:          records.filter((r) => r.outcome === "CR").length,
+        faCount:           records.filter((r) => r.outcome === "FA").length,
+        crCount:           records.filter((r) => r.outcome === "CR").length,
       };
 
       // Reset.
@@ -682,12 +851,13 @@ export function createCommsSubTaskHandle(): SubTaskHandle<CommsSubTaskResult> {
       canvas = null;
       ctx2d = null;
       container = null;
+      freqModAccMs = 0;
 
       return result;
     },
 
     getPerformance(): SubTaskPerformance {
-      const targets   = records.filter((r) => r.isOwnCallsign);
+      const targets    = records.filter((r) => r.isOwnCallsign);
       const nonTargets = records.filter((r) => !r.isOwnCallsign);
       const hits   = targets.filter((r) => r.outcome === "HIT").length;
       const misses = targets.filter((r) => r.outcome === "MISS").length;

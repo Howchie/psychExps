@@ -57,7 +57,7 @@ const hoverToClearDemand = (brick, conveyor, config) => {
   ) || speed;
   const expectedClearMs = (width / processRatePxPerSec) * 1000;
   return {
-    mode: 'hover_to_clear',
+    mode: config?.bricks?.completionMode === 'hold_to_clear' ? 'hold_to_clear' : 'hover_to_clear',
     width_px: width,
     speed_px_per_sec: speed,
     hover_process_rate_px_s: processRatePxPerSec,
@@ -93,6 +93,21 @@ const brickDemandEstimate = (brick, conveyor, config) => {
   if (mode === 'hover_to_clear') {
     return hoverToClearDemand(brick, conveyor, config);
   }
+  if (mode === 'hold_to_clear') {
+    return hoverToClearDemand(brick, conveyor, {
+      ...config,
+      bricks: {
+        ...(config?.bricks || {}),
+        completionParams: {
+          ...(config?.bricks?.completionParams || {}),
+          hover_process_rate_px_s: finiteOr(
+            config?.bricks?.completionParams?.hold_process_rate_px_s,
+            config?.bricks?.completionParams?.hover_process_rate_px_s
+          ),
+        },
+      },
+    });
+  }
   if (mode === 'single_click' || mode === 'multi_click') {
     return clickDemand(brick, config);
   }
@@ -107,6 +122,7 @@ const brickDemandEstimate = (brick, conveyor, config) => {
 };
 
 const hoverToClearAvailableMs = (brick, conveyor, config) => {
+  const mode = config?.bricks?.completionMode;
   const speed = Math.max(1e-6, finiteOr(conveyor?.speed, finiteOr(brick?.speed, 1)));
   const length = Math.max(0, finiteOr(conveyor?.length, 0));
   const x = Math.max(0, finiteOr(brick?.x, 0));
@@ -114,7 +130,12 @@ const hoverToClearAvailableMs = (brick, conveyor, config) => {
   const rightEdgeDistance = length - (x + width);
   const processRatePxPerSec = Math.max(
     0,
-    finiteOr(config?.bricks?.completionParams?.hover_process_rate_px_s, speed)
+    finiteOr(
+      mode === 'hold_to_clear'
+        ? config?.bricks?.completionParams?.hold_process_rate_px_s
+        : config?.bricks?.completionParams?.hover_process_rate_px_s,
+      speed
+    )
   ) || speed;
   const edgeVelocityPxPerSec = speed - processRatePxPerSec;
 
@@ -134,7 +155,7 @@ const brickSupplyEstimate = (brick, conveyor, config) => {
   const width = Math.max(1, finiteOr(brick?.width, 1));
   const remainingDistancePx = Math.max(0, length - (x + width));
   const completionMode = config?.bricks?.completionMode;
-  const availableMs = completionMode === 'hover_to_clear'
+  const availableMs = completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear'
     ? hoverToClearAvailableMs(brick, conveyor, config)
     : (remainingDistancePx / speed) * 1000;
   return {

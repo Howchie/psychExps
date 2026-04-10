@@ -422,6 +422,7 @@ export class ConveyorRenderer {
   config: Record<string, any>;
   onBrickClick: (brickId: string, x: number | null, y: number | null) => void;
   onBrickHold: (brickId: string, durationMs: number, x: number | null, y: number | null) => void;
+  onBrickHoldState: (brickId: string, isHolding: boolean, x: number | null, y: number | null) => void;
   onBrickHover: (brickId: string, hovering: boolean, x: number | null, y: number | null) => void;
   onPointerDebug: (payload: Record<string, any>) => void;
   runtimeLengths: number[] | null;
@@ -444,12 +445,12 @@ export class ConveyorRenderer {
   interactionLayer: PIXI.Container | null;
   conveyorZones: Map<string, PIXI.Graphics>;
   bricksByConveyor: Map<string, any[]>;
-  conveyorHoldStart: Map<string, { brickId: string; t: number }>;
+  conveyorHoldStart: Map<string, { brickId: string; t: number | null; mode: 'hold_duration' | 'hold_to_clear' }>;
   conveyorHovered: Set<string>;
   conveyorHoverTarget: Map<string, string>;
   conveyorPointerPos: Map<string, { x: number | null; y: number | null }>;
   spotlightZone: PIXI.Graphics | null;
-  spotlightHoldStart: { brickId: string; t: number } | null;
+  spotlightHoldStart: { brickId: string; t: number | null; mode: 'hold_duration' | 'hold_to_clear' } | null;
   spotlightHoveredBrickId: string | null;
   spotlightPointerPos: { x: number | null; y: number | null };
   spotlightPointerInside: boolean;
@@ -492,10 +493,11 @@ export class ConveyorRenderer {
   hudLayer!: PIXI.Container;
   drtLayer!: PIXI.Container;
 
-  constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
+  constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHoldState, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
     this.config = config;
     this.onBrickClick = typeof onBrickClick === 'function' ? onBrickClick : () => {};
     this.onBrickHold = typeof onBrickHold === 'function' ? onBrickHold : () => {};
+    this.onBrickHoldState = typeof onBrickHoldState === 'function' ? onBrickHoldState : () => {};
     this.onBrickHover = typeof onBrickHover === 'function' ? onBrickHover : () => {};
     this.onPointerDebug = typeof onPointerDebug === 'function' ? onPointerDebug : () => {};
     this.runtimeLengths = Array.isArray(runtimeLengths) ? runtimeLengths.slice() : null;
@@ -728,24 +730,9 @@ export class ConveyorRenderer {
         return;
       }
       const renderMode = String(texCfg.renderMode ?? 'image').toLowerCase();
-      const scrollRenderMode = String(texCfg.scrollRenderMode ?? 'auto').trim().toLowerCase();
-      const useProceduralRedraw = renderMode === 'procedural_topdown' && scrollRenderMode !== 'tiling';
-      if (useProceduralRedraw) {
-        // Redraw mode does not sample from a texture atlas.
-        this.beltTexture = null;
-        this.beltTextureOwned = false;
-        return;
-      }
       if (renderMode === 'procedural_topdown') {
-        const styleCfg = this._resolveBeltProceduralStyleConfig(texCfg);
-        const key = makeMaterialKey(
-          'belt:procedural_topdown',
-          styleCfg,
-          (this.seed ^ 0x7f4a7c15) >>> 0
-        );
-        this.beltTexture = getOrCreateProceduralTexture(this.app?.renderer, key, () =>
-          this._buildProceduralTopdownBeltTexture(styleCfg)
-        );
+        // Handled per-lane in _drawBelts to support height variations
+        this.beltTexture = null;
         this.beltTextureOwned = false;
         return;
       }
@@ -759,102 +746,8 @@ export class ConveyorRenderer {
     }
   }
 
-  _buildProceduralTopdownBeltTexture(styleCfg: Record<string, any> = {}) {
-    if (!this.app?.renderer) {
-      return null;
-    }
-    const tileSize = Math.max(48, Number(styleCfg.tileSizePx ?? 120));
-    const ribStep = Math.max(6, Number(styleCfg.ribStepPx ?? 12));
-    const ribWidth = Math.max(2, Math.min(ribStep - 1, Number(styleCfg.ribWidthPx ?? 8)));
-    const sideBand = Math.max(4, Number(styleCfg.sideBandPx ?? Math.round(tileSize * 0.16)));
-    const sideCleatStep = Math.max(8, Number(styleCfg.sideCleatStepPx ?? 16));
-    const sideCleatLen = Math.max(4, Number(styleCfg.sideCleatLengthPx ?? Math.round(sideCleatStep * 0.75)));
-    const shadeAlpha = Math.max(0, Math.min(1, Number(styleCfg.shadeAlpha ?? 0.55)));
-    const g = new PIXI.Graphics();
-    const beltBase = toPixiColor(styleCfg.baseColor ?? '#2a323b');
-    const beltShade = toPixiColor(styleCfg.shadeColor ?? '#202730');
-    const ribColor = toPixiColor(styleCfg.ribColor ?? '#4d5863');
-    const grooveColor = toPixiColor(styleCfg.grooveColor ?? '#2b333c');
-    const sideLineDark = toPixiColor(styleCfg.sideLineDarkColor ?? '#111827');
-    const sideLineLight = toPixiColor(styleCfg.sideLineLightColor ?? '#9ca3af');
-    const cleatColor = toPixiColor(styleCfg.sideCleatColor ?? '#6b7280');
-    const scuffColor = toPixiColor(styleCfg.scuffColor ?? '#cbd5e1');
-    const patchColor = toPixiColor(styleCfg.patchColor ?? '#111827');
-    const scuffCount = Math.max(0, Math.floor(Number(styleCfg.scuffCount ?? 0)));
-    const patchCount = Math.max(0, Math.floor(Number(styleCfg.patchCount ?? 0)));
-
-    g.beginFill(beltBase, 1);
-    g.drawRect(0, 0, tileSize, tileSize);
-    g.endFill();
-
-    if (shadeAlpha > 0) {
-      g.beginFill(beltShade, shadeAlpha);
-      g.drawRect(0, Math.floor(tileSize * 0.5), tileSize, Math.ceil(tileSize * 0.5));
-      g.endFill();
-    }
-
-    for (let x = 0; x < tileSize; x += ribStep) {
-      g.beginFill(ribColor, 0.9);
-      g.drawRect(x, sideBand + 2, ribWidth, tileSize - sideBand * 2 - 4);
-      g.endFill();
-
-      g.beginFill(grooveColor, 0.92);
-      g.drawRect(x + ribWidth, sideBand + 2, Math.max(1, ribStep - ribWidth), tileSize - sideBand * 2 - 4);
-      g.endFill();
-    }
-
-    for (let x = 0; x < tileSize; x += sideCleatStep) {
-      g.beginFill(cleatColor, 0.7);
-      g.drawRoundedRect(x, Math.max(1, sideBand - 8), sideCleatLen, 6, 1);
-      g.drawRoundedRect(x, Math.min(tileSize - 7, tileSize - sideBand + 2), sideCleatLen, 6, 1);
-      g.endFill();
-    }
-
-    g.beginFill(sideLineDark, 0.65);
-    g.drawRect(0, sideBand - 2, tileSize, 2);
-    g.drawRect(0, tileSize - sideBand, tileSize, 2);
-    g.endFill();
-
-    g.beginFill(sideLineLight, 0.2);
-    g.drawRect(0, sideBand, tileSize, 2);
-    g.drawRect(0, tileSize - sideBand - 2, tileSize, 2);
-    g.endFill();
-
-    for (let i = 0; i < scuffCount; i += 1) {
-      const x = Math.floor(this._nextRand() * tileSize);
-      const y = Math.floor(this._nextRand() * tileSize);
-      const w = Math.max(4, Math.floor(6 + this._nextRand() * 16));
-      const h = Math.max(1, Math.floor(1 + this._nextRand() * 2));
-      g.beginFill(scuffColor, 0.08 + this._nextRand() * 0.18);
-      g.drawRoundedRect(x, y, w, h, 1);
-      g.endFill();
-    }
-
-    for (let i = 0; i < patchCount; i += 1) {
-      const x = Math.floor(this._nextRand() * Math.max(1, tileSize - 18));
-      const y = Math.floor(this._nextRand() * Math.max(1, tileSize - 12));
-      const w = Math.max(10, Math.floor(10 + this._nextRand() * 16));
-      const h = Math.max(5, Math.floor(5 + this._nextRand() * 6));
-      g.beginFill(patchColor, 0.14 + this._nextRand() * 0.22);
-      g.drawRect(x, y, w, h);
-      g.endFill();
-      g.beginFill(sideLineLight, 0.18);
-      g.drawRect(x + 1, y + 1, Math.max(1, w - 2), 1);
-      g.endFill();
-    }
-
-    const texture = this.app.renderer.generateTexture(g, {
-      region: new PIXI.Rectangle(0, 0, tileSize, tileSize),
-      resolution: 1
-    });
-    g.destroy();
-    return texture;
-  }
-
   _drawProceduralTopdownBeltGraphics(target: PIXI.Graphics, {
-    beltLength,
     beltHeight,
-    phaseX = 0,
     styleCfg = {},
     styleScaleX = 1,
     styleScaleY = 1
@@ -862,23 +755,40 @@ export class ConveyorRenderer {
     if (!target) {
       return;
     }
-    const length = Math.max(1, Number(beltLength) || 1);
     const height = Math.max(1, Number(beltHeight) || 1);
     const pixelStep = (() => {
       const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
       return 1 / resolution;
     })();
-    const snap = (value: number) => this._roundSymmetric(value, pixelStep);
-    const snapSize = (value: number, min: number = pixelStep) => Math.max(min, snap(value));
 
     const tileSize = Math.max(48, Number(styleCfg.tileSizePx ?? 120));
     const patternScaleX = Math.max(1e-6, (height / tileSize) * Math.max(0.01, Number(styleScaleX) || 1));
     const patternScaleY = Math.max(1e-6, (height / tileSize) * Math.max(0.01, Number(styleScaleY) || 1));
-    const ribStep = Math.max(pixelStep * 2, snapSize(Number(styleCfg.ribStepPx ?? 12) * patternScaleX, pixelStep * 2));
+
+    const ribStepRaw = Math.max(pixelStep * 2, Number(styleCfg.ribStepPx ?? 12) * patternScaleX);
+    const ribStep = this._roundSymmetric(ribStepRaw, pixelStep);
+    const sideCleatStep = Math.max(pixelStep * 2, this._roundSymmetric(Number(styleCfg.sideCleatStepPx ?? 16) * patternScaleX, pixelStep));
+    
+    // Ensure tileWidth is a multiple of both ribStep and sideCleatStep for a seamless loop.
+    // 480 is a good base width, we round it up to the next common multiple.
+    const lcm = (a: number, b: number) => {
+      const step = Math.max(a, b, 1);
+      for (let i = step; i < 10000; i += 0.001) {
+        if (Math.abs(i % a) < 0.001 && Math.abs(i % b) < 0.001) return i;
+      }
+      return a * b;
+    };
+    // For simplicity since they are often integers or simple fractions:
+    const baseTileWidth = 480;
+    const ribCount = Math.ceil(baseTileWidth / ribStep);
+    const tileWidth = ribCount * ribStep;
+
+    const snap = (value: number) => this._roundSymmetric(value, pixelStep);
+    const snapSize = (value: number, min: number = pixelStep) => Math.max(min, snap(value));
+    
     const ribWidthRaw = snapSize(Number(styleCfg.ribWidthPx ?? 8) * patternScaleX, pixelStep);
     const ribWidth = Math.max(pixelStep, Math.min(ribStep - pixelStep, ribWidthRaw));
     const sideBand = Math.max(pixelStep, snapSize(Number(styleCfg.sideBandPx ?? Math.round(tileSize * 0.16)) * patternScaleY, pixelStep));
-    const sideCleatStep = Math.max(pixelStep * 2, snapSize(Number(styleCfg.sideCleatStepPx ?? 16) * patternScaleX, pixelStep * 2));
     const sideCleatLen = Math.max(pixelStep, snapSize(Number(styleCfg.sideCleatLengthPx ?? Math.round((Number(styleCfg.sideCleatStepPx ?? 16)) * 0.75)) * patternScaleX, pixelStep));
     const shadeAlpha = Math.max(0, Math.min(1, Number(styleCfg.shadeAlpha ?? 0.55)));
     const beltBase = toPixiColor(styleCfg.baseColor ?? '#2a323b');
@@ -893,66 +803,56 @@ export class ConveyorRenderer {
     const scuffCount = Math.max(0, Math.floor(Number(styleCfg.scuffCount ?? 0)));
     const patchCount = Math.max(0, Math.floor(Number(styleCfg.patchCount ?? 0)));
     const workingHeight = Math.max(pixelStep, snapSize(height - sideBand * 2 - (4 * patternScaleY), pixelStep));
-    // Procedural redraw uses screen-space phase so belt texture speed can match brick advection.
-    // Keep sign so visual direction matches prior belt motion convention.
-    // Use symmetric snap then negate to stay in sync with brick coordinates.
-    const phase = -snap(Number(phaseX) || 0);
-
-    const wrappedOffset = (step: number) => {
-      const s = Math.max(1, Number(step) || 1);
-      const rem = ((phase % s) + s) % s;
-      return -rem;
-    };
 
     target.clear();
+    // Fill background
     target.beginFill(beltBase, 1);
-    target.drawRect(0, 0, length, height);
+    target.drawRect(0, 0, tileWidth, height);
     target.endFill();
 
     if (shadeAlpha > 0) {
       target.beginFill(beltShade, shadeAlpha);
-      target.drawRect(0, Math.floor(height * 0.5), length, Math.ceil(height * 0.5));
+      target.drawRect(0, Math.floor(height * 0.5), tileWidth, Math.ceil(height * 0.5));
       target.endFill();
     }
 
-    for (let x = wrappedOffset(ribStep); x < length + ribStep; x += ribStep) {
+    // Ribs
+    for (let x = 0; x < tileWidth; x += ribStep) {
       target.beginFill(ribColor, 0.9);
-      const xPos = snap(x);
-      target.drawRect(xPos, snap(sideBand + 2), ribWidth, workingHeight);
+      target.drawRect(x, snap(sideBand + 2), ribWidth, workingHeight);
       target.endFill();
 
       target.beginFill(grooveColor, 0.92);
-      const grooveX = snap(xPos + ribWidth);
+      const grooveX = snap(x + ribWidth);
       const grooveW = Math.max(pixelStep, snapSize(ribStep - ribWidth, pixelStep));
       target.drawRect(grooveX, snap(sideBand + 2), grooveW, workingHeight);
       target.endFill();
     }
 
-    for (let x = wrappedOffset(sideCleatStep); x < length + sideCleatStep; x += sideCleatStep) {
-      const xPos = snap(x);
+    // Side Cleats
+    for (let x = 0; x < tileWidth; x += sideCleatStep) {
       const cleatH = Math.max(pixelStep, snapSize(6 * patternScaleY, pixelStep));
       const cleatYTop = snap(Math.max(pixelStep, sideBand - (8 * patternScaleY)));
       const cleatYBottom = snap(Math.min(height - (7 * patternScaleY), height - sideBand + (2 * patternScaleY)));
       target.beginFill(cleatColor, 0.7);
-      target.drawRoundedRect(xPos, cleatYTop, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
-      target.drawRoundedRect(xPos, cleatYBottom, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
+      target.drawRoundedRect(x, cleatYTop, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
+      target.drawRoundedRect(x, cleatYBottom, sideCleatLen, cleatH, Math.max(pixelStep, snapSize(patternScaleY, pixelStep)));
       target.endFill();
     }
 
+    // Side lines
     const lineH = Math.max(pixelStep, snapSize(2 * patternScaleY, pixelStep));
     target.beginFill(sideLineDark, 0.65);
-    target.drawRect(0, snap(sideBand - (2 * patternScaleY)), length, lineH);
-    target.drawRect(0, snap(height - sideBand), length, lineH);
+    target.drawRect(0, snap(sideBand - (2 * patternScaleY)), tileWidth, lineH);
+    target.drawRect(0, snap(height - sideBand), tileWidth, lineH);
     target.endFill();
 
     target.beginFill(sideLineLight, 0.2);
-    target.drawRect(0, snap(sideBand), length, lineH);
-    target.drawRect(0, snap(height - sideBand - (2 * patternScaleY)), length, lineH);
+    target.drawRect(0, snap(sideBand), tileWidth, lineH);
+    target.drawRect(0, snap(height - sideBand - (2 * patternScaleY)), tileWidth, lineH);
     target.endFill();
 
-    const tileSpanX = Math.max(pixelStep, snapSize(tileSize * patternScaleX, pixelStep));
-    const tileSpanY = Math.max(pixelStep, snapSize(tileSize * patternScaleY, pixelStep));
-    const tileStart = wrappedOffset(tileSpanX) - tileSpanX;
+    // Procedural wear (random scuffs/patches)
     const prand = (seed: number) => {
       let x = (seed >>> 0) || 1;
       x ^= (x << 13) >>> 0;
@@ -961,45 +861,41 @@ export class ConveyorRenderer {
       return (x >>> 0) / 0x100000000;
     };
 
-    // Re-apply procedural wear accents so preset styles (e.g. damaged belts) stay distinguishable.
     if (scuffCount > 0) {
-      for (let tx = tileStart; tx < length + tileSpanX; tx += tileSpanX) {
-        for (let i = 0; i < scuffCount; i += 1) {
-          const s0 = (i * 73856093) ^ 0x1f123bb5;
-          const s1 = (i * 19349663) ^ 0x7a4d4c95;
-          const s2 = (i * 83492791) ^ 0x12b9b0a1;
-          const s3 = (i * 2654435761) ^ 0x4f1bbcdc;
-          const px = snap(tx + (prand(s0) * tileSize * patternScaleX));
-          const py = snap(prand(s1) * tileSpanY);
-          const w = snapSize((6 + prand(s2) * 16) * patternScaleX, pixelStep);
-          const h = snapSize((1 + prand(s3) * 2) * patternScaleY, pixelStep);
-          target.beginFill(scuffColor, 0.08 + prand(s1 ^ 0x9e3779b9) * 0.18);
-          target.drawRoundedRect(px, py, w, h, Math.max(pixelStep, h * 0.4));
-          target.endFill();
-        }
+      for (let i = 0; i < scuffCount * (tileWidth / 120); i += 1) {
+        const s0 = (i * 73856093) ^ 0x1f123bb5;
+        const s1 = (i * 19349663) ^ 0x7a4d4c95;
+        const s2 = (i * 83492791) ^ 0x12b9b0a1;
+        const s3 = (i * 2654435761) ^ 0x4f1bbcdc;
+        const px = snap(prand(s0) * tileWidth);
+        const py = snap(prand(s1) * height);
+        const w = snapSize((6 + prand(s2) * 16) * patternScaleX, pixelStep);
+        const h = snapSize((1 + prand(s3) * 2) * patternScaleY, pixelStep);
+        target.beginFill(scuffColor, 0.08 + prand(s1 ^ 0x9e3779b9) * 0.18);
+        target.drawRoundedRect(px, py, w, h, Math.max(pixelStep, h * 0.4));
+        target.endFill();
       }
     }
 
     if (patchCount > 0) {
-      for (let tx = tileStart; tx < length + tileSpanX; tx += tileSpanX) {
-        for (let i = 0; i < patchCount; i += 1) {
-          const s0 = (i * 2654435761) ^ 0x55aaff11;
-          const s1 = (i * 374761393) ^ 0x9b93f6d5;
-          const s2 = (i * 1103515245) ^ 0x3c6ef372;
-          const s3 = (i * 668265263) ^ 0xda3e39cb;
-          const w = snapSize((10 + prand(s2) * 16) * patternScaleX, pixelStep);
-          const h = snapSize((5 + prand(s3) * 6) * patternScaleY, pixelStep);
-          const px = snap(tx + (prand(s0) * Math.max(pixelStep, tileSpanX - w)));
-          const py = snap(prand(s1) * Math.max(pixelStep, tileSpanY - h));
-          target.beginFill(patchColor, 0.14 + prand(s2 ^ 0x6a09e667) * 0.22);
-          target.drawRect(px, py, w, h);
-          target.endFill();
-          target.beginFill(sideLineLight, 0.18);
-          target.drawRect(px + pixelStep, py + pixelStep, Math.max(pixelStep, w - pixelStep * 2), pixelStep);
-          target.endFill();
-        }
+      for (let i = 0; i < patchCount * (tileWidth / 120); i += 1) {
+        const s0 = (i * 2654435761) ^ 0x55aaff11;
+        const s1 = (i * 374761393) ^ 0x9b93f6d5;
+        const s2 = (i * 1103515245) ^ 0x3c6ef372;
+        const s3 = (i * 668265263) ^ 0xda3e39cb;
+        const w = snapSize((10 + prand(s2) * 16) * patternScaleX, pixelStep);
+        const h = snapSize((5 + prand(s3) * 6) * patternScaleY, pixelStep);
+        const px = snap(prand(s0) * (tileWidth - w));
+        const py = snap(prand(s1) * (height - h));
+        target.beginFill(patchColor, 0.14 + prand(s2 ^ 0x6a09e667) * 0.22);
+        target.drawRect(px, py, w, h);
+        target.endFill();
+        target.beginFill(sideLineLight, 0.18);
+        target.drawRect(px + pixelStep, py + pixelStep, Math.max(pixelStep, w - pixelStep * 2), pixelStep);
+        target.endFill();
       }
     }
+    return tileWidth;
   }
 
   _buildProceduralWarehouseTexture(styleCfg: Record<string, any> = {}) {
@@ -1215,13 +1111,17 @@ export class ConveyorRenderer {
     const beltTexCfg = this.config?.display?.beltTexture || {};
     const beltRenderMode = String(beltTexCfg.renderMode ?? 'image').toLowerCase();
     const scrollRenderMode = String(beltTexCfg.scrollRenderMode ?? 'auto').trim().toLowerCase();
-    const useProceduralRedraw = beltRenderMode === 'procedural_topdown' && scrollRenderMode !== 'tiling';
-    const proceduralStyleCfg = useProceduralRedraw ? this._resolveBeltProceduralStyleConfig(beltTexCfg) : null;
+    const useProceduralTexture = beltRenderMode === 'procedural_topdown' && scrollRenderMode !== 'tiling';
+    const proceduralStyleCfg = useProceduralTexture ? this._resolveBeltProceduralStyleConfig(beltTexCfg) : null;
     const alpha = Number(this.config?.display?.beltTexture?.alpha ?? 1);
     const scaleX = Number(this.config?.display?.beltTexture?.scaleX ?? this.config?.display?.beltTexture?.scale ?? 1);
     const scaleY = Number(this.config?.display?.beltTexture?.scaleY ?? this.config?.display?.beltTexture?.scale ?? 1);
     const pixelSnap = this.config?.display?.beltTexture?.pixelSnap !== false;
     const tint = this.config?.display?.beltTexture?.tint ?? null;
+
+    const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
+    const brickSnapStep = this.pixelSnapBricks ? 1 : (1 / resolution);
+
     for (let i = 0; i < n; i += 1) {
       const y = topOffset + i * (beltHeight + beltGap);
       const sampledLength =
@@ -1229,32 +1129,48 @@ export class ConveyorRenderer {
           ? runtimeLengths[i]
           : fallbackLength;
       const length = Math.max(0, sampledLength);
-      if (useProceduralRedraw) {
+      if (useProceduralTexture) {
         const g = new PIXI.Graphics();
-        g.x = 0;
-        const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
-        const pixelStep = 1 / resolution;
-        g.y = pixelSnap ? Math.round(y / pixelStep) * pixelStep : y;
-        (g as any).roundPixels = pixelSnap;
-        this._drawProceduralTopdownBeltGraphics(g, {
-          beltLength: length,
+        const tileWidth = this._drawProceduralTopdownBeltGraphics(g, {
           beltHeight,
-          phaseX: 0,
           styleCfg: proceduralStyleCfg,
           styleScaleX: scaleX,
           styleScaleY: scaleY
         });
-        this.beltLayer.addChild(g);
+
+        if (!this.app?.renderer) {
+          g.destroy();
+          continue;
+        }
+        
+        // Use an explicit region to avoid clipping empty margins (which caused black bars)
+        const texture = this.app.renderer.generateTexture(g, {
+          region: new PIXI.Rectangle(0, 0, tileWidth, beltHeight),
+          resolution: resolution
+        });
+        g.destroy();
+
+        const sprite = new PIXI.TilingSprite(texture, length, beltHeight);
+        sprite.x = 0;
+        sprite.y = pixelSnap ? this._roundSymmetric(y, brickSnapStep) : y;
+        sprite.roundPixels = pixelSnap;
+        sprite.alpha = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+        if (tint) {
+          sprite.tint = toPixiColor(tint);
+        }
+
+        this.beltLayer.addChild(sprite);
         this.beltVisuals.push({
-          type: 'procedural_redraw',
-          node: g,
+          type: 'tiling',
+          node: sprite,
           offsetX: 0,
           pixelSnap,
           beltLength: length,
           beltHeight,
           styleCfg: proceduralStyleCfg,
           styleScaleX: scaleX,
-          styleScaleY: scaleY
+          styleScaleY: scaleY,
+          isProcedural: true
         });
       } else if (useTexture) {
         let sprite;
@@ -1264,7 +1180,7 @@ export class ConveyorRenderer {
           sprite = new PIXI.TilingSprite(this.beltTexture!, length, beltHeight);
         }
         sprite.x = 0;
-        sprite.y = y;
+        sprite.y = pixelSnap ? this._roundSymmetric(y, brickSnapStep) : y;
         sprite.roundPixels = pixelSnap;
         sprite.alpha = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
         if (tint) {
@@ -1288,11 +1204,12 @@ export class ConveyorRenderer {
         this.beltVisuals.push({ type: 'tiling', node: sprite, offsetX: 0, pixelSnap });
       } else {
         const g = new PIXI.Graphics();
+        const snappedY = pixelSnap ? this._roundSymmetric(y, brickSnapStep) : y;
         g.beginFill(toPixiColor(beltColor));
-        g.drawRoundedRect(0, y, length, beltHeight, 12);
+        g.drawRoundedRect(0, snappedY, length, beltHeight, 12);
         g.endFill();
         this.beltLayer.addChild(g);
-      this.beltVisuals.push({ type: 'solid', node: g, offsetX: 0, pixelSnap: false });
+        this.beltVisuals.push({ type: 'solid', node: g, offsetX: 0, pixelSnap });
       }
       const markerCfg = this.config.display?.dueDateMarker || {};
       if (markerCfg.enable === true) {
@@ -1300,10 +1217,13 @@ export class ConveyorRenderer {
         const markerColor = toPixiColor(markerCfg.color ?? '#f5f6fa');
         const markerWidth = Math.max(1, Number(markerCfg.widthPx ?? 3));
         const markerHeight = Math.max(10, Number(markerCfg.heightPx ?? Math.floor(beltHeight * 0.5)));
-        const markerY = y + (beltHeight - markerHeight) / 2;
+        const markerYRaw = y + (beltHeight - markerHeight) / 2;
+        const markerY = pixelSnap ? this._roundSymmetric(markerYRaw, brickSnapStep) : markerYRaw;
         const markerAlpha = Math.max(0.1, Math.min(1, Number(markerCfg.alpha ?? 0.95)));
+        const markerXRaw = length - markerWidth / 2;
+        const markerX = pixelSnap ? this._roundSymmetric(markerXRaw, brickSnapStep) : markerXRaw;
         marker.beginFill(markerColor, markerAlpha);
-        marker.drawRoundedRect(length - markerWidth / 2, markerY, markerWidth, markerHeight, Math.min(3, markerWidth / 2));
+        marker.drawRoundedRect(markerX, markerY, markerWidth, markerHeight, Math.min(3, markerWidth / 2));
         marker.endFill();
         this.beltLayer.addChild(marker);
         this.dueMarkerAnchors.set(`c${i}`, {
@@ -1655,17 +1575,21 @@ export class ConveyorRenderer {
       zone.cursor = 'pointer';
 
       const endSpotlightHold = (e: any) => {
-        const mode = this.config?.bricks?.completionMode;
         const holdState = this.spotlightHoldStart;
-        if (mode !== 'hold_duration' || !holdState) {
+        if (!holdState) {
           return;
         }
         this.spotlightHoldStart = null;
         const pos = this._extractPointerPosition(e);
         this.spotlightPointerPos = pos;
-        const holdDurationMs = Math.max(0, performance.now() - holdState.t);
-        this._emitPointerDebug('spotlight_hold_end', holdState.brickId, e, { hold_ms: Math.round(holdDurationMs) });
-        this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+        if (holdState.mode === 'hold_duration') {
+          const holdDurationMs = Math.max(0, performance.now() - Number(holdState.t ?? performance.now()));
+          this._emitPointerDebug('spotlight_hold_end', holdState.brickId, e, { hold_ms: Math.round(holdDurationMs) });
+          this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+          return;
+        }
+        this._emitPointerDebug('spotlight_hold_state_end', holdState.brickId, e);
+        this.onBrickHoldState(holdState.brickId, false, pos.x, pos.y);
       };
 
       zone.on('pointerdown', (e) => {
@@ -1679,8 +1603,12 @@ export class ConveyorRenderer {
           return;
         }
         if (mode === 'hold_duration') {
-          this.spotlightHoldStart = { brickId: targetBrickId, t: performance.now() };
+          this.spotlightHoldStart = { brickId: targetBrickId, t: performance.now(), mode: 'hold_duration' };
           this._emitPointerDebug('spotlight_hold_begin', targetBrickId, e);
+        } else if (mode === 'hold_to_clear') {
+          this.spotlightHoldStart = { brickId: targetBrickId, t: null, mode: 'hold_to_clear' };
+          this._emitPointerDebug('spotlight_hold_state_begin', targetBrickId, e);
+          this.onBrickHoldState(targetBrickId, true, pos.x, pos.y);
         } else {
           this._emitPointerDebug('spotlight_click', targetBrickId, e);
           this.onBrickClick(targetBrickId, pos.x, pos.y);
@@ -1741,17 +1669,21 @@ export class ConveyorRenderer {
 
     const endConveyorHold = (e: any) => {
       const cid = (zone as any).conveyorId;
-      const mode = this.config?.bricks?.completionMode;
       const holdState = this.conveyorHoldStart.get(cid);
-      if (mode !== 'hold_duration' || !holdState) {
+      if (!holdState) {
         return;
       }
       this.conveyorHoldStart.delete(cid);
       const pos = this._extractPointerPosition(e);
       this.conveyorPointerPos.set(cid, pos);
-      const holdDurationMs = Math.max(0, performance.now() - holdState.t);
-      this._emitPointerDebug('conveyor_hold_end', holdState.brickId, e, { conveyor_id: cid, hold_ms: Math.round(holdDurationMs) });
-      this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+      if (holdState.mode === 'hold_duration') {
+        const holdDurationMs = Math.max(0, performance.now() - Number(holdState.t ?? performance.now()));
+        this._emitPointerDebug('conveyor_hold_end', holdState.brickId, e, { conveyor_id: cid, hold_ms: Math.round(holdDurationMs) });
+        this.onBrickHold(holdState.brickId, holdDurationMs, pos.x, pos.y);
+        return;
+      }
+      this._emitPointerDebug('conveyor_hold_state_end', holdState.brickId, e, { conveyor_id: cid });
+      this.onBrickHoldState(holdState.brickId, false, pos.x, pos.y);
     };
 
     zone.on('pointerdown', (e) => {
@@ -1767,9 +1699,18 @@ export class ConveyorRenderer {
       if (mode === 'hold_duration') {
         this.conveyorHoldStart.set(cid, {
           brickId: targetBrickId,
-          t: performance.now()
+          t: performance.now(),
+          mode: 'hold_duration'
         });
         this._emitPointerDebug('conveyor_hold_begin', targetBrickId, e, { conveyor_id: cid });
+      } else if (mode === 'hold_to_clear') {
+        this.conveyorHoldStart.set(cid, {
+          brickId: targetBrickId,
+          t: null,
+          mode: 'hold_to_clear'
+        });
+        this._emitPointerDebug('conveyor_hold_state_begin', targetBrickId, e, { conveyor_id: cid });
+        this.onBrickHoldState(targetBrickId, true, pos.x, pos.y);
       } else {
         this._emitPointerDebug('conveyor_click', targetBrickId, e, { conveyor_id: cid });
         this.onBrickClick(targetBrickId, pos.x, pos.y);
@@ -1858,8 +1799,13 @@ export class ConveyorRenderer {
     }
     const bodyWidth = Math.max(20, Number(cfg.widthPx ?? Math.round(beltHeight * 0.8)));
     const bodyHeight = Math.max(18, Number(cfg.heightPx ?? Math.round(beltHeight * 0.9)));
-    const bodyX = Number(beltLength) + Number(cfg.offsetX ?? 6);
-    const bodyY = Number(beltY) + (beltHeight - bodyHeight) / 2;
+    const bodyXRaw = Number(beltLength) + Number(cfg.offsetX ?? 6);
+    const bodyYRaw = Number(beltY) + (beltHeight - bodyHeight) / 2;
+
+    const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
+    const brickSnapStep = this.pixelSnapBricks ? 1 : (1 / resolution);
+    const bodyX = this._roundSymmetric(bodyXRaw, brickSnapStep);
+    const bodyY = this._roundSymmetric(bodyYRaw, brickSnapStep);
 
     const wallColor = toPixiColor(cfg.wallColor ?? '#334155');
     const wallShadeColor = toPixiColor(cfg.wallShadeColor ?? '#1e293b');
@@ -2025,9 +1971,7 @@ export class ConveyorRenderer {
     if (!this.beltVisuals || !this.beltVisuals.length) {
       return;
     }
-    const hasAnimatedBelts = this.beltVisuals.some((vis) =>
-      vis?.type === 'tiling' || vis?.type === 'procedural_redraw'
-    );
+    const hasAnimatedBelts = this.beltVisuals.some((vis) => vis?.type === 'tiling');
     if (!hasAnimatedBelts) {
       return;
     }
@@ -2052,9 +1996,12 @@ export class ConveyorRenderer {
       return (text === 'left' || text === 'rtl' || text === 'reverse' || text === 'backward') ? -1 : 1;
     })();
     const dt = Math.max(0, Number(dtMs) || 0) / 1000;
+    const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+    const brickSnapStep = this.pixelSnapBricks ? 1 : (1 / resolution);
+
     for (let i = 0; i < Math.min(this.beltVisuals.length, conveyors.length); i += 1) {
       const vis = this.beltVisuals[i];
-      if (!vis?.node || (vis.type !== 'tiling' && vis.type !== 'procedural_redraw')) {
+      if (!vis?.node || vis.type !== 'tiling') {
         continue;
       }
       const speed = Number(conveyors[i]?.speed) || 0;
@@ -2062,40 +2009,28 @@ export class ConveyorRenderer {
       try {
         vis.offsetX = Number(vis.offsetX ?? 0) + shift;
         let snappedOffsetX = vis.offsetX;
-        const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
+
         if (vis.pixelSnap) {
           if (scrollSnapMode === 'texture') {
             snappedOffsetX = this._roundSymmetric(vis.offsetX, 1);
           } else if (scrollSnapMode === 'none') {
-            // For 'none' mode, we still snap to device pixels (resolution) if pixelSnap is enabled
-            // to match brick movement and avoid phase-shift rocking.
-            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1 / resolution);
-          } else if (vis.type === 'tiling') {
+            // Match brick movement snapping to avoid phase-shift rocking.
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, brickSnapStep);
+          } else if (!vis.isProcedural) {
             const scaleX = Math.max(1e-6, Math.abs(Number(vis.node?.tileScale?.x) || 1));
             snappedOffsetX = this._roundSymmetric(vis.offsetX, 1 / scaleX);
           } else {
-            snappedOffsetX = this._roundSymmetric(vis.offsetX, 1);
+            // Default (including 'screen') - force exactly brickSnapStep to stay in sync.
+            snappedOffsetX = this._roundSymmetric(vis.offsetX, brickSnapStep);
           }
         }
 
-        if (vis.type === 'procedural_redraw') {
-          this._drawProceduralTopdownBeltGraphics(vis.node, {
-            beltLength: vis.beltLength,
-            beltHeight: vis.beltHeight,
-            phaseX: snappedOffsetX,
-            styleCfg: vis.styleCfg,
-            styleScaleX: vis.styleScaleX,
-            styleScaleY: vis.styleScaleY
-          });
-        } else {
-          vis.node.tilePosition.x = snappedOffsetX;
-        }
+        vis.node.tilePosition.x = snappedOffsetX;
       } catch (_) {
         // ignore
       }
     }
   }
-
   updateFurnaces(dtMs: number) {
     if (!this.furnaceVisuals.size) {
       return;
@@ -2839,13 +2774,21 @@ export class ConveyorRenderer {
         this.brickSprites.set(brick.id, sprite);
         this.brickLayer.addChild(sprite);
       }
+
+      // Late-initialize baseline if not already present (for existing bricks during transition)
+      if (sprite.initialSimX === undefined) {
+        sprite.initialSimX = Number(brick.x ?? 0);
+        const conveyorIdx = Number(String(brick.conveyorId ?? '').replace(/\D/g, ''));
+        const vis = this.beltVisuals[conveyorIdx];
+        sprite.initialRendererOffsetX = vis ? Number(vis.offsetX ?? 0) : 0;
+      }
       const desiredFill = toPixiColor(brick.color ?? this.config.display.brickColor);
       const desiredBorder = toPixiColor(brick.borderColor ?? this.config.display.brickBorderColor ?? 0x0f172a);
       const desiredShape = normalizeBrickShape(brick.shape ?? this.config.display.brickShape);
       const progressChanged = sprite.progressValue !== brick.clearProgress;
       const needsProgressRedraw =
         progressChanged &&
-        (completionMode === 'hold_duration' || completionMode === 'hover_to_clear') &&
+        (completionMode === 'hold_duration' || completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear') &&
         !sprite.usesProgressMask;
       if (
         sprite.modeValue !== completionMode ||
@@ -2863,7 +2806,22 @@ export class ConveyorRenderer {
 
       const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
       const step = this.pixelSnapBricks ? 1 : (1 / resolution);
-      const x = this._roundSymmetric(brick.x, step);
+
+      // Lock visual X to the belt offset to eliminate relative drift jitter.
+      const conveyorIdx = Number(String(brick.conveyorId ?? '').replace(/\D/g, ''));
+      const vis = this.beltVisuals[conveyorIdx];
+      let x = 0;
+      if (vis) {
+        // We MUST snap the belt offset and the relative position separately 
+        // to ensure they stay phase-locked and jump pixels at the exact same moment.
+        const snappedBeltOffsetX = this._roundSymmetric(vis.offsetX, step);
+        const relativeX = Number(sprite.initialSimX ?? 0) - Number(sprite.initialRendererOffsetX ?? 0);
+        const snappedRelativeX = this._roundSymmetric(relativeX, step);
+        x = snappedBeltOffsetX + snappedRelativeX;
+      } else {
+        x = this._roundSymmetric(brick.x, step);
+      }
+      
       const y = this._roundSymmetric(brick.y, step);
 
       sprite.position.set(x, y);
@@ -2958,15 +2916,23 @@ export class ConveyorRenderer {
   }
 
   _shouldUseProgressMask(shape: string, completionMode: string) {
-    if (!['hold_duration', 'hover_to_clear'].includes(completionMode)) {
+    if (!['hold_duration', 'hover_to_clear', 'hold_to_clear'].includes(completionMode)) {
       return false;
     }
-    return shape === 'rect' || shape === 'rounded_rect';
+    // Circles should deplete via the same right-edge clipping path as rectangles.
+    return shape === 'rect' || shape === 'rounded_rect' || shape === 'circle';
   }
 
   _createBrickSprite(brick: any) {
     const sprite: any = new PIXI.Container();
     sprite.brickId = brick.id;
+
+    // Capture baseline for perfectly locked motion relative to belt.
+    sprite.initialSimX = Number(brick.x ?? 0);
+    const conveyorIdx = Number(String(brick.conveyorId ?? '').replace(/\D/g, ''));
+    const vis = this.beltVisuals[conveyorIdx];
+    sprite.initialRendererOffsetX = vis ? Number(vis.offsetX ?? 0) : 0;
+
     sprite.cursor = 'pointer';
     sprite.eventMode = 'dynamic';
     if (this.config.bricks.completionMode === 'hold_duration') {
@@ -2995,6 +2961,26 @@ export class ConveyorRenderer {
       sprite.on('pointerdown', beginHold);
       // End hold across multiple exit/release cases because bricks move while
       // the pointer is down, which can otherwise drop the release callback.
+      sprite.on('pointerup', endHold);
+      sprite.on('pointerupoutside', endHold);
+      sprite.on('pointerout', endHold);
+      sprite.on('pointerleave', endHold);
+      sprite.on('pointeroutoutside', endHold);
+      sprite.on('pointercancel', endHold);
+    } else if (this.config.bricks.completionMode === 'hold_to_clear') {
+      const beginHold = (e: any) => {
+        const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
+        const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
+        this._emitPointerDebug('brick_hold_state_begin', brick.id, e);
+        this.onBrickHoldState(brick.id, true, gx, gy);
+      };
+      const endHold = (e: any) => {
+        const gx = (e && (e.globalX ?? (e.global && e.global.x))) ?? 0;
+        const gy = (e && (e.globalY ?? (e.global && e.global.y))) ?? 0;
+        this._emitPointerDebug('brick_hold_state_end', brick.id, e);
+        this.onBrickHoldState(brick.id, false, gx, gy);
+      };
+      sprite.on('pointerdown', beginHold);
       sprite.on('pointerup', endHold);
       sprite.on('pointerupoutside', endHold);
       sprite.on('pointerout', endHold);
@@ -3046,7 +3032,7 @@ export class ConveyorRenderer {
       Math.min(Number(defaultCornerRadius) || 0, Number(brick.width) / 2, Number(brick.height) / 2)
     );
     const supportsMaskProgress = this._shouldUseProgressMask(shape, completionMode);
-    if (completionMode === 'hold_duration' && supportsMaskProgress) {
+    if ((completionMode === 'hold_duration' || completionMode === 'hold_to_clear') && supportsMaskProgress) {
       const progressGraphic = new PIXI.Graphics();
       this._drawBrickBody(progressGraphic, {
         brick,
@@ -3089,7 +3075,7 @@ export class ConveyorRenderer {
       sprite.progressMask = mask;
       sprite.usesProgressMask = true;
       sprite.progressMaxWidth = brick.width;
-    } else if (completionMode === 'hold_duration') {
+    } else if (completionMode === 'hold_duration' || completionMode === 'hold_to_clear') {
       const legacyGraphic = new PIXI.Graphics();
       const remainingWidth = getBrickVisibleWidth(brick, completionMode);
       const legacyRadius = Math.max(0, Math.min(cornerRadius, remainingWidth / 2, brick.height / 2));
@@ -3153,11 +3139,12 @@ export class ConveyorRenderer {
     sprite.brickHeight = brick.height;
     sprite.progressValue = brick.clearProgress;
     sprite.progressMaskWidth = -1;
+    sprite.progressMaskBypassed = false;
   }
 
   _updateBrickProgressVisual(sprite: any, brick: any, completionMode: string) {
     sprite.progressValue = brick.clearProgress;
-    if (!sprite.usesProgressMask || !sprite.progressMask) {
+    if (!sprite.usesProgressMask || !sprite.progressMask || !sprite.progressGraphic) {
       return;
     }
     const remainingWidth = getBrickVisibleWidth(brick, completionMode);
@@ -3165,6 +3152,25 @@ export class ConveyorRenderer {
     const width = Math.max(0, Math.min(maxWidth, remainingWidth));
     const h = Math.max(1, Number(brick.height) || 1);
     const renderedWidth = this.pixelSnapBricks ? Math.round(width) : Math.round(width * 1000) / 1000;
+
+    // Avoid clipping at full width to prevent right-edge shimmer from mask AA.
+    if (renderedWidth >= maxWidth) {
+      if (sprite.progressGraphic.mask) {
+        sprite.progressGraphic.mask = null;
+      }
+      if (sprite.progressMaskBypassed !== true) {
+        sprite.progressMask.clear();
+        sprite.progressMaskBypassed = true;
+      }
+      sprite.progressMaskWidth = renderedWidth;
+      return;
+    }
+
+    if (sprite.progressGraphic.mask !== sprite.progressMask) {
+      sprite.progressGraphic.mask = sprite.progressMask;
+    }
+    sprite.progressMaskBypassed = false;
+
     const previousWidth = Number(sprite.progressMaskWidth ?? -1);
     if (renderedWidth === previousWidth) {
       return;

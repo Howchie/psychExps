@@ -24,6 +24,7 @@ interface BrickRecord {
   holds: number;
   clearProgress: number;
   isHovered: boolean;
+  isHeld: boolean;
   color: string;
   borderColor: string | null;
   shape: string;
@@ -56,6 +57,12 @@ interface ConveyorRecord {
   interSpawnSampler: () => number;
   nextSpawnAt: number;
   activeIds: string[];
+  dynamicSpeed: {
+    enabled: boolean;
+    speedSampler: (() => unknown) | null;
+    intervalSamplerMs: (() => number) | null;
+    nextChangeAtMs: number | null;
+  } | null;
 }
 
 interface CategoryEntry {
@@ -136,6 +143,7 @@ export class GameState {
   categoryPalettes: CategoryPalettes;
   brickCategories: CategoryEntry[];
   forcedControl: ForcedControlState;
+  hasDynamicConveyorSpeed: boolean;
 
   constructor(config: Record<string, any>, { onEvent, seed }: { onEvent?: (event: GameEvent) => void; seed?: unknown } = {}) {
     this.config = config;
@@ -167,6 +175,7 @@ export class GameState {
     this.categoryPalettes = this._prepareBrickCategories();
     this.brickCategories = this.categoryPalettes.color;
     this.forcedControl = this._buildForcedControlConfig();
+    this.hasDynamicConveyorSpeed = false;
     this._initConveyors();
     this._initBricks();
     this._initForcedControl();
@@ -192,6 +201,7 @@ export class GameState {
     const explicitLengths = Array.isArray(cfg.conveyors.lengthPx) ? cfg.conveyors.lengthPx : null;
     const lengthSampler = explicitLengths ? null : this._makeLengthSampler(cfg.conveyors.lengthPx);
     const speedSampler = createSampler(cfg.conveyors.speedPxPerSec, this.rng);
+    const dynamicSpeedCfg = this._resolveDynamicConveyorSpeedConfig();
     const interSpawnSampler = this._makeInterSpawnSampler(cfg.bricks.spawn);
     const configuredBrickWidth = Number(cfg.display?.brickWidth);
     const brickWidth = Number.isFinite(configuredBrickWidth) ? Math.max(8, configuredBrickWidth) : 80;
@@ -208,7 +218,7 @@ export class GameState {
         ? Math.max(minLength, sampledLength)
         : fallbackLength;
       const speed = Math.max(0, Number(speedSampler()));
-      const conveyor = {
+      const conveyor: ConveyorRecord = {
         id: `c${i}`,
         index: i,
         y: topOffset + i * (beltHeight + gap),
@@ -216,8 +226,13 @@ export class GameState {
         speed,
         interSpawnSampler,
         nextSpawnAt: 0,
-        activeIds: []
+        activeIds: [],
+        dynamicSpeed: null
       };
+      conveyor.dynamicSpeed = this._buildConveyorDynamicSpeedState(conveyor, dynamicSpeedCfg, cfg.conveyors.speedPxPerSec);
+      if (conveyor.dynamicSpeed?.enabled) {
+        this.hasDynamicConveyorSpeed = true;
+      }
       if (defaultLength === null) {
         defaultLength = length;
       }
@@ -226,6 +241,143 @@ export class GameState {
     }
     if (defaultLength !== null) {
       this.defaultConveyorLength = defaultLength;
+    }
+  }
+
+  _resolveDynamicConveyorSpeedConfig(): Record<string, any> | null {
+    const raw = this.config?.conveyors?.dynamicSpeed ?? this.config?.conveyors?.dynamic_speed;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return null;
+    }
+    return raw as Record<string, any>;
+  }
+
+  _resolvePerConveyorDynamicSpeedOverride(
+    dynamicCfg: Record<string, any> | null,
+    conveyor: ConveyorRecord
+  ): Record<string, any> | null {
+    if (!dynamicCfg) {
+      return null;
+    }
+    const map = dynamicCfg.perConveyor ?? dynamicCfg.per_conveyor;
+    if (!map || typeof map !== 'object' || Array.isArray(map)) {
+      return null;
+    }
+    const byId = map[conveyor.id];
+    if (byId && typeof byId === 'object' && !Array.isArray(byId)) {
+      return byId as Record<string, any>;
+    }
+    const byIndex = map[String(conveyor.index)] ?? map[conveyor.index];
+    if (byIndex && typeof byIndex === 'object' && !Array.isArray(byIndex)) {
+      return byIndex as Record<string, any>;
+    }
+    return null;
+  }
+
+  _makeIntervalSamplerMs(spec: unknown): (() => number) | null {
+    if (typeof spec === 'number' && Number.isFinite(spec)) {
+      const fixed = Number(spec);
+      return () => fixed;
+    }
+    if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+      try {
+        const sampler = createSampler(spec as Record<string, unknown>, this.rng);
+        return () => Number(sampler());
+      } catch (error) {
+        console.warn('Invalid dynamic conveyor interval sampler spec; ignoring dynamic conveyor speed.', spec, error);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  _buildConveyorDynamicSpeedState(
+    conveyor: ConveyorRecord,
+    dynamicCfg: Record<string, any> | null,
+    fallbackSpeedSpec: unknown,
+  ): ConveyorRecord['dynamicSpeed'] {
+    if (!dynamicCfg) {
+      return null;
+    }
+    const override = this._resolvePerConveyorDynamicSpeedOverride(dynamicCfg, conveyor);
+    const globalEnable = dynamicCfg.enable === true;
+    const localEnable = override && typeof override.enable === 'boolean' ? override.enable : null;
+    const enabled = localEnable ?? globalEnable;
+    if (!enabled) {
+      return null;
+    }
+
+    const intervalSpec = override?.intervalMs ?? override?.interval_ms ?? dynamicCfg.intervalMs ?? dynamicCfg.interval_ms;
+    const intervalSamplerMs = this._makeIntervalSamplerMs(intervalSpec);
+    if (!intervalSamplerMs) {
+      return null;
+    }
+
+    const speedSpec = override?.speedPxPerSec
+      ?? override?.speed_px_per_sec
+      ?? dynamicCfg.speedPxPerSec
+      ?? dynamicCfg.speed_px_per_sec
+      ?? fallbackSpeedSpec;
+    let speedSampler: (() => unknown) | null = null;
+    try {
+      speedSampler = createSampler(speedSpec, this.rng);
+    } catch (error) {
+      console.warn('Invalid dynamic conveyor speed sampler spec; ignoring dynamic conveyor speed.', speedSpec, error);
+      return null;
+    }
+
+    const initialDelayMs = Number(intervalSamplerMs());
+    if (!Number.isFinite(initialDelayMs)) {
+      return null;
+    }
+    return {
+      enabled: true,
+      speedSampler,
+      intervalSamplerMs,
+      nextChangeAtMs: this.elapsed + Math.max(1, initialDelayMs),
+    };
+  }
+
+  _updateDynamicConveyorSpeeds() {
+    if (!this.hasDynamicConveyorSpeed) {
+      return;
+    }
+    for (const conveyor of this.conveyors) {
+      const dynamic = conveyor.dynamicSpeed;
+      if (!dynamic?.enabled || dynamic.nextChangeAtMs === null) {
+        continue;
+      }
+      let guard = 0;
+      while (dynamic.nextChangeAtMs !== null && this.elapsed >= dynamic.nextChangeAtMs && guard < 8) {
+        const prevSpeed = conveyor.speed;
+        let sampledSpeed = prevSpeed;
+        try {
+          const next = Number(dynamic.speedSampler ? dynamic.speedSampler() : prevSpeed);
+          if (Number.isFinite(next)) {
+            sampledSpeed = Math.max(0, next);
+          }
+        } catch (error) {
+          console.warn('Dynamic conveyor speed sampling failed; keeping previous speed.', error);
+        }
+        conveyor.speed = sampledSpeed;
+        this._log('conveyor_speed_changed', {
+          conveyor_id: conveyor.id,
+          conveyor_index: conveyor.index,
+          speed_px_s_prev: prevSpeed,
+          speed_px_s_next: sampledSpeed,
+        });
+
+        const delayMs = Number(dynamic.intervalSamplerMs ? dynamic.intervalSamplerMs() : Number.POSITIVE_INFINITY);
+        if (!Number.isFinite(delayMs)) {
+          dynamic.nextChangeAtMs = null;
+          break;
+        }
+        dynamic.nextChangeAtMs += Math.max(1, delayMs);
+        guard += 1;
+      }
+      if (guard >= 8 && dynamic.nextChangeAtMs !== null && this.elapsed >= dynamic.nextChangeAtMs) {
+        dynamic.nextChangeAtMs = this.elapsed + 1;
+      }
     }
   }
 
@@ -930,6 +1082,7 @@ export class GameState {
       holds: 0,
       clearProgress: 0,
       isHovered: false,
+      isHeld: false,
       color: String(pickedColor ?? ''),
       borderColor: pickedBorderColor != null ? String(pickedBorderColor) : null,
       shape: pickedShape,
@@ -1175,6 +1328,30 @@ export class GameState {
           y: brick.y
         });
       }
+    } else if (mode === 'click_to_clear') {
+      const meanPx = Math.max(1, Number(params.click_clear_mean_px ?? 20));
+      const sdPx = Math.max(0, Number(params.click_clear_sd_px ?? 0));
+      const minPx = Math.max(0, Number(params.click_clear_min_px ?? 1));
+      const clearPx = sdPx > 0
+        ? Math.max(minPx, this.rng.nextNormal(meanPx, sdPx))
+        : Math.max(minPx, meanPx);
+      const progressDelta = clearPx / Math.max(1, brick.initialWidth);
+      brick.clicks += 1;
+      brick.clearProgress = Math.min(1, (brick.clearProgress ?? 0) + progressDelta);
+      this._log('brick_click_progress', {
+        brick_id: brick.id,
+        clicks: brick.clicks,
+        clear_px: clearPx,
+        progress: brick.clearProgress,
+      });
+      if (brick.clearProgress >= 1) {
+        this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
+          completion_mode: mode,
+          clicks: brick.clicks,
+          x: brick.x,
+          y: brick.y,
+        });
+      }
     } else if (mode === 'hold_duration') {
       this._log('brick_click_progress', {
         brick_id: brick.id,
@@ -1184,6 +1361,11 @@ export class GameState {
       this._log('brick_click_progress', {
         brick_id: brick.id,
         note: 'Click ignored in hover_to_clear mode; progress is driven by hover exposure.'
+      });
+    } else if (mode === 'hold_to_clear') {
+      this._log('brick_click_progress', {
+        brick_id: brick.id,
+        note: 'Click ignored in hold_to_clear mode; progress is driven by continuous hold exposure.'
       });
     } else {
       // Future modes can plug in here (e.g., cognitive tasks).
@@ -1274,6 +1456,57 @@ export class GameState {
     }
   }
 
+  handleBrickHoldState(brickId: string, isHolding: boolean, timestamp: number, clickPos: PointerPos = {}) {
+    const { x = null, y = null } = clickPos || {};
+    const brick = this.bricks.get(brickId);
+    if (!brick) {
+      this.stats.clickErrors += 1;
+      this._log('brick_hold_state', { brick_id: brickId ?? null, x, y, valid: false, holding: Boolean(isHolding) });
+      return;
+    }
+    const mode = this.config.bricks.completionMode;
+    if (mode !== 'hold_to_clear') {
+      return;
+    }
+    if (!isHolding) {
+      if (!brick.isHeld) return;
+      brick.isHeld = false;
+      this._log('brick_hold_end', {
+        brick_id: brick.id,
+        conveyor_id: brick.conveyorId,
+        x,
+        y,
+        valid: true
+      });
+      return;
+    }
+    const gate = this._canWorkOnBrick(brick);
+    if (!gate.ok) {
+      this.stats.clickErrors += 1;
+      this._log('brick_hold_state', {
+        brick_id: brick.id,
+        conveyor_id: brick.conveyorId,
+        x,
+        y,
+        valid: false,
+        holding: true,
+        blocked_reason: gate.reason
+      });
+      return;
+    }
+    if (brick.isHeld) {
+      return;
+    }
+    brick.isHeld = true;
+    this._log('brick_hold_begin', {
+      brick_id: brick.id,
+      conveyor_id: brick.conveyorId,
+      x,
+      y,
+      valid: true
+    });
+  }
+
   /**
    * Advances the simulation by dt milliseconds.
    */
@@ -1281,6 +1514,7 @@ export class GameState {
     const dt = dtMs / 1000;
     this.elapsed += dtMs;
     const completionMode = this.config.bricks.completionMode;
+    this._updateDynamicConveyorSpeeds();
 
     // Update brick positions and check for drops.
     this.bricks.forEach((brick: BrickRecord) => {
@@ -1292,17 +1526,16 @@ export class GameState {
       const speed = conveyor ? conveyor.speed : brick.speed;
       brick.speed = speed;
       const hoverCanProcess = completionMode === 'hover_to_clear' && brick.isHovered && this._canWorkOnBrick(brick).ok;
+      const holdCanProcess = completionMode === 'hold_to_clear' && brick.isHeld && this._canWorkOnBrick(brick).ok;
       brick.x += speed * dt;
-      if (hoverCanProcess) {
+      if (hoverCanProcess || holdCanProcess) {
         const referenceWidth = Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1));
-        const processRatePxPerSec = Math.max(
-          0,
-          Number(this.config?.bricks?.completionParams?.hover_process_rate_px_s ?? speed) || speed
-        );
+        const rateKey = completionMode === 'hold_to_clear' ? 'hold_process_rate_px_s' : 'hover_process_rate_px_s';
+        const processRatePxPerSec = Math.max(0, Number(this.config?.bricks?.completionParams?.[rateKey] ?? speed) || speed);
         const progressDelta = (processRatePxPerSec * dt) / referenceWidth;
         brick.clearProgress = Math.max(0, Math.min(1, (brick.clearProgress ?? 0) + progressDelta));
       }
-      if (completionMode === 'hover_to_clear' && (brick.clearProgress ?? 0) >= 1) {
+      if ((completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear') && (brick.clearProgress ?? 0) >= 1) {
         this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
           completion_mode: completionMode,
           progress: brick.clearProgress,

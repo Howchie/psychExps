@@ -1,288 +1,183 @@
-# Task: NBack
+# Task: NBack (N-Back)
 
-This document reflects the current `tasks/nback` implementation.
+This document describes the unified `tasks/nback` implementation, which serves as the host for both standard N-Back and modular Prospective Memory (PM) experiments.
 
-## 1. Implementation Details
+## 1. Implementation Overview
 
-The NBack task is implemented using the `createTaskAdapter` factory:
+The NBack task is built on the core `TaskOrchestrator` and `createTaskAdapter` factory. It uses **jsPsych** as its primary runner.
 
-```typescript
-export const nbackAdapter = createTaskAdapter({
-  manifest: { taskId: "nback", ... },
-  run: runNbackTask,
-  terminate: async () => { nbackEnvironment.cleanup(); /* + module/state cleanup */ },
-});
-```
+- **Adapter Path:** `tasks/nback/src/index.ts`
+- **Canonical PM Path:** NBack task + `task.modules.pm` (or `task.modules.injector`)
 
-- **`run(context)`**: Parses configuration, generates the block plan, and runs the jsPsych timeline via `TaskOrchestrator`. Manages DRT and PM module scopes using `TaskModuleRunner`.
-- **`terminate()`**: Calls `nbackEnvironment.cleanup()` (a `TaskEnvironmentGuard`) to reset the cursor and remove keyboard/scroll blockers, plus task-specific module teardown.
+## 1.1 Variants
 
-## 2. Runner and structure
+| Variant ID | Config Path | Description |
+| :--- | :--- | :--- |
+| `default` | `nback/default` | Standard N-Back |
+| `drt_block_demo` | `nback/drt_block_demo` | N-Back with block-scoped DRT |
+| `pm_module_demo` | `nback/pm_module_demo` | N-Back + PM module demo |
+| `pm_module_export_demo` | `nback/pm_module_export_demo` | PM module with stimulus export |
+| `annikaHons` | `nback/annikaHons` | Custom Honours study config |
+| `nirvanaExp1` | `nback/nirvanaExp1` | Nirvana Experiment 1 config |
+| `modern` | `nback/nirvanaExp1` | Legacy URL-compat entry pointing to `nirvanaExp1` config; kept so old `?variant=modern` links still resolve |
 
-- Runner: `jspsych` via `LifecycleManager`
-- Adapter: `tasks/nback/src/index.ts`
-- Variants:
-  - `nback/default`
-  - `nback/drt_block_demo`
-  - `nback/pm_module_demo`
-  - `nback/pm_module_export_demo`
-  - `nback/annikaHons`
-  - `nback/nirvanaExp1`
+## 2. Configuration Schema
 
-## Response mapping
+The task configuration is resolved through the core `VariableResolver`, allowing for dynamic participant-level and block-level overrides using the `$var`, `$sample`, and `$namespace` syntax.
 
-`mapping.targetKey` is required.
+### 2.1 Top-Level Configuration
 
-`mapping.nonTargetKey` is optional:
-- If set, non-target responses are key-based.
-- If omitted/`"none"`/`"withhold"`, non-targets are scored as `timeout` (withheld response is correct).
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `task.title` | string | Title shown on the task intro card. |
+| `task.rtTask` | object | Global RT phase configuration (see [RT Task](#rt-task)). |
+| `task.modules` | object | Active modules (e.g., `pm`, `drt`, `injector`). |
+| `mapping.targetKey` | string | Required. Key for N-Back matches (e.g., `"m"`). |
+| `mapping.nonTargetKey`| string | Optional. Key for non-matches. If omitted or `"withhold"`, non-targets require no response. |
+| `timing` | object | Legacy timing shortcuts (mapped to `rtTask` defaults). |
+| `display` | object | Visual presentation settings (see [Display](#display)). |
+| `plan` | object | Block structure and manipulation definitions (see [Plan](#plan)). |
+| `stimuli` | object | Inline stimulus pools (category map). |
+| `stimuliCsv` | object | CSV-based stimulus pool loader. |
+| `stimulusPools` | object | Global draw mode settings (e.g., `nbackDraw`). |
+| `variables` | object | Participant-scoped variable definitions. |
+| `instructions` | object | Task-level instruction screens and templates (see [Instructions](#instructions)). |
+| `feedback` | object | Global trial feedback settings (see [Feedback](#feedback)). |
 
-## Instructions
+### 2.2 RT Task (Timing & Response Policy)
 
-`instructions` supports shared config-level screen slots:
-- `pages` (preferred): string/object or array
-  - aliases: `introPages`, `intro`, `screens`
-- `preBlockPages` (string/object or array)
-- `postBlockPages` (string/object or array)
-- `endPages` (string/object or array)
-- `blockIntroTemplate` (`{nLevel}`)
-- `blockIntroControlTemplate` (`{nLevel}`)
-- `blockIntroPmTemplate` (`{nLevel}`, `{pmCategoryText}`)
-- `pmTemplate` (optional intro page text)
-- `showBlockLabel` (default `true`)
-- `preBlockBeforeBlockIntro` (default `false`)
-- `insertions` (optional array): generalized instruction insertion points for additional pages
-- `blockSummary` (optional object): computed block-end summary page using trial results
+Configured under `task.rtTask` (global) or `plan.blocks[].rtTask` (block override).
 
-`rtTask` supports task-level defaults and block-level overrides:
-- `task.rtTask` defines default RT timing/behavior.
-- `plan.blocks[].rtTask` can override any subset (`enabled`, `responseTerminatesTrial`, `timing.*`) per block.
+- `enabled`: boolean (default `false`). If `true`, uses the RT phase engine.
+- `responseTerminatesTrial`: boolean (default `false`). If `true`, the trial ends immediately upon any valid response.
+- `timing`:
+  - `trialDurationMs`: Total trial length (default `5000`).
+  - `fixationDurationMs`: Duration of the fixation cross (default `500`).
+  - `stimulusOnsetMs`: Offset from trial start when stimulus appears (default `1000`).
+  - `responseWindowStartMs`: When key logging begins (default `1000`).
+  - `responseWindowEndMs`: When key logging ends (default `5000`).
 
-`repeatUntil` supports block-level retry loops:
-- `plan.blocks[].repeatUntil` can repeat the same block until a threshold is met or `maxAttempts` is reached.
-- Thresholds are computed from current-attempt trial results only (no retrospective rescoring history).
-- `afterBlockScreens` are shown on the final attempt only.
-- Use `repeatAfterBlockScreens` (alias: `repeatPostBlockScreens`) to show retry-specific pages on non-final attempts.
+### 2.3 Display Settings
 
-`preBlockPages`/`postBlockPages` are positional shortcuts applied to every block and are combined with each block's `beforeBlockScreens`/`afterBlockScreens`.
-Setting a slot to `""` (or arrays containing only blank strings) clears that slot.
+Configured under the top-level `display` object.
 
-Instruction page object shape (for slots and insertions):
-- `text`: plain text (escaped)
-- `html`: raw HTML fragment
-- `title`: optional per-page heading
-- `actions`: optional button array (`continue`/`exit`) for that page
-  - `exit` stops task execution immediately and skips completion finalization/redirect.
+- `aperturePx`: Width/Height of the square stimulus frame (default `250`).
+- `paddingYPx`: Vertical padding within the frame (default `16`).
+- `cueHeightPx`: Height reserved above the stimulus for a rule cue label (default `0`; set > 0 when using PM cue labels).
+- `cueMarginBottomPx`: Margin between the cue area and the stimulus (default `0`).
+- `frameBackground`: CSS color for the stimulus frame (default `"#ffffff"`).
+- `frameBorder`: CSS border string for the frame (default `"2px solid #d1d5db"`).
+- `textColor`: CSS color for text stimuli and fixation (default `"#111827"`).
+- `fixationFontSizePx`: Font size for the `+` fixation (default `28`).
+- `fixationFontWeight`: Font weight for the fixation cross (default `500`).
+- `stimulusFontSizePx`: Font size for text stimuli (default `48`).
+- `stimulusScale`: Multiplier for image/text size relative to frame (default `0.82`).
+- `imageWidthPx` / `imageHeightPx`: Optional fixed dimensions for image stimuli.
+- `imageUpscale`: boolean (default `false`). If `false`, images won't scale above native size.
 
-Supported insertion points:
-- `task_intro_before`
-- `task_intro_after`
-- `block_start_before_intro`
-- `block_start_after_intro`
-- `block_start_after_pre`
-- `block_end_before_post`
-- `block_end_after_post`
-- `task_end_before`
-- `task_end_after`
+### 2.4 Plan (Blocks & Manipulations)
 
-`instructions.blockSummary` example for NBack:
+The `plan` object defines the sequence of trials and condition assignments.
+
+#### Block Fields (`plan.blocks[]`)
+Each block can override global settings or use tokenized variables.
+
+- `label`: String identifier for the block (used in output and intros).
+- `phase`: `"practice"` or `"main"` (also sets `isPractice` if not specified explicitly).
+- `isPractice`: boolean override for practice status.
+- `nLevel`: The "N" in N-Back (e.g., `1`, `2`, `3`).
+- `trials`: Total trials in the block (default `20` for practice, `54` for main).
+- `targetCount`: Number of N-Back matches to insert (default `6` for practice, `18` for main).
+- `lureCount`: Number of N-Back lures (near-matches at other lags) to insert (default `3` for practice, `18` for main).
+- `nbackSourceCategories`: Array of stimulus categories to draw from for this block (default `["other"]`).
+- `stimulusVariant`: Optional integer selecting a numbered stimulus variant (used with `imageAssets`).
+- `manipulation` / `manipulations`: Manipulation IDs to apply.
+- `variables`: Block-scoped variable overrides.
+- `feedback`: Block-level feedback override.
+- `rtTask`: Block-level timing override.
+- `beforeBlockScreens` / `afterBlockScreens`: Array of instruction pages for this block.
+- `repeatUntil`: Block-level retry criteria (e.g., `minAccuracy: 0.8`).
+- `repeatAfterBlockScreens`: Pages shown if the `repeatUntil` check fails.
+
+#### Manipulations (`plan.manipulations[]`)
+Define reusable sets of overrides:
 ```json
 {
-  "instructions": {
-    "blockSummary": {
-      "enabled": true,
-      "at": "before_post",
-      "title": "End of {blockLabel}",
-      "lines": ["Accuracy: {accuracyPct}% ({correct}/{total})", "Mean RT: {meanRtMs} ms"],
-      "metrics": {
-        "correctField": "responseCorrect",
-        "rtField": "responseRtMs"
-      },
-      "where": {
-        "trialType": ["N"]
-      },
-      "when": {
-        "isPractice": true
-      }
-    }
+  "id": "high_load",
+  "overrides": {
+    "nLevel": 3,
+    "targetCount": 20,
+    "rtTask": { "timing": { "trialDurationMs": 2000 } }
   }
 }
 ```
 
-You can also override `blockSummary` per block/manipulation via `plan.blocks[].blockSummary` in NBack.
+### 2.5 Instructions & Screens
 
-`plan.blocks[].repeatUntil` example:
+Configured under `instructions`.
+
+- `introPages` (alias `pages`): Array of strings or page objects shown at task start.
+- `blockIntroTemplate`: Template string for block start (e.g., `"This is a {nLevel}-back block."`).
+- `preBlockPages` / `postBlockPages`: Screens shown before/after every block.
+- `endPages`: Screens shown after all blocks are complete.
+- `showBlockLabel`: boolean (default `true`).
+- `preBlockBeforeBlockIntro`: boolean (default `false`).
+- `insertions`: Array of generic page insertions at specific lifecycle points.
+- `blockSummary`: Configuration for a computed performance summary screen (see example below).
+
+#### Block Summary Example
 ```json
-{
-  "plan": {
-    "blocks": [
-      {
-        "label": "Practice",
-        "isPractice": true,
-        "trials": 20,
-        "repeatUntil": {
-          "enabled": true,
-          "maxAttempts": 3,
-          "minAccuracy": 0.8,
-          "where": { "trialType": ["N"] },
-          "metrics": { "correctField": "responseCorrect" }
-        },
-        "repeatAfterBlockScreens": [
-          "We will repeat this block.",
-          "Remember: press / only for exact N-back matches."
-        ]
-      }
-    ]
-  }
+"blockSummary": {
+  "enabled": true,
+  "at": "before_post",
+  "title": "Block Feedback",
+  "lines": ["Accuracy: {accuracyPct}%", "Mean RT: {meanRtMs} ms"],
+  "where": { "trialType": ["N"] },
+  "when": { "isPractice": true }
 }
 ```
 
-Example:
-```json
-{
-  "instructions": {
-    "pages": [
-      "Welcome.",
-      "Press / for targets.",
-      "Withhold response for non-targets."
-    ],
-    "preBlockPages": "Next block starts now.",
-    "endPages": "All blocks complete."
-  }
-}
-```
+## 3. Modular Integrations (PM, DRT, Injector)
 
-## DRT integration
+NBack supports additive functionality via the `task.modules` system. These modules are task-independent and can be plugged into other adapters.
 
-NBack supports optional DRT using shared core controller (`DrtController`):
+- [**Module: Prospective Memory (PM)**](./MODULE_PM.md): Rule-based PM trial injection.
+- [**Module: Detection Response Task (DRT)**](./MODULE_DRT.md): Concurrent detection task (ISO-standard).
+- [**Module: Stimulus Injector**](./MODULE_INJECTOR.md): Low-level trial injection for custom PM and control trials.
 
-`task.modules.drt` config:
-- `enabled`: boolean
-- `scope`: `"block"` or `"trial"`
-- `key`: DRT response key (for example `"space"`)
-- `responseWindowMs`: probe response window
-- `displayDurationMs`: probe presentation duration (independent of response window)
-- `responseTerminatesStimulus`: whether a valid DRT response hides the probe immediately
-- `transformPersistence`: `"scope"` (default) or `"session"`; controls whether online transform windows reset at each DRT scope boundary
-- `isiSampler`: core sampler spec (`uniform`, `normal`, etc.)
-- `stimMode`: `"visual" | "auditory" | "border"` (+ combined aliases)
-- `visual`, `audio`, `border`: mode-specific presentation settings
-- `parameterTransforms`: optional online parameter model list (core-level), currently includes:
-  - `type: "wald_conjugate"` for moving-window shifted-Wald drift/threshold estimates from DRT RTs
+## 4. Stimulus Management
 
-Behavior:
-- `scope: "block"` runs DRT continuously across all trials in a block, excluding inter-block screens.
-- `scope: "trial"` starts/stops DRT per trial.
-- DRT events are emitted into the task event stream and included in final payload extras (`payload.drt.scopeRecords`).
-- Transform updates are emitted as `drt_transform_estimate` events and each scope record includes transform runtime export (`scopeRecords[].transforms`).
-- DRT scope records also include row-aligned transform linkage for each DRT response (`scopeRecords[].responseRows`), with per-response `estimate` and flattened `transformColumns`.
-- Visual default is a red square shown at top-center of the monitor viewport (`position: fixed`), not constrained to the task canvas.
-- Border mode applies a flashing outline to the inner framed stimulus area (the square where n-back items are drawn), not the full task host/container.
-- Block-level RT overrides are supported in `plan.blocks[].rtTask` so practice and main blocks can run different response timings.
-- Block-level overrides are supported in `plan.blocks[].modules.drt` so different blocks can use different DRT modes/settings.
+- **CSV Loading:** Use `stimuliCsv` to load large pools. Path templates like `{runtime.assetsBase}` are supported.
+- **Pool Drawing:** `stimulusPools.nbackDraw` controls how filler items are drawn.
+  - `mode`: `"without_replacement"`, `"with_replacement"`, or `"ordered"`.
+  - `scope`: `"block"` or `"participant"`.
+  - `shuffle`: boolean.
+- **Image Assets:** If `imageAssets.enabled: true`, the task resolves item IDs to image file paths.
+  - `imageAssets.basePath`: Base directory for image files.
+  - `imageAssets.filenameTemplate`: Template string for filenames (default `"{id}"`). The `{id}` token is replaced with the item identifier.
+  - `imageAssets.practiceVariant`: Integer variant number used for practice blocks (default `1`).
+  - `imageAssets.mainVariants`: Array of integer variant numbers available for main blocks (default `[1]`).
+  - `imageAssets.mainMode`: How main variants are selected — `"with_replacement"` (random, default) or `"cycle"` (sequential cycle through `mainVariants`).
 
-## Demo variant
+### N-Back Rule (`nbackRule`)
 
-`configs/nback/drt_block_demo.json` demonstrates:
-- Block-scoped DRT on `space`.
-- NBack target on `/`.
-- Withheld non-target response.
-- Source pool of numerals `1-9` repeated three times (27 items) with shuffled without-replacement draw prior to target insertion.
-- Two blocks in one config:
-  - Block 1: visual top-center square probe
-  - Block 2: border-flash probe
-- ISO-like timing profile:
-  - `displayDurationMs: 1000`
-  - `responseWindowMs: 2500`
-  - `responseTerminatesStimulus: true`
-  - uniform ISI `3000-5000 ms`
-- Demo also includes a `wald_conjugate` online transform with `10-50` trial moving window and prior-mean shifting.
+Controls how targets and lures are inserted into the trial sequence.
 
-## PM Module Demo
+- `nbackRule.lureLagPasses`: Array of lag arrays defining which non-target lags count as lures. Each entry is one injection pass. Default produces standard N±1 lures.
+  - Example: `[[1], [2]]` — first inject 1-back lures, then 2-back lures.
+- `nbackRule.maxInsertionAttempts`: Maximum retries when placing a lure fails due to sequence constraints (default `10`).
 
-`configs/nback/pm_module_demo.json` demonstrates additive PM-module behavior inside NBack:
-- `task.modules.pm` rule-based PM injection
-- PM slot scheduling (`schedule.count`, `schedule.minSeparation`, `schedule.maxSeparation`)
-- PM category targeting via module rules (`rules[].categories`)
-- Block-local PM enable/count/category overrides via `plan.blocks[].variables` + tokenized module config
-- PM key activation driven by injected PM trials in each block
+## 5. Output Data
 
-## Injector Module (Generic Trial Injection)
+The NBack task produces a consolidated CSV/JSON payload with suffix `nback_trials`.
 
-NBack also supports a generic core injector module at `task.modules.injector`.
-This enables arbitrary trial injection into the ongoing block plan (including PM-like and control-like injections) without task-specific planner code.
+- **Trial Records:** Every N-Back, PM, and Injector trial is exported as a primary row.
+- **Fields:** `trialType` (`N`, `F`, `PM`, `L<lag>`), `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`, etc.
+- **Module Results:** Detailed DRT and PM module outputs (e.g., transform estimates, raw module logs) are included in the `moduleResults` object in the final JSON payload.
 
-High-level shape:
-```json
-{
-  "task": {
-    "modules": {
-      "injector": {
-        "enabled": true,
-        "injections": [
-          {
-            "id": "pm_animals",
-            "schedule": { "count": 5, "minSeparation": 8, "maxSeparation": 11 },
-            "eligibleTrialTypes": ["F"],
-            "source": { "type": "category_in", "categories": ["animals"] },
-            "sourceDraw": {
-              "mode": "without_replacement",
-              "scope": "block",
-              "shuffle": true
-            },
-            "set": {
-              "trialType": "PM",
-              "itemCategory": "PM",
-              "correctResponse": "space",
-              "responseCategory": "pm"
-            }
-          }
-        ]
-      }
-    }
-  }
-}
-```
+## 6. Stimulus Export Mode
 
-Notes:
-- `source.type` supports:
-  - `category_in` (draw from configured stimulus categories)
-  - `literal` (draw from an inline item list)
-- `sourceDraw` controls item reuse behavior for injected items:
-  - `mode`: `without_replacement` (default), `with_replacement`, `ordered`
-  - `scope`: `block` (default) or `participant`
-  - `shuffle`: default `true`
-- `without_replacement` automatically recycles when the pool is exhausted (shuffle/consume/recycle), so large PM counts do not crash.
-- `set.correctResponse` controls expected response for injected trials.
-- `set.responseCategory` is optional and contributes semantic category mapping.
-- If an injected response key is not present in base mapping, NBack automatically adds it to allowed keys for blocks containing those trials.
+To export the planned stimulus list without running the task, launch with the URL parameter:
+`?task=nback&variant=<id>&exportStimuli=true`
 
-## Canonical PM Integration Path
-
-NBack + core PM module is the canonical PM-integration direction.
-
-Current PM module path in NBack:
-- uses core module lifecycle (`TaskModuleRunner` scoped start/stop)
-- applies PM trial transformations through `task.modules.pm`
-- exports module scope outputs in finalized payload (`payload.moduleResults`)
-
-Parity with standalone PM task is still partial. See:
-- `docs/PM_NBACK_PARITY_AUDIT.md`
-
-## CSV Output
-
-Trial results are saved with suffix `nback_trials`.
-
-## Stimulus Export (No Full Run)
-
-For parity workflows, NBack can export planned stimulus lists without executing trials.
-
-Launch with:
-- `?task=nback&variant=<variant>&exportStimuli=true`
-
-Behavior:
-- Skips timeline execution.
-- Saves a CSV with planned rows including:
-  - `block_phase` and condition-level `block_type`
-  - `trial_type`
-  - item/source-category and block/trial indices.
+This saves a CSV with the planned sequence, including `block_type`, `trial_type`, and `item` identifiers.

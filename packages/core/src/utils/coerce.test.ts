@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { asStringArray, asPositiveNumberArray, coerceInstructionInsertions } from './coerce';
+import {
+  asStringArray,
+  asPositiveNumberArray,
+  coerceInstructionInsertions,
+  resolveBlockScreenSlotValue,
+} from './coerce';
 
 describe('coerce utilities', () => {
   describe('asStringArray', () => {
@@ -69,6 +74,32 @@ describe('coerce utilities', () => {
       ).toEqual([
         { at: 'task_intro_after', pages: [{ text: 'ok' }] },
       ]);
+    });
+  });
+
+  describe('resolveBlockScreenSlotValue', () => {
+    it('resolves pre-block aliases in precedence order', () => {
+      const source = {
+        preBlockInstructions: ['legacy'],
+        preBlockScreens: ['newer'],
+        beforeBlockScreens: ['canonical'],
+      } as Record<string, unknown>;
+      expect(resolveBlockScreenSlotValue(source, 'before')).toEqual(['canonical']);
+    });
+
+    it('resolves post-block aliases including postBlockScreens', () => {
+      const source = {
+        postBlockInstructions: ['legacy'],
+        postBlockScreens: ['newer'],
+      } as Record<string, unknown>;
+      expect(resolveBlockScreenSlotValue(source, 'after')).toEqual(['newer']);
+    });
+
+    it('resolves repeat aliases', () => {
+      const source = {
+        repeatPostBlockScreens: ['retry'],
+      } as Record<string, unknown>;
+      expect(resolveBlockScreenSlotValue(source, 'repeatAfter')).toEqual(['retry']);
     });
   });
 });

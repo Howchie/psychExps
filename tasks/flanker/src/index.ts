@@ -29,6 +29,7 @@ import {
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   ensureJsPsychCanvasCentered,
   applyTaskInstructionConfig,
   createTaskAdapter,
@@ -296,8 +297,8 @@ export async function parseFlankerConfig(config: JSONObject): Promise<ParsedFlan
   const blockTemplateRaw = asObject(planRaw?.blockTemplate);
   const trialsPerBlock = toPositiveNumber(blockTemplateRaw?.trials, 36);
   const blockFeedback = parseTrialFeedbackConfig(asObject(blockTemplateRaw?.feedback), feedbackDefaults);
-  const rawBeforeBlockScreens = blockTemplateRaw?.beforeBlockScreens ?? blockTemplateRaw?.preBlockInstructions;
-  const rawAfterBlockScreens = blockTemplateRaw?.afterBlockScreens ?? blockTemplateRaw?.postBlockInstructions;
+  const rawBeforeBlockScreens = resolveBlockScreenSlotValue(blockTemplateRaw ?? null, "before");
+  const rawAfterBlockScreens = resolveBlockScreenSlotValue(blockTemplateRaw ?? null, "after");
   const parsedBeforeBlockScreens = toStringScreens(rawBeforeBlockScreens);
   const parsedAfterBlockScreens = toStringScreens(rawAfterBlockScreens);
   const blocks = Array.from({ length: blockCount }, (_, idx) => ({

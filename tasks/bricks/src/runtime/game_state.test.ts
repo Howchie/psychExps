@@ -68,3 +68,55 @@ describe('GameState hover_to_clear dynamics', () => {
     expect(nextRightEdge).toBeCloseTo(initialRightEdge, 6);
   });
 });
+
+describe('GameState conveyor speed scheduling', () => {
+  it('does not resample conveyor speed at runtime when dynamic speed is disabled', () => {
+    const cfg: any = buildConfig();
+    cfg.conveyors.speedPxPerSec = { type: 'fixed', value: 10 };
+    const gameState: any = new GameState(cfg, { seed: 2 });
+    expect(gameState.conveyors[0].speed).toBe(10);
+
+    gameState.step(100);
+    gameState.step(100);
+    gameState.step(100);
+
+    expect(gameState.conveyors[0].speed).toBe(10);
+    const speedChangeEvents = gameState.events.filter((event: any) => event.type === 'conveyor_speed_changed');
+    expect(speedChangeEvents).toHaveLength(0);
+  });
+
+  it('supports per-conveyor dynamic speed changes', () => {
+    const cfg: any = buildConfig();
+    cfg.conveyors.nConveyors = 2;
+    cfg.conveyors.speedPxPerSec = { type: 'fixed', value: 20 };
+    cfg.conveyors.dynamicSpeed = {
+      enable: false,
+      intervalMs: { type: 'fixed', value: 100 },
+      speedPxPerSec: { type: 'fixed', value: 20 },
+      perConveyor: {
+        c1: {
+          enable: true,
+          intervalMs: { type: 'fixed', value: 100 },
+          speedPxPerSec: { type: 'fixed', value: 30 }
+        }
+      }
+    };
+    cfg.bricks.forcedSet = [];
+    const gameState: any = new GameState(cfg, { seed: 3 });
+
+    expect(gameState.conveyors[0].speed).toBe(20);
+    expect(gameState.conveyors[1].speed).toBe(20);
+
+    gameState.step(100);
+    expect(gameState.conveyors[0].speed).toBe(20);
+    expect(gameState.conveyors[1].speed).toBe(30);
+
+    gameState.step(100);
+    expect(gameState.conveyors[0].speed).toBe(20);
+    expect(gameState.conveyors[1].speed).toBe(30);
+
+    const speedChangeEvents = gameState.events.filter((event: any) => event.type === 'conveyor_speed_changed');
+    expect(speedChangeEvents.length).toBeGreaterThanOrEqual(2);
+    expect(speedChangeEvents.every((event: any) => event.conveyor_id === 'c1')).toBe(true);
+  });
+});

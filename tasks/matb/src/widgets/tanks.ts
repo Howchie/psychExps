@@ -52,14 +52,14 @@ export interface TankRenderOptions {
 // ---------------------------------------------------------------------------
 
 const LABEL_OFFSET = 14;
-const TANK_BORDER_WIDTH = 2;
-const TANK_BG_COLOR = "#e8e8e8";
-const FLUID_COLOR_NORMAL = "#22c55e";
-const FLUID_COLOR_OUT = "#ef4444";
-const TOLERANCE_COLOR = "#333";
-const TOLERANCE_WIDTH = 3;
-const LEVEL_FONT = "bold 10px monospace";
-const LABEL_FONT = "bold 12px monospace";
+const TANK_BORDER_WIDTH = 1.5;
+const TANK_BG_COLOR = "#ffffff";
+const FLUID_COLOR_NORMAL = "#8edbb0";
+const FLUID_COLOR_OUT = "#e04545";
+const TOLERANCE_COLOR = "#323232";
+const TOLERANCE_WIDTH = 2;
+const LEVEL_FONT = "11px sans-serif";
+const LABEL_FONT = "bold 12px sans-serif";
 
 // ---------------------------------------------------------------------------
 // Rendering
@@ -80,7 +80,7 @@ export function renderTank(
   const barWidth = width;
 
   // Label above.
-  ctx.fillStyle = "#ccc";
+  ctx.fillStyle = "#323232";
   ctx.font = LABEL_FONT;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
@@ -136,13 +136,13 @@ export function renderTank(
   }
 
   // Border.
-  ctx.strokeStyle = "#222";
+  ctx.strokeStyle = "#323232";
   ctx.lineWidth = TANK_BORDER_WIDTH;
   ctx.strokeRect(x, barTop, barWidth, barHeight);
 
   // Level text below (only for depletable tanks).
   if (config.depletable) {
-    ctx.fillStyle = "#aaa";
+    ctx.fillStyle = "#323232";
     ctx.font = LEVEL_FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";

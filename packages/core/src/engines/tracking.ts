@@ -439,10 +439,6 @@ export class PerturbationController {
     const dtSec = Math.max(0, Number(dtMs) || 0) / 1000;
     this.elapsedSec += dtSec;
 
-    // Accumulate compensation from participant input.
-    this.compensationX += (Number(inputDeltaX) || 0) * this.inputGain;
-    this.compensationY += (Number(inputDeltaY) || 0) * this.inputGain;
-
     // Compute perturbation signal.
     let pertX = 0;
     let pertY = 0;
@@ -453,9 +449,15 @@ export class PerturbationController {
     }
 
     // Cursor = perturbation + compensation, clamped.
+    // Anti-windup: back-project compensation so it never exceeds what the
+    // clamp actually permits.  Without this, compensation accumulates
+    // unboundedly when the cursor is against a boundary (e.g. participant
+    // moves mouse far off-screen while away), making recovery impossible.
     const max = this.maxDisplacementPx;
-    const cursorX = clamp(pertX + this.compensationX, -max, max);
-    const cursorY = clamp(pertY + this.compensationY, -max, max);
+    const cursorX = clamp(pertX + this.compensationX + (Number(inputDeltaX) || 0) * this.inputGain, -max, max);
+    const cursorY = clamp(pertY + this.compensationY + (Number(inputDeltaY) || 0) * this.inputGain, -max, max);
+    this.compensationX = cursorX - pertX;
+    this.compensationY = cursorY - pertY;
 
     return {
       cursorX,

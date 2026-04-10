@@ -24,6 +24,7 @@ import {
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   maybeExportStimulusRows,
   createTaskAdapter,
   type DrtEvent,
@@ -994,8 +995,8 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>, selection: Sel
       phase: asString(raw.phase) ?? "main",
       trials: toPositiveNumber(raw.trials, 8),
       manipulationId: manipulationIds.length > 0 ? manipulationIds.join("+") : null,
-      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens ?? raw.preBlockInstructions),
-      afterBlockScreens: toStringScreens(raw.afterBlockScreens ?? raw.postBlockInstructions),
+      beforeBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "before")),
+      afterBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "after")),
       trialTemplate,
       drt: resolveTrackingDrtConfig(drtDefault, resolveScopedModuleConfig(raw, "drt")),
     } satisfies ParsedTrackingBlock;
@@ -1057,4 +1058,3 @@ function toFinitePositive(value: unknown, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
-

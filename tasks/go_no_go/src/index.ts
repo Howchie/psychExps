@@ -26,6 +26,7 @@ import {
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   ensureJsPsychCanvasCentered,
   applyTaskInstructionConfig,
   createTaskAdapter,
@@ -156,7 +157,7 @@ export const parseGoNoGoConfig = (taskConfig: JSONObject): ParsedGoNoGoConfig =>
         trials: toNonNegativeNumber(bObj.trials, 0),
         goRatio: typeof bObj.goRatio === "number" ? Math.max(0, bObj.goRatio) : 0.8,
         feedback: parseTrialFeedbackConfig(asObject(bObj.feedback), null),
-        beforeBlockScreens: toStringScreens(bObj.beforeBlockScreens) ?? [],
+        beforeBlockScreens: toStringScreens(resolveBlockScreenSlotValue(bObj, "before")) ?? [],
       };
     }),
   };

@@ -17,6 +17,7 @@ import {
   toNonNegativeNumber,
   toPositiveNumber,
   toStringScreens,
+  resolveBlockScreenSlotValue,
   maybeExportStimulusRows,
   createTaskAdapter,
   type ScopedDrtConfig,
@@ -215,8 +216,8 @@ function parseRdkConfig(taskConfig: Record<string, unknown>, selection: Selectio
       phase: asString(raw.phase) ?? "main",
       trials: toPositiveNumber(raw.trials, 8),
       manipulationId: manipulationIds.length > 0 ? manipulationIds.join("+") : null,
-      beforeBlockScreens: toStringScreens(raw.beforeBlockScreens ?? raw.preBlockInstructions),
-      afterBlockScreens: toStringScreens(raw.afterBlockScreens ?? raw.postBlockInstructions),
+      beforeBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "before")),
+      afterBlockScreens: toStringScreens(resolveBlockScreenSlotValue(raw, "after")),
       trialTemplate,
       drt: coerceScopedDrtConfig(drtDefault, resolveScopedModuleConfig(raw, "drt")) as RdkDrtConfig,
     } satisfies ParsedRdkBlock;
@@ -529,4 +530,3 @@ async function renderRdkTrial(
     animationId = requestAnimationFrame(renderLoop);
   });
 }
-

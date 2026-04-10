@@ -34,7 +34,8 @@ import { matbCommsAdapter } from "@experiments/task-matb-comms";
 import { matbAdapter } from "@experiments/task-matb";
 
 import { coreDefaultConfig } from "./appCoreConfig";
-import { taskConfigsByPath, taskDefaults } from "./taskVariantConfigs";
+import { taskConfigsByPath } from "./taskVariantConfigs";
+import { buildConfigReferenceCandidates, toBundledConfigKey, toConfigFetchPath } from "./configResolution";
 
 async function bootstrap(): Promise<void> {
   const app = document.querySelector("#app");
@@ -72,14 +73,36 @@ async function bootstrap(): Promise<void> {
 
   let resolvedVariantConfig = {} as Record<string, unknown>;
   if (selection.configPath) {
-    const fromMap = taskConfigsByPath[selection.configPath];
-    if (fromMap) {
-      resolvedVariantConfig = fromMap;
-    } else {
-      const explicitPath = selection.configPath.endsWith(".json")
-        ? selection.configPath
-        : resolveRuntimePath(`/configs/${selection.configPath}.json`);
-      resolvedVariantConfig = await configManager.load(explicitPath);
+    const candidates = buildConfigReferenceCandidates({
+      requestedConfig: selection.configPath,
+      taskId: selection.taskId,
+      variants: adapter.manifest.variants,
+    });
+
+    let loaded = false;
+    let lastError: unknown = null;
+    for (const candidate of candidates) {
+      const fromMap = taskConfigsByPath[toBundledConfigKey(candidate)];
+      if (fromMap) {
+        resolvedVariantConfig = fromMap;
+        loaded = true;
+        break;
+      }
+      try {
+        resolvedVariantConfig = await configManager.load(toConfigFetchPath(candidate));
+        loaded = true;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (!loaded) {
+      const suffix = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";
+      throw new Error(
+        `Could not resolve config '${selection.configPath}' for task '${selection.taskId}'. ` +
+        `Tried: ${candidates.join(", ")}.${suffix}`,
+      );
     }
   } else if (variant.configPath) {
     const fromMap = taskConfigsByPath[variant.configPath];
@@ -92,7 +115,7 @@ async function bootstrap(): Promise<void> {
 
   const mergedTaskConfig = configManager.merge(
     {},
-    taskDefaults[selection.taskId] ?? {},
+    {},
     resolvedVariantConfig,
     selection.overrides ?? undefined,
   );

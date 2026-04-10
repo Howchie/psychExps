@@ -52,19 +52,19 @@ export function renderLight(
 ): void {
   const { ctx, x, y, width, height } = opts;
 
-  // Light rectangle.
+  // Light rectangle — OpenMATB style: large rectangle with label inside.
   ctx.fillStyle = state.on ? config.onColor : config.offColor;
   ctx.fillRect(x, y, width, height);
 
   // Border.
-  ctx.strokeStyle = "#222";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#323232";
+  ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, width, height);
 
-  // Label beneath.
-  ctx.fillStyle = "#ccc";
-  ctx.font = "bold 11px monospace";
+  // Label inside the light (centered), matching OpenMATB.
+  ctx.fillStyle = "#323232";
+  ctx.font = `bold ${Math.max(12, Math.round(height * 0.45))}px sans-serif`;
   ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillText(config.label, x + width / 2, y + height + 4);
+  ctx.textBaseline = "middle";
+  ctx.fillText(config.label, x + width / 2, y + height / 2);
 }

@@ -43,6 +43,11 @@ describe('data', () => {
     it("handles strings without special characters", () => {
       expect(csvCell("hello world")).toBe("hello world");
     });
+
+    it("serializes object and array values as JSON", () => {
+      expect(csvCell({ a: 1, b: "x" })).toBe('"{""a"":1,""b"":""x""}"');
+      expect(csvCell([1, "two", true])).toBe('"[1,""two"",true]"');
+    });
   });
 
   describe('recordsToCsv', () => {

@@ -194,6 +194,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   const brickQuotaEndDelayMs = Number.isFinite(brickQuotaEndDelayMsRaw)
     ? Math.max(0, Math.floor(brickQuotaEndDelayMsRaw))
     : (globalEndDelayMs > 0 ? globalEndDelayMs : 3000);
+  const stopDrtOnBrickQuotaMet =
+    resolvedDrtConfig.scope === 'trial' &&
+    (trialCfg.stopDrtOnBrickQuotaMet === true || trialCfg.endDrtOnBrickQuotaMet === true);
 
   const renderer = new ConveyorRenderer(resolvedCfg, {
     onBrickClick: (brickId: string, x: number, y: number) => {
@@ -201,6 +204,9 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     },
     onBrickHold: (brickId: string, holdDurationMs: number, x: number, y: number) => {
       gameState.handleBrickHold(brickId, holdDurationMs, gameState.elapsed, { x, y });
+    },
+    onBrickHoldState: (brickId: string, isHolding: boolean, x: number, y: number) => {
+      gameState.handleBrickHoldState(brickId, isHolding, gameState.elapsed, { x, y });
     },
     onBrickHover: (brickId: string, isHovering: boolean, x: number, y: number) => {
       gameState.handleBrickHover(brickId, isHovering, gameState.elapsed, { x, y });
@@ -217,6 +223,10 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
 
   await renderer.init(container);
   renderer.toggleVisualDRT(false, legacyDrtRaw?.stim_visual_config);
+
+  // Prime the first frame so spotlight hit-area is interactive before the first RAF tick.
+  const initialFocusState = gameState.getFocusState();
+  renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, initialFocusState);
 
   let drtPresentation: ReturnType<typeof createDrtPresentationBridge> | null = null;
   let activeStimulusId: string | null = null;
@@ -446,8 +456,18 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       }
       resolve(trialData);
     };
+    const stopDrtForPendingEnd = () => {
+      if (finalizedDrtData !== null || !drtController) return;
+      finalizedDrtData = drtController.stop();
+      drtPresentation?.hideAll();
+      activeStimulusId = null;
+    };
+
     const scheduleEnd = (reason: string) => {
       if (ended || pendingEnd) return;
+      if (reason === 'brick_quota_met' && stopDrtOnBrickQuotaMet) {
+        stopDrtForPendingEnd();
+      }
       const delayMs = reason === 'brick_quota_met' ? brickQuotaEndDelayMs : globalEndDelayMs;
       pendingEnd = {
         reason,

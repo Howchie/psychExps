@@ -64,36 +64,34 @@ export function renderScale(
   const { ctx, x, y, width, height } = opts;
 
   const centerX = x + width / 2;
-  const trackLeft = centerX - 1;
-  const trackRight = centerX + 1;
-  const trackTop = y + 20; // leave room for label
-  const trackBottom = y + height - FEEDBACK_BAR_HEIGHT - 8;
+  const trackTop = y + 4;
+  const labelHeight = 18;
+  const trackBottom = y + height - FEEDBACK_BAR_HEIGHT - labelHeight - 4;
   const trackHeight = trackBottom - trackTop;
 
-  // Label above.
-  ctx.fillStyle = "#ccc";
-  ctx.font = "bold 11px monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillText(config.label, centerX, y + 2);
+  // Scale border rectangle — matching OpenMATB's bordered scale areas.
+  const boxPad = 4;
+  ctx.strokeStyle = "#323232";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + boxPad, trackTop - 2, width - boxPad * 2, trackHeight + 4);
 
   // Vertical track line.
-  ctx.strokeStyle = "#555";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#323232";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(centerX, trackTop);
   ctx.lineTo(centerX, trackBottom);
   ctx.stroke();
 
-  // Tick marks.
+  // Tick marks — alternating long/short, matching OpenMATB scale.py.
   for (let i = 0; i < POSITIONS; i++) {
     const frac = i / (POSITIONS - 1);
     const tickY = trackTop + frac * trackHeight;
-    const isCenter = i === CENTER_POSITION;
-    const halfTick = (TICK_LENGTH + (isCenter ? CENTER_TICK_EXTRA : 0)) / 2;
+    const isLong = i % 2 === 0;
+    const halfTick = isLong ? TICK_LENGTH + CENTER_TICK_EXTRA : TICK_LENGTH;
 
-    ctx.strokeStyle = isCenter ? "#aaa" : "#555";
-    ctx.lineWidth = isCenter ? 2 : 1;
+    ctx.strokeStyle = "#323232";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(centerX - halfTick, tickY);
     ctx.lineTo(centerX + halfTick, tickY);
@@ -104,9 +102,9 @@ export function renderScale(
   const clampedPos = Math.max(0, Math.min(POSITIONS - 1, Math.round(state.position)));
   const frac = clampedPos / (POSITIONS - 1);
   const arrowY = trackTop + frac * trackHeight;
-  const arrowTipX = centerX - 4; // tip points toward the track
+  const arrowTipX = centerX - 4;
 
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "#323232";
   ctx.beginPath();
   ctx.moveTo(arrowTipX, arrowY);
   ctx.lineTo(arrowTipX - ARROW_WIDTH, arrowY - ARROW_HEIGHT);
@@ -114,12 +112,19 @@ export function renderScale(
   ctx.closePath();
   ctx.fill();
 
-  // Feedback bar below the track.
+  // Label below scale — matching OpenMATB (F1, F2, etc. below).
+  ctx.fillStyle = "#323232";
+  ctx.font = "bold 12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(config.label, centerX, trackBottom + 8);
+
+  // Feedback bar below the label.
   if (opts.feedback) {
-    const fbY = trackBottom + 4;
+    const fbY = trackBottom + labelHeight + 6;
     const fbWidth = width * 0.7;
     const fbX = centerX - fbWidth / 2;
-    ctx.fillStyle = opts.feedback === "positive" ? "#22c55e" : "#ef4444";
+    ctx.fillStyle = opts.feedback === "positive" ? "#8edbb0" : "#e04545";
     ctx.fillRect(fbX, fbY, fbWidth, FEEDBACK_BAR_HEIGHT);
   }
 }

@@ -67,6 +67,7 @@ export interface ButtonStyleOverrides {
   minHeight?: string;
   outline?: string;
   boxShadow?: string;
+  textTransform?: string;
 }
 
 export interface CenteredNoticeOptions {
@@ -468,6 +469,7 @@ export function resolveButtonStyleOverrides(raw: unknown): ButtonStyleOverrides 
   assignString("minHeight", "minHeight", "min_height");
   assignString("outline", "outline");
   assignString("boxShadow", "boxShadow", "box_shadow");
+  assignString("textTransform", "textTransform", "text_transform");
   const fontWeightRaw = (node as Record<string, unknown>).fontWeight ?? (node as Record<string, unknown>).font_weight;
   if (typeof fontWeightRaw === "string" || typeof fontWeightRaw === "number") {
     style.fontWeight = fontWeightRaw;
@@ -488,6 +490,7 @@ export function applyButtonStyleOverrides(button: HTMLButtonElement, style: Butt
   if (style.minHeight !== undefined) button.style.minHeight = style.minHeight;
   if (style.outline !== undefined) button.style.outline = style.outline;
   if (style.boxShadow !== undefined) button.style.boxShadow = style.boxShadow;
+  if (style.textTransform !== undefined) button.style.textTransform = style.textTransform;
 }
 
 function buildContinueScreenHtml(

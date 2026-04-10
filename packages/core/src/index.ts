@@ -58,6 +58,7 @@ export * from "./runtime/taskInstructions";
 export * from "./runtime/blockSummary";
 export * from "./runtime/blockRepeat";
 export * from "./runtime/scenarioScheduler";
+export * from "./runtime/dynamicScenarioSource";
 export * from "./runtime/concurrentRunner";
 
 // Stimuli

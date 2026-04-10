@@ -482,14 +482,32 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
   lengthPx: number | number[] | SamplerSpec;
   runtimeLengths?: number[]; // optional renderer override
   speedPxPerSec: number | SamplerSpec;
+  dynamicSpeed?: {
+    enable?: boolean;                 // default false
+    intervalMs?: number | SamplerSpec; // ms between speed changes (sampled per conveyor)
+    speedPxPerSec?: number | SamplerSpec; // sampled speed for each change event
+    perConveyor?: Record<string, {
+      enable?: boolean;
+      intervalMs?: number | SamplerSpec;
+      speedPxPerSec?: number | SamplerSpec;
+    }>;
+  };
 }
 ```
+
+`conveyors.dynamicSpeed` behavior:
+- Off by default (`enable: false`): conveyor speed is sampled once at trial init and reused; no runtime speed resampling occurs.
+- When enabled, each conveyor keeps its own independent timer and speed sampler.
+- On each sampled interval boundary, the conveyor speed is resampled and applied immediately.
+- `perConveyor` overrides are keyed by conveyor id (`"c0"`, `"c1"`, …) or string index (`"0"`, `"1"`, …).
+- `perConveyor[*].enable` can turn dynamic speed on/off for individual conveyors while global `enable` remains unchanged.
+- If `speedPxPerSec` is omitted inside `dynamicSpeed`, it falls back to `conveyors.speedPxPerSec`.
 
 ## 4.3 `bricks`
 
 ```ts
 {
-  completionMode: "single_click" | "multi_click" | "hold_duration" | "hover_to_clear" | string;
+  completionMode: "single_click" | "multi_click" | "hold_duration" | "hover_to_clear" | "hold_to_clear" | string;
   completionParams?: {
     clicks_required?: number;        // multi_click
     target_hold_ms?: number;         // hold_duration
@@ -500,6 +518,7 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
     width_reference_px?: number;     // hold_duration
     width_scaling_exponent?: number; // hold_duration
     hover_process_rate_px_s?: number;// hover_to_clear; if unset, uses runtime `brick.speed`
+    hold_process_rate_px_s?: number; // hold_to_clear; if unset, uses runtime `brick.speed`
   };
 
   maxBricksPerTrial?: number;
@@ -561,6 +580,12 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
 - Processing depletes visible width from the right edge at `hover_process_rate_px_s`.
 - Depleted segments are fully removed visually (no translucent ghost body), while interaction bounds remain the full brick object until clear/drop.
 - If `hover_process_rate_px_s` is not set, the runtime uses `brick.speed` (the sampled conveyor/brick px/s rate), so depletion rate matches forward progress by default.
+
+`hold_to_clear` runtime behavior:
+- Bricks continue moving while held (normal conveyor advection still applies).
+- Processing depletes visible width while the mouse button is held at `hold_process_rate_px_s`.
+- Works with all targeting areas (`brick`, `conveyor`, `spotlight`).
+- If `hold_process_rate_px_s` is not set, the runtime uses `brick.speed`.
 
 ### `BrickCategorySpec`
 
@@ -658,6 +683,19 @@ Each field can be:
   maxTimeSec?: number | null;          // used in fixed_time
   endDelayMs?: number;                 // global post-end delay (ms), default 0
   brickQuotaEndDelayMs?: number;       // post-end delay for "brick_quota_met" (ms), default 3000
+  stopDrtOnBrickQuotaMet?: boolean;   // if true (trial-scoped DRT), stop DRT immediately when quota is met
+  endDrtOnBrickQuotaMet?: boolean;    // alias of stopDrtOnBrickQuotaMet
+  holdDurationPractice?: {
+    requiredPresses?: number;          // for hold-duration practice runner, forces max_bricks quota
+    fullWidthConveyor?: boolean;       // default true in hold-duration practice runner
+    centerBrick?: boolean;             // default true in hold-duration practice runner
+    hideHud?: boolean;                 // default true in hold-duration practice runner
+    replenishDelayMs?: number;         // ms to keep post-release clear state before refilling (default 220)
+    trialTimeMs?: number;              // alias of replenishDelayMs
+    nextTrialDelayMs?: number;         // alias of replenishDelayMs
+    useSpotlightWindow?: boolean;      // enable forced-order spotlight window during hold-duration practice
+    spotlightWindow?: boolean;         // alias of useSpotlightWindow
+  };
   forcedOrder?: {
     enable?: boolean;
     switchMode?: "on_clear" | "interval" | "interval_or_clear";

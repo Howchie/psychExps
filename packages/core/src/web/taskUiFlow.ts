@@ -122,6 +122,7 @@ export interface RunBlockUiFlowArgs {
   blockIndex: number;
   buttonIdPrefix: string;
   introText?: string | null;
+  showBlockIntro?: boolean;
   showBlockLabel?: boolean;
   preBlockBeforeIntro?: boolean;
   preBlockPages?: InstructionPage[];
@@ -227,13 +228,17 @@ export async function runBlockStartFlow(args: RunBlockUiFlowArgs): Promise<void>
     await runInsertionGroups(args.beforeIntroInsertions, "blockStartBeforeIntro");
     await runPreScreens();
     await runInsertionGroups(args.afterPreInsertions, "blockStartAfterPre");
-    await runIntroCard();
+    if (args.showBlockIntro !== false) {
+      await runIntroCard();
+    }
     await runInsertionGroups(args.afterIntroInsertions, "blockStartAfterIntro");
     return;
   }
 
   await runInsertionGroups(args.beforeIntroInsertions, "blockStartBeforeIntro");
-  await runIntroCard();
+  if (args.showBlockIntro !== false) {
+    await runIntroCard();
+  }
   await runInsertionGroups(args.afterIntroInsertions, "blockStartAfterIntro");
   await runPreScreens();
   await runInsertionGroups(args.afterPreInsertions, "blockStartAfterPre");

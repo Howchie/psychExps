@@ -30,11 +30,26 @@ export function downloadCsv(csv: string, filePrefix: string, selection: Selectio
 }
 
 export function csvCell(value: unknown): string {
-  const raw = String(value ?? "");
+  const raw = serializeCsvValue(value);
   if (raw.includes(",") || raw.includes("\"") || raw.includes("\n")) {
     return `"${raw.replaceAll("\"", "\"\"")}"`;
   }
   return raw;
+}
+
+function serializeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    // Fallback for circular structures or non-serializable values.
+    return String(value);
+  }
 }
 
 export function recordsToCsv<T extends object>(records: T[]): string {

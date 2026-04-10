@@ -18,23 +18,48 @@
       "The MATB session is complete. Thank you."
     ]
   },
+  "ui": {
+    "pageBackground": "#0a0a0a",
+    "cardWidth": "800px",
+    "cardMinHeight": "600px",
+    "cardBackground": "#1a1a1a",
+    "cardBorder": "1px solid #444444",
+    "cardBorderRadius": "0px",
+    "cardColor": "#cccccc",
+    "cardFontSize": "1rem",
+    "cardFontFamily": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    "continueButtonStyle": {
+      "background": "#222222",
+      "border": "1px solid #444444",
+      "borderRadius": "0px",
+      "color": "#cccccc",
+      "fontSize": "12px",
+      "fontWeight": "700",
+      "padding": "8px 20px",
+      "outline": "none",
+      "boxShadow": "none",
+      "textTransform": "uppercase"
+    }
+  },
   "layout": {
     "rows": 2,
-    "cols": 2,
+    "cols": 3,
     "gap": "2px",
-    "background": "#111",
+    "background": "#d0d0d0",
     "panels": [
-      { "id": "sysmon",   "row": 0, "col": 0, "label": "SYSMON" },
-      { "id": "tracking", "row": 0, "col": 1, "label": "TRACKING" },
-      { "id": "comms",    "row": 1, "col": 0, "label": "COMMS" },
-      { "id": "resman",   "row": 1, "col": 1, "label": "RESMAN" }
+      { "id": "sysmon",     "row": 0, "col": 0, "label": "SYSTEM MONITORING" },
+      { "id": "tracking",   "row": 0, "col": 1, "label": "TRACKING" },
+      { "id": "scheduling", "row": 0, "col": 2, "label": "SCHEDULING" },
+      { "id": "comms",      "row": 1, "col": 0, "label": "COMMUNICATIONS" },
+      { "id": "resman",     "row": 1, "col": 1, "label": "RESOURCE MANAGEMENT" },
+      { "id": "pumpstatus", "row": 1, "col": 2, "label": "PUMP STATUS" }
     ]
   },
   "subtasks": {
     "sysmon": {
       "lights": [
-        { "id": "light1", "label": "F5", "onColor": "#22c55e", "offColor": "#555", "defaultOn": true,  "key": "F5" },
-        { "id": "light2", "label": "F6", "onColor": "#ef4444", "offColor": "#555", "defaultOn": false, "key": "F6" }
+        { "id": "light1", "label": "F5", "onColor": "#8edbb0", "offColor": "#ffffff", "defaultOn": true,  "key": "F5" },
+        { "id": "light2", "label": "F6", "onColor": "#e04545", "offColor": "#ffffff", "defaultOn": false, "key": "F6" }
       ],
       "scales": [
         { "id": "scale1", "label": "F1", "key": "F1", "driftSpeed": 1 },
@@ -49,12 +74,17 @@
     "tracking": {
       "display": {
         "aperturePx": 400,
-        "targetProportion": 0.15,
-        "cursorSizePx": 8,
-        "cursorColorInside": "#000000",
-        "cursorColorOutside": "#ef4444",
         "showCrosshair": true,
-        "backgroundColor": "#1e293b"
+        "canvasBackground": "#f0f0f0"
+      },
+      "reticle": {
+        "radiusPx": 50,
+        "strokeColor": "#323232"
+      },
+      "cursor": {
+        "radiusPx": 16,
+        "colorInside": "#323232",
+        "colorOutside": "#ef4444"
       },
       "perturbation": {
         "components": [

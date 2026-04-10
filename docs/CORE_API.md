@@ -434,7 +434,9 @@ Helpers:
 
 ### `recordsToCsv(records)`
 
-Converts flat object rows to CSV with escaping.
+Converts object rows to CSV with escaping.
+- primitive cells are written directly
+- object/array cells are JSON-serialized (instead of `[object Object]`)
 
 ### `finalizeTaskRun(args): Promise<{ submittedToJatos: boolean; redirected: boolean }>`
 
@@ -446,6 +448,7 @@ Behavior:
    - `"json"`: JSON only
    - `"both"`: CSV + JSON
    CSV uses explicit `args.csv.contents` when provided, else inferred tabular rows from payload where possible.
+   Optional `args.extraCsvs` allows downloading additional CSV files in the same finalize pass.
 2. Submit to JATOS when available.
    - When a core data sink handles JATOS incrementally, finalization does not overwrite streamed result data with a second full-payload submit.
 3. `endStudy()` unless `endJatosOnSubmit === false`.
@@ -735,8 +738,8 @@ Supports:
 - `title`
 - `lines` (string or string[])
 - `when` filters (`blockIndex`, `blockLabel`, `blockType`, `isPractice`)
-- `where` trial-result filters (field -> value or array of values)
-- `metrics.correctField`, `metrics.rtField`
+- `where` trial-result filters (field -> value or array of values; supports dotted paths)
+- `metrics.correctField`, `metrics.rtField` (supports dotted paths)
 
 ### `buildBlockSummaryModel(args): BlockSummaryModel | null`
 
@@ -744,6 +747,8 @@ Builds a computed block summary from block metadata and trial results.
 Template variables include:
 - `{blockLabel}`, `{blockIndex}`, `{blockIndex1}`, `{blockType}`, `{isPractice}`
 - `{total}`, `{correct}`, `{incorrect}`, `{accuracyPct}`, `{meanRtMs}`, `{validRtCount}`
+- `{blockSpawned}`, `{blockCleared}`, `{blockDropped}`, `{blockPoints}`
+- `{experimentSpawned}`, `{experimentCleared}`, `{experimentDropped}`, `{experimentPoints}`
 
 ### `renderBlockSummaryCardHtml(model): string`
 
@@ -752,6 +757,7 @@ Renders a simple HTML card from a summary model for tasks that use custom `waitF
 ### `computeBlockSummaryStats(args): { total, correct, accuracyPct, meanRtMs, validRtCount }`
 
 Computes filtered summary stats from trial results using `where` + `metrics`.
+Both `where` keys and metric field names can use dotted paths (for example `game.stats.cleared`).
 Useful when non-UI control flow (for example, retry logic) should use the same scoring semantics as block summary screens.
 
 ## 16. Block repeat helpers
@@ -764,8 +770,9 @@ Supports:
 - `maxAttempts`
 - `minAccuracy` (0..1) and `minAccuracyPct` (0..100 alias)
 - `minCorrect`, `minTotal`
-- `where` trial-result filtering
-- `metrics.correctField`
+- `maxMeanMetric`, `minMeanMetric` (mean absolute value of `metrics.metricField`)
+- `where` trial-result filtering (supports dotted paths)
+- `metrics.correctField`, `metrics.metricField` (supports dotted paths)
 
 ### `evaluateBlockRepeatUntil(args): BlockRepeatEvaluation`
 
@@ -774,4 +781,4 @@ Returns:
 - `passed`
 - `shouldRepeat`
 - `reason` (`threshold_met`, `threshold_not_met`, `max_attempts_reached`, `disabled`)
-- attempt-local `stats` (`total`, `correct`, `accuracy`)
+- attempt-local `stats` (`total`, `correct`, `accuracy`, `meanMetric`)
