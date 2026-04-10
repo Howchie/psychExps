@@ -1,3 +1,4 @@
+import { AudioService } from "@experiments/core";
 import {
   QuestBinaryStaircase,
   buildLinearRange,
@@ -95,6 +96,14 @@ interface SftParsedConfig {
     stimulusMs: number;
     responseDeadlineMs: number;
     responseTerminatesTrial: boolean;
+  };
+  audio: {
+    mode: "visual" | "audiovisual";
+    waveform: OscillatorType;
+
+    frequencyHz: number;
+    durationMs: number;
+    volume: number;
   };
   display: {
     aperturePx: number;
@@ -221,6 +230,7 @@ interface TrialRecord {
 
 interface StaircaseSpec {
   enabled: boolean;
+  stimCode: string;
   nTrials: number;
   stimDbMin: number;
   stimDbMax: number;
@@ -278,6 +288,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   applyGlobalSalience(parsed, parsed.salience);
 
   let jsPsych: ReturnType<typeof initStandardJsPsych> | null = null;
+  const audioService = new AudioService();
   const orchestrator = new TaskOrchestrator<PlannedBlock, PlannedTrial, TrialRecord>(context);
   applyTaskInstructionConfig(context.taskConfig, {
     ...parsed.instructions,
@@ -454,6 +465,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
           timeline: staircaseTimeline,
           container: root,
           config: parsed,
+          audioService,
           rng,
           allowedKeys,
           staircaseRecords,
@@ -474,6 +486,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       suffix: "sft_trials",
     },
     getTaskMetadata: (sessionResult) => {
+      audioService.dispose();
       const records = sessionResult.blocks.flatMap((b: any) => b.trialResults) as TrialRecord[];
       eventLogger.emit("task_complete", { task: "sft", runner: "jspsych", nTrials: records.length });
       return {
@@ -495,12 +508,13 @@ function appendStaircaseTimeline(args: {
   timeline: any[];
   container: HTMLElement;
   config: SftParsedConfig;
+  audioService?: AudioService;
   rng: () => number;
   allowedKeys: string[];
   staircaseRecords: StaircaseRecord[];
   eventLogger: EventLogger;
 }): void {
-  const { timeline, container, config, rng, allowedKeys, staircaseRecords, eventLogger } = args;
+  const { timeline, container, config, audioService, rng, allowedKeys, staircaseRecords, eventLogger } = args;
   const staircase = config.staircase;
   if (!staircase?.enabled) return;
 
@@ -542,7 +556,7 @@ function appendStaircaseTimeline(args: {
             trialIndex: timelineIndex,
             rule: "OR",
             layout: "center",
-            stimCode: "Hx",
+            stimCode: staircase.stimCode,
             stimCategory: "AN",
             salience: { high: dbToLuminance(stimDb), low: 0 },
             showRuleCue: false,
@@ -555,6 +569,7 @@ function appendStaircaseTimeline(args: {
     appendDotTrialTimeline({
       timeline,
       config,
+      audioService,
       trialProvider: () => activeTrial?.trial ?? null,
       allowedKeys,
       rng,
@@ -625,6 +640,8 @@ function appendStaircaseTimeline(args: {
 function appendDotTrialTimeline(args: {
   timeline: any[];
   config: SftParsedConfig;
+  audioService?: AudioService;
+
   trialProvider: () => PlannedTrial | null;
   allowedKeys: string[];
   rng: () => number;
@@ -638,7 +655,7 @@ function appendDotTrialTimeline(args: {
     viewProvider: () => { text: string; color: string } | null;
   };
 }): void {
-  const { timeline, config, trialProvider, allowedKeys, rng, phasePrefix, onResponse, dataContext, feedback } = args;
+  const { timeline, config, audioService, trialProvider, allowedKeys, rng, phasePrefix, onResponse, dataContext, feedback } = args;
 
   const responseTerminatesTrial = config.rtTask.responseTerminatesTrial;
   const fallbackFixationMs = jitter(config.timing.fixationMs, rng);
@@ -722,6 +739,30 @@ function appendDotTrialTimeline(args: {
         }
       : undefined,
     postResponseContent: config.rtTask.enabled ? config.rtTask.postResponseContent : "stimulus",
+    onStimulusPhaseStart: () => {
+      const trial = trialProvider();
+      if (!trial || !audioService || config.audio.mode !== "audiovisual") return;
+      let targetSalience = 0;
+      const code = trial.stimCode;
+      if (code.length === 2) {
+          const audioChar = code[1]; // Assume channel 2 is audio
+          if (audioChar === 'H') targetSalience = trial.salience.high;
+          else if (audioChar === 'L') targetSalience = trial.salience.low;
+          else if (audioChar === 'x') targetSalience = 0;
+          else targetSalience = trial.salience.high; // fallback
+      } else {
+         targetSalience = trial.salience.high;
+      }
+
+      if (targetSalience > 0) {
+         const baseVol = config.audio.volume;
+         const vol = baseVol * targetSalience;
+         audioService.playTone(config.audio.frequencyHz, config.audio.durationMs, {
+             waveform: config.audio.waveform,
+             volume: vol
+         });
+      }
+    },
     onResponse: (response: { key: string | null; rtMs: number | null }, data: Record<string, unknown>) => {
       onResponse(response, trialProvider(), data);
     },
@@ -789,6 +830,7 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
   const stimulusRaw = asObject(config.stimulus);
   const salienceRaw = asObject(stimulusRaw?.salience_levels);
   const conditionCodes = asArray(stimulusRaw?.condition_codes).map((v) => asString(v)).filter((v): v is string => Boolean(v));
+
   const legacyTiming = {
     fixationMs: toNonNegativeNumber(asObject(config.timing)?.fixation_truncexp ? (asObject(asObject(config.timing)?.fixation_truncexp)?.mean ?? 500) : 500, 500),
     blankMs: toNonNegativeNumber(asObject(config.timing)?.blank_ms, 66),
@@ -796,6 +838,16 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     responseDeadlineMs: toPositiveNumber(asObject(config.timing)?.response_deadline_ms, 3000),
     responseTerminatesTrial: asObject(config.timing)?.response_terminates_trial !== false,
   };
+  const stimulusAudioRaw = asObject(stimulusRaw?.audio);
+  const audioMode = (asString(stimulusAudioRaw?.mode) || "visual").toLowerCase() === "audiovisual" ? "audiovisual" : "visual";
+  const audio = {
+    mode: audioMode as "visual" | "audiovisual",
+    waveform: (asString(stimulusAudioRaw?.waveform) || "sine") as OscillatorType,
+    frequencyHz: toPositiveNumber(stimulusAudioRaw?.frequencyHz ?? stimulusAudioRaw?.frequency_hz, 440),
+    durationMs: toPositiveNumber(stimulusAudioRaw?.durationMs ?? stimulusAudioRaw?.duration_ms, legacyTiming.stimulusMs),
+    volume: toUnitNumber(stimulusAudioRaw?.volume, 0.25),
+  };
+
 
   const taskRaw = asObject(config.task);
   const rtRaw = asObject(taskRaw?.rtTask);
@@ -905,6 +957,8 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
       canvasBorder: asString(asObject(config.display)?.canvas_border) || "2px solid #444",
       cueColor: asString(asObject(config.display)?.cue_color) || "#0f172a",
     },
+    audio,
+
     responses,
     responseSemantics,
     salience: {
@@ -936,6 +990,7 @@ function parseStaircase(config: JSONObject): StaircaseSpec | null {
   const enabled = Boolean(raw.enabled);
   return {
     enabled,
+    stimCode: asString(raw.stim_code ?? raw.stimCode) || "Hx",
     nTrials: toPositiveNumber(raw.n_trials ?? raw.nTrials, 20),
     stimDbMin: toFiniteNumber(raw.stim_db_min, -2.5),
     stimDbMax: toFiniteNumber(raw.stim_db_max, -0.2),
@@ -1126,7 +1181,7 @@ function drawStimulusPhase(canvas: HTMLCanvasElement, config: SftParsedConfig, t
   }, ({ centerX, centerY }) => {
     if (!trial) return;
     const positions = dotPositions(centerX, centerY, trial.layout, config.display.dotOffsetPx);
-    const dots = dotsFromStimCode(trial.stimCode, trial.salience);
+    const dots = dotsFromStimCode(trial.stimCode, trial.salience, config.audio.mode);
     for (const dot of dots) {
       const p = positions[dot.loc];
       ctx.beginPath();
@@ -1178,11 +1233,11 @@ function classifyResponse(
   return semantics.ID.responseCategoryFromKey(key);
 }
 
-function dotsFromStimCode(stimCode: string, salience: { high: number; low: number }): Array<{ loc: "A" | "B"; luminance: number }> {
+function dotsFromStimCode(stimCode: string, salience: { high: number; low: number }, mode: "visual" | "audiovisual"): Array<{ loc: "A" | "B"; luminance: number }> {
   const [a, b] = normalizeStimCode(stimCode).split("");
   const dots: Array<{ loc: "A" | "B"; luminance: number }> = [];
   if (a !== "x") dots.push({ loc: "A", luminance: a === "H" ? salience.high : salience.low });
-  if (b !== "x") dots.push({ loc: "B", luminance: b === "H" ? salience.high : salience.low });
+  if (mode === "visual" && b !== "x") dots.push({ loc: "B", luminance: b === "H" ? salience.high : salience.low });
   return dots;
 }
 
