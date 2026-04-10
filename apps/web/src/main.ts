@@ -15,6 +15,7 @@ import {
   installGlobalScrollBlocker,
   resolvePageBackground,
   validateTaskConfigIsolation,
+  ensureEegBridgeReady,
 } from "@experiments/core";
 import type { TaskAdapter } from "@experiments/core";
 
@@ -143,6 +144,7 @@ async function bootstrap(): Promise<void> {
     mergedTaskConfig,
     adapters.map((entry) => entry.manifest.taskId),
   );
+  await ensureEegBridgeReady(coreDefaultConfig, mergedTaskConfig);
 
   app.innerHTML = "";
   app.classList.add("app-experiment");

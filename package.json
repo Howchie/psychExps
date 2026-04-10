@@ -11,6 +11,8 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev": "npm run dev -w @experiments/web",
+    "eeg:bridge": "node scripts/eeg-bridge.mjs",
+    "eeg:session": "node scripts/run-eeg-session.mjs",
     "test:auto": "playwright test -c playwright.config.ts",
     "autoresponder:url": "node scripts/run-autoresponder-url.mjs"
   },

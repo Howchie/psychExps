@@ -4,6 +4,7 @@
 - [Docs index](./docs/README.md)
 - [Core framework API](./docs/CORE_API.md)
 - [Configuration & inheritance](./docs/CONFIGURATION_GUIDE.md)
+- [EEG workflow](./docs/EEG_WORKFLOW.md)
 - [Task: SFT](./docs/TASK_SFT.md)
 - [Task: PM](./docs/TASK_PM.md)
 - [Task: NBack](./docs/TASK_NBACK.md)
@@ -41,6 +42,12 @@ Participant params:
 ```bash
 npm install
 npm run dev
+```
+
+EEG local session (bridge + web dev server):
+
+```bash
+npm run eeg:session
 ```
 
 Auto-responder launch example:

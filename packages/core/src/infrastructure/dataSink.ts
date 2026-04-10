@@ -1,6 +1,7 @@
 import type { CoreConfig, JSONObject, SelectionContext } from "../api/types";
 import type { TaskSessionEvent, TaskSessionRunnerResult } from "../runtime/sessionRunner";
 import { appendToJatos, isJatosAvailable, submitToJatos } from "./jatos";
+import { postEegBridgeEvent, resolveEegBridgeConfig } from "./eegBridge";
 
 export type TaskDataEnvelopeKind = "session_event" | "trial_result" | "task_summary";
 
@@ -272,11 +273,91 @@ export class JatosCheckpointSink<TBlock = unknown, TTrial = unknown, TTrialResul
   }
 }
 
+export class EegBridgeSink<TBlock = unknown, TTrial = unknown, TTrialResult = unknown>
+  implements TaskDataSink<TBlock, TTrial, TTrialResult>
+{
+  private hadFailure = false;
+
+  private async post(
+    context: TaskDataSinkContext,
+    event: {
+      kind: string;
+      eventType?: string;
+      blockIndex?: number;
+      blockAttempt?: number;
+      trialIndex?: number;
+      eventData?: unknown;
+      data?: unknown;
+    },
+  ): Promise<void> {
+    const eegConfig = resolveEegBridgeConfig(context.coreConfig, context.taskConfig);
+    if (!eegConfig.enabled) return;
+    const ok = await postEegBridgeEvent(eegConfig, {
+      kind: event.kind,
+      ts: new Date().toISOString(),
+      taskId: context.selection.taskId,
+      variantId: context.selection.variantId,
+      participantId: context.selection.participant.participantId,
+      studyId: context.selection.participant.studyId,
+      sessionId: context.selection.participant.sessionId,
+      ...(typeof event.blockIndex === "number" ? { blockIndex: event.blockIndex } : {}),
+      ...(typeof event.blockAttempt === "number" ? { blockAttempt: event.blockAttempt } : {}),
+      ...(typeof event.trialIndex === "number" ? { trialIndex: event.trialIndex } : {}),
+      ...(typeof event.eventType === "string" ? { eventType: event.eventType } : {}),
+      ...(event.eventData === undefined ? {} : { eventData: event.eventData }),
+      ...(event.data === undefined ? {} : { data: event.data }),
+    });
+    if (!ok) this.hadFailure = true;
+  }
+
+  async onTaskStart(context: TaskDataSinkContext): Promise<void> {
+    await this.post(context, {
+      kind: "session_start",
+      data: {
+        taskId: context.selection.taskId,
+        variantId: context.selection.variantId,
+      },
+    });
+  }
+
+  async onSessionEvent(context: TaskDataSinkContext, event: TaskSessionEvent): Promise<void> {
+    const eegConfig = resolveEegBridgeConfig(context.coreConfig, context.taskConfig);
+    if (!eegConfig.enabled) return;
+    const eventType = String(event.type || "").toLowerCase();
+    if (!eegConfig.eventTypes.has(eventType)) return;
+    await this.post(context, {
+      kind: "session_event",
+      eventType: event.type,
+      blockIndex: event.blockIndex,
+      blockAttempt: event.blockAttempt,
+      trialIndex: event.trialIndex,
+      ...(eegConfig.includeEventPayload && event.payload !== undefined ? { eventData: event.payload } : {}),
+    });
+  }
+
+  async onTaskEnd(args: TaskDataSinkTaskEndArgs<TBlock, TTrialResult>): Promise<void> {
+    await this.post(args.context, {
+      kind: "session_end",
+      data: {
+        recordCount: Array.isArray(args.payload.records) ? args.payload.records.length : 0,
+      },
+    });
+  }
+
+  getStatus(): TaskDataSinkStatus {
+    return {
+      jatosStreamingUsed: false,
+      jatosStreamingFailed: this.hadFailure,
+    };
+  }
+}
+
 export function createDefaultTaskDataSink<TBlock = unknown, TTrial = unknown, TTrialResult = unknown>():
   TaskDataSink<TBlock, TTrial, TTrialResult> {
   const sinks: Array<TaskDataSink<TBlock, TTrial, TTrialResult>> = [];
   if (isJatosAvailable()) {
     sinks.push(new JatosCheckpointSink<TBlock, TTrial, TTrialResult>());
   }
+  sinks.push(new EegBridgeSink<TBlock, TTrial, TTrialResult>());
   return new CompositeTaskDataSink(sinks);
 }

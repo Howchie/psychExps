@@ -202,6 +202,36 @@ Survey submit buttons support analogous per-survey controls via survey definitio
 
 ---
 
+## 4.2 EEG Bridge (Local)
+
+The framework supports an opt-in local EEG bridge for marker forwarding.
+
+Keys:
+- `coreConfig.eeg`
+- `taskConfig.eeg` (overrides core values for the selected task run)
+
+Example:
+
+```json
+{
+  "eeg": {
+    "enabled": true,
+    "bridgeUrl": "http://127.0.0.1:8787",
+    "requireBridge": true,
+    "eventTypes": ["task_start", "task_end", "trial_start", "trial_end"],
+    "includeEventPayload": false
+  }
+}
+```
+
+Behavior:
+- When `enabled=false`, EEG bridge integration is inactive.
+- When `requireBridge=true`, launch is blocked if `GET {bridgeUrl}/health` fails.
+- Session events listed in `eventTypes` are forwarded to `POST {bridgeUrl}/event`.
+- This is marker/event forwarding only; continuous EEG signal recording is expected to be handled by external tooling (for example LabRecorder).
+
+---
+
 ## 5. Redirect Templates
 
 The framework supports dynamic redirect URLs upon completion. These are configured in the `completion.redirect` section of the core config.

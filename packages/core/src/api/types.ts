@@ -88,6 +88,28 @@ export interface CoreUiConfig {
   pageBackground?: string;
 }
 
+export interface CoreEegConfig {
+  enabled?: boolean;
+  /**
+   * Base URL for the local EEG bridge process.
+   * Example: http://127.0.0.1:8787
+   */
+  bridgeUrl?: string;
+  /**
+   * If true, experiment launch is blocked when bridge health check fails.
+   */
+  requireBridge?: boolean;
+  /**
+   * Session event types to forward to the EEG bridge.
+   * Defaults to trial/task boundaries when omitted.
+   */
+  eventTypes?: string[];
+  /**
+   * If true, include session event payload data in forwarded EEG events.
+   */
+  includeEventPayload?: boolean;
+}
+
 export interface CoreConfig {
   selection: CoreSelectionDefaults;
   participant?: CoreParticipantConfig;
@@ -95,6 +117,7 @@ export interface CoreConfig {
   data?: CoreDataConfig;
   autoresponder?: AutoResponderConfig;
   ui?: CoreUiConfig;
+  eeg?: CoreEegConfig;
 }
 
 export interface TaskVariantManifest {

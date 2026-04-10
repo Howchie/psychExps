@@ -124,6 +124,17 @@ Runtime path tokens supported by templated stimulus/config helpers:
 - `{runtime.assetsBase}`
 - `{runtime.configsBase}`
 
+### `ensureEegBridgeReady(coreConfig, taskConfig?): Promise<void>`
+
+Performs optional EEG bridge preflight:
+- resolves effective EEG config from `coreConfig.eeg` + `taskConfig.eeg`
+- if `enabled=true` and `requireBridge=true`, checks `{bridgeUrl}/health`
+- throws on failure (caller can block experiment launch)
+
+### `resolveEegBridgeConfig(coreConfig, taskConfig?): ResolvedEegBridgeConfig`
+
+Resolves effective EEG bridge settings (`enabled`, `bridgeUrl`, `requireBridge`, event forwarding controls).
+
 ### `buildMergedConfig(base, taskDefault, variantOverride, runtimeOverride?)`
 
 Deep merge order:

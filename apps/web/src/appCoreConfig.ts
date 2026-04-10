@@ -35,4 +35,11 @@ export const coreDefaultConfig: CoreConfig = {
   ui: {
     pageBackground: "linear-gradient(180deg, #e8edf4 0%, #f7fafc 100%)",
   },
+  eeg: {
+    enabled: false,
+    bridgeUrl: "http://127.0.0.1:8787",
+    requireBridge: false,
+    eventTypes: ["task_start", "task_end", "trial_start", "trial_end"],
+    includeEventPayload: false,
+  },
 };

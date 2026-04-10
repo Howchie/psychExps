@@ -38,6 +38,7 @@ export * from "./infrastructure/runtimePaths";
 export * from "./infrastructure/redirect";
 export * from "./infrastructure/spatial";
 export * from "./infrastructure/dataSink";
+export * from "./infrastructure/eegBridge";
 export * from "./infrastructure/manipulations";
 export * from "./infrastructure/gamepad";
 

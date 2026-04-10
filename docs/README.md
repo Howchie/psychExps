@@ -10,6 +10,7 @@ This documentation is implementation-first and tracks current behavior in this r
 
 - [**Core Framework API**](./CORE_API.md): Exhaustive reference for `@experiments/core` utilities.
 - [**Configuration & Inheritance**](./CONFIGURATION_GUIDE.md): Deep dive into the merge system, runtime overrides, variable resolution, and instruction slots.
+- [**EEG Workflow**](./EEG_WORKFLOW.md): Local EEG bridge, optional LSL, and optional LabRecorder remote control.
 
 ## Task Adapters
 
