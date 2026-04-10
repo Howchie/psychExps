@@ -44,13 +44,11 @@ export function toFiniteNumber(value: unknown, fallback: number): number {
 }
 
 export function toNumberArray(value: unknown, fallback: number[]): number[] {
-  const arr = asArray(value);
   const out: number[] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const entry = Number(arr[i]);
-    if (Number.isFinite(entry)) {
-      out.push(entry);
-    }
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const entry = Number(arrayValue[i]);
+    if (Number.isFinite(entry)) out.push(entry);
   }
   return out.length > 0 ? out : fallback;
 }
@@ -60,13 +58,11 @@ export function toStringScreens(value: unknown): string[] {
     const text = value.trim();
     return text ? [text] : [];
   }
-  const arr = asArray(value);
   const out: string[] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const item = asString(arr[i]);
-    if (item) {
-      out.push(item);
-    }
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const item = asString(arrayValue[i]);
+    if (item) out.push(item);
   }
   return out;
 }
@@ -95,30 +91,25 @@ export function resolveBlockScreenSlotValue(
 }
 
 export function asStringArray(value: unknown, fallback: string[]): string[] {
-  const arr = asArray(value);
-  const list: string[] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const item = asString(arr[i]);
-    if (item) {
-      list.push(item);
-    }
+  const out: string[] = [];
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const item = asString(arrayValue[i]);
+    if (item) out.push(item);
   }
-  return list.length > 0 ? list : [...fallback];
+  return out.length > 0 ? out : [...fallback];
 }
 
-export function asPositiveNumberArray(
-  value: unknown,
-  fallback: number[],
-): number[] {
-  const arr = asArray(value);
-  const list: number[] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const entry = Number(arr[i]);
+export function asPositiveNumberArray(value: unknown, fallback: number[]): number[] {
+  const out: number[] = [];
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const entry = Number(arrayValue[i]);
     if (Number.isFinite(entry) && entry > 0) {
-      list.push(Math.floor(entry));
+      out.push(Math.floor(entry));
     }
   }
-  return list.length > 0 ? list : [...fallback];
+  return out.length > 0 ? out : [...fallback];
 }
 
 export type InstructionInsertionPoint =
@@ -173,19 +164,30 @@ export function coerceInstructionInsertions(
     const pages = toInstructionScreenSpecs(raw.pages);
     if (pages.length === 0) continue;
     const whenRaw = asObject(raw.when);
-    const blockIndex = asArray(whenRaw?.blockIndex)
-      .map((item) => Number(item))
-      .filter((item) => Number.isInteger(item))
-      .map((item) => Math.floor(item));
-    const blockLabel = asArray(whenRaw?.blockLabel)
-      .map((item) => asString(item))
-      .filter((item): item is string => Boolean(item));
-    const blockType = asArray(whenRaw?.blockType)
-      .map((item) => asString(item))
-      .filter((item): item is string => Boolean(item))
-      .map((item) => item.toLowerCase());
-    const isPractice =
-      typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
+
+    const blockIndex: number[] = [];
+    const rawBlockIndex = asArray(whenRaw?.blockIndex);
+    for (let i = 0; i < rawBlockIndex.length; i += 1) {
+      const item = Number(rawBlockIndex[i]);
+      if (Number.isInteger(item)) {
+        blockIndex.push(Math.floor(item));
+      }
+    }
+
+    const blockLabel: string[] = [];
+    const rawBlockLabel = asArray(whenRaw?.blockLabel);
+    for (let i = 0; i < rawBlockLabel.length; i += 1) {
+      const item = asString(rawBlockLabel[i]);
+      if (item) blockLabel.push(item);
+    }
+
+    const blockType: string[] = [];
+    const rawBlockType = asArray(whenRaw?.blockType);
+    for (let i = 0; i < rawBlockType.length; i += 1) {
+      const item = asString(rawBlockType[i]);
+      if (item) blockType.push(item.toLowerCase());
+    }
+    const isPractice = typeof whenRaw?.isPractice === "boolean" ? whenRaw.isPractice : undefined;
     const when: InstructionInsertionWhen | undefined =
       blockIndex.length > 0 ||
       blockLabel.length > 0 ||
@@ -277,48 +279,46 @@ export function toInstructionScreenSpecs(
     const text = value.trim();
     return text ? [{ text }] : [];
   }
-  return asArray(value)
-    .map((item): InstructionScreenSpec | null => {
-      if (typeof item === "string") {
-        const text = item.trim();
-        return text ? { text } : null;
-      }
-      const raw = asObject(item);
-      if (!raw) return null;
-      const title = asString(raw.title) ?? undefined;
-      const html = asString(raw.html) ?? undefined;
-      const text =
-        asString(raw.text) ??
-        asString(raw.body) ??
-        asString(raw.content) ??
-        undefined;
-      const actions = asArray(raw.actions)
-        .map((entry): InstructionScreenAction | null => {
-          const actionRaw = asObject(entry);
-          if (!actionRaw) return null;
-          const label = asString(actionRaw.label);
-          if (!label) return null;
-          const action = (
-            asString(actionRaw.action) ?? "continue"
-          ).toLowerCase();
-          return {
-            ...(asString(actionRaw.id)
-              ? { id: asString(actionRaw.id) as string }
-              : {}),
-            label,
-            action: action === "exit" ? "exit" : "continue",
-          };
-        })
-        .filter((entry): entry is InstructionScreenAction => Boolean(entry));
-      if (!html && !text) return null;
-      return {
-        ...(title ? { title } : {}),
-        ...(text ? { text } : {}),
-        ...(html ? { html } : {}),
-        ...(actions.length > 0 ? { actions } : {}),
-      };
-    })
-    .filter((item): item is InstructionScreenSpec => Boolean(item));
+  const out: InstructionScreenSpec[] = [];
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const item = arrayValue[i];
+    if (typeof item === "string") {
+      const text = item.trim();
+      if (text) out.push({ text });
+      continue;
+    }
+    const raw = asObject(item);
+    if (!raw) continue;
+    const title = asString(raw.title) ?? undefined;
+    const html = asString(raw.html) ?? undefined;
+    const text = asString(raw.text) ?? asString(raw.body) ?? asString(raw.content) ?? undefined;
+
+    const actions: InstructionScreenAction[] = [];
+    const rawActions = asArray(raw.actions);
+    for (let j = 0; j < rawActions.length; j += 1) {
+      const entry = rawActions[j];
+      const actionRaw = asObject(entry);
+      if (!actionRaw) continue;
+      const label = asString(actionRaw.label);
+      if (!label) continue;
+      const action = (asString(actionRaw.action) ?? "continue").toLowerCase();
+      actions.push({
+        ...(asString(actionRaw.id) ? { id: asString(actionRaw.id) as string } : {}),
+        label,
+        action: action === "exit" ? "exit" : "continue",
+      });
+    }
+
+    if (!html && !text) continue;
+    out.push({
+      ...(title ? { title } : {}),
+      ...(text ? { text } : {}),
+      ...(html ? { html } : {}),
+      ...(actions.length > 0 ? { actions } : {}),
+    });
+  }
+  return out;
 }
 
 export function resolveInstructionScreenSlots(

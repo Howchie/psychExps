@@ -33,6 +33,7 @@ export interface JsPsychRtTimelineConfig {
   };
   postResponseContent?: "blank" | "stimulus";
   onResponse?: (response: { key: string | null; rtMs: number | null }, data: Record<string, unknown>) => void;
+  onStimulusPhaseStart?: () => void;
 }
 
 export function initStandardJsPsych(args: {
@@ -69,6 +70,7 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
     feedback,
     postResponseContent = "stimulus",
     onResponse,
+    onStimulusPhaseStart,
   } = config;
 
   const timeline: any[] = [];
@@ -155,6 +157,11 @@ export function buildJsPsychRtTimelineNodes(config: JsPsychRtTimelineConfig): an
       response_ends_trial: responseTerminatesTrial,
       trial_duration: Math.max(0, Math.round(segment.durationMs)),
       data: { ...baseData, phase: segment.phase },
+      on_start: () => {
+        if (segment.showStimulus && onStimulusPhaseStart && !responseSeen) {
+          onStimulusPhaseStart();
+        }
+      },
       on_finish: (data: Record<string, unknown>) => {
         if (!responseSeen) {
           const response = extractJsPsychTrialResponse(data);
