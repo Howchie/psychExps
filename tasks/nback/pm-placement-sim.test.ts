@@ -1,15 +1,18 @@
 /**
  * @vitest-environment jsdom
  *
- * PM placement Monte Carlo simulation.
- * Simulates how often the injector can successfully place PM trials
- * in an n-back block, given the locked-source constraint introduced by the bug fix.
+ * PM-first N-back Monte Carlo simulation.
+ * Simulates the generation pipeline:
+ *   1) filler draw
+ *   2) PM injection (locked)
+ *   3) target insertion (must hit requested count)
+ *   4) lure insertion (best-effort up to max)
  *
- * Run with:  npx vitest run pm-placement-sim.ts
+ * Run with:  npx vitest run pm-placement-sim.test.ts
  */
 
 import { describe, it } from 'vitest';
-import { SeededRandom, generateProspectiveMemoryPositions } from '@experiments/core';
+import { SeededRandom, StimulusInjectorModule } from '@experiments/core';
 import { __testing__ } from './src/index.ts';
 
 const { injectNBackTargets, injectNBackLures } = __testing__;
@@ -28,11 +31,9 @@ const PM_MAX_SEP  = 18;
 
 const N_SEEDS     = 2000;   // increase for tighter confidence intervals
 
-// Eligible trial types for PM injection (types NOT locked that PM can replace)
-const ELIGIBLE_TYPES = ['F', 'L4', 'L5', 'L6', 'L7', 'L8', 'L9'];
-
-// Retry budget in buildBlockPlanWithChecks
+// Retry budget in buildBlockPlanWithChecks.
 const RETRY_BUDGET = 30;
+const TARGET_INSERTION_ATTEMPTS = 10;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -48,94 +49,169 @@ function buildTrials(items: string[]) {
   }));
 }
 
-function injectSequence(seed: number, nTrials: number, nTargets: number, nLures: number) {
-  const items = makeItems(nTrials);
-  const rng = new SeededRandom(seed);
-  const trials = buildTrials(items);
-  injectNBackTargets(rng, trials, N_LEVEL, nTargets, 'm');
-  for (const lagPass of LURE_LAG_PASSES) {
-    const inserted = trials.filter(t => t.trialType.startsWith('L')).length;
-    injectNBackLures(rng, trials, N_LEVEL, nLures - inserted, lagPass);
-  }
-  return trials;
-}
+type AttemptResult = {
+  ok: boolean;
+  pmPlaced: number;
+  targetsPlaced: number;
+  luresPlaced: number;
+  failureReason: 'pm_count' | 'target_count' | null;
+};
 
-function eligibleSet(trials: any[], preFixMode = false): Set<number> {
-  return new Set(
-    trials
-      .map((t, i) => ({ t, i }))
-      .filter(({ t }) => {
-        if (!ELIGIBLE_TYPES.includes(t.trialType)) return false;
-        if (!preFixMode && t.locked) return false;
-        return true;
-      })
-      .map(({ i }) => i)
-  );
-}
-
-function successRate(
+function runSingleAttempt(
+  seed: number,
   nTrials: number,
   nTargets: number,
   nLures: number,
   maxSep: number,
-  preFixMode = false,
-): { rate: number; minElig: number; avgElig: number } {
-  let ok = 0;
-  let totalElig = 0;
-  let minElig = Infinity;
+): AttemptResult {
+  const items = makeItems(nTrials);
+  const injector = new StimulusInjectorModule();
 
-  for (let seed = 0; seed < N_SEEDS; seed++) {
-    const trials = injectSequence(seed, nTrials, nTargets, nLures);
-    const elig = eligibleSet(trials, preFixMode);
-    totalElig += elig.size;
-    if (elig.size < minElig) minElig = elig.size;
-    try {
-      generateProspectiveMemoryPositions(
-        new SeededRandom(seed + 10000),
-        nTrials,
-        { count: PM_COUNT, minSeparation: PM_MIN_SEP, maxSeparation: maxSep },
-        elig,
-      );
-      ok++;
-    } catch { /* placement failed */ }
+  const block = { blockIndex: 0, trials: buildTrials(items) };
+  let afterPm: any;
+  try {
+    afterPm = injector.transformBlockPlan(
+      block,
+      {
+        enabled: true,
+        injections: [{
+          id: 'pm',
+          enabled: true,
+          eligibleTrialTypes: ['F'],
+          schedule: { count: PM_COUNT, minSeparation: PM_MIN_SEP, maxSeparation: maxSep },
+          source: { type: 'literal', items: makeItems(500), sourceCategory: 'pm' },
+          set: { trialType: 'PM', itemCategory: 'PM', correctResponse: 'space', responseCategory: 'pm' },
+        }],
+      },
+      {
+        rng: new SeededRandom(seed + 10000),
+        stimuliByCategory: {},
+      } as any,
+    );
+  } catch {
+    return { ok: false, pmPlaced: 0, targetsPlaced: 0, luresPlaced: 0, failureReason: 'pm_count' };
   }
 
-  return { rate: (ok / N_SEEDS) * 100, minElig, avgElig: totalElig / N_SEEDS };
+  const trials = afterPm.trials as any[];
+  const pmPlaced = trials.filter((t) => t.trialType === 'PM').length;
+  if (pmPlaced !== PM_COUNT) {
+    return { ok: false, pmPlaced, targetsPlaced: 0, luresPlaced: 0, failureReason: 'pm_count' };
+  }
+
+  const rng = new SeededRandom(seed + 20000);
+  let targetsPlaced = 0;
+  for (let i = 0; i < TARGET_INSERTION_ATTEMPTS; i += 1) {
+    targetsPlaced += injectNBackTargets(rng, trials, N_LEVEL, nTargets - targetsPlaced, 'm');
+    if (targetsPlaced >= nTargets) break;
+  }
+  if (targetsPlaced !== nTargets) {
+    return { ok: false, pmPlaced, targetsPlaced, luresPlaced: 0, failureReason: 'target_count' };
+  }
+
+  let luresPlaced = 0;
+  for (const lagPass of LURE_LAG_PASSES) {
+    luresPlaced += injectNBackLures(rng, trials, N_LEVEL, nLures - luresPlaced, lagPass);
+    if (luresPlaced >= nLures) break;
+  }
+
+  // Lures are max/best-effort now: do not fail if underfilled.
+  return { ok: true, pmPlaced, targetsPlaced, luresPlaced, failureReason: null };
 }
 
-function pAllFail(ratePercent: number, retries: number) {
-  return (Math.pow(1 - ratePercent / 100, retries) * 100).toFixed(3) + '%';
+type MonteCarloSummary = {
+  successRate: number;
+  failuresPm: number;
+  failuresTarget: number;
+  avgLuresPlaced: number;
+  minLuresPlaced: number;
+  maxLuresPlaced: number;
+};
+
+function runMonteCarlo(
+  nTrials: number,
+  nTargets: number,
+  nLures: number,
+  maxSep: number,
+): MonteCarloSummary {
+  let successes = 0;
+  let failuresPm = 0;
+  let failuresTarget = 0;
+
+  let totalLuresPlaced = 0;
+  let minLuresPlaced = Infinity;
+  let maxLuresPlaced = -Infinity;
+
+  for (let seed = 0; seed < N_SEEDS; seed += 1) {
+    let succeeded = false;
+    let lastReason: 'pm_count' | 'target_count' | null = null;
+    let finalLuresPlaced = 0;
+
+    for (let attempt = 0; attempt < RETRY_BUDGET; attempt += 1) {
+      const attemptResult = runSingleAttempt(seed + attempt * 100000, nTrials, nTargets, nLures, maxSep);
+      if (attemptResult.ok) {
+        succeeded = true;
+        finalLuresPlaced = attemptResult.luresPlaced;
+        break;
+      }
+      lastReason = attemptResult.failureReason;
+    }
+
+    if (succeeded) {
+      successes += 1;
+      totalLuresPlaced += finalLuresPlaced;
+      minLuresPlaced = Math.min(minLuresPlaced, finalLuresPlaced);
+      maxLuresPlaced = Math.max(maxLuresPlaced, finalLuresPlaced);
+      continue;
+    }
+
+    if (lastReason === 'pm_count') failuresPm += 1;
+    else failuresTarget += 1;
+  }
+
+  const successRate = (successes / N_SEEDS) * 100;
+  const avgLuresPlaced = successes > 0 ? totalLuresPlaced / successes : 0;
+  if (!Number.isFinite(minLuresPlaced)) minLuresPlaced = 0;
+  if (!Number.isFinite(maxLuresPlaced)) maxLuresPlaced = 0;
+
+  return {
+    successRate,
+    failuresPm,
+    failuresTarget,
+    avgLuresPlaced,
+    minLuresPlaced,
+    maxLuresPlaced,
+  };
 }
 
 // ── Run scenarios ──────────────────────────────────────────────────────────
 
 describe('pm-placement-sim', () => { it('runs simulation', () => {
-console.log('PM Placement Monte Carlo Simulation');
+console.log('PM-First NBack Monte Carlo Simulation');
 console.log(`Seeds: ${N_SEEDS} | PM: count=${PM_COUNT}, minSep=${PM_MIN_SEP}, maxSep=${PM_MAX_SEP}`);
-console.log(`n-level: ${N_LEVEL} | Retry budget: ${RETRY_BUDGET}\n`);
+console.log(`n-level: ${N_LEVEL} | Retry budget: ${RETRY_BUDGET} | Target attempts: ${TARGET_INSERTION_ATTEMPTS}`);
+console.log(`Lures are treated as max count (best-effort), not a hard requirement.\n`);
 
-type Scenario = { label: string; nTrials: number; nTargets: number; nLures: number; maxSep: number; preFix?: boolean };
+type Scenario = { label: string; nTrials: number; nTargets: number; nLures: number; maxSep: number };
 
 const scenarios: Scenario[] = [
-  { label: `Pre-fix  (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=${PM_MAX_SEP})`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: PM_MAX_SEP, preFix: true },
-  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=16)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 16, preFix: false },
-  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=17)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 17, preFix: false },
-  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=18)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 18, preFix: false },
-  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=19)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 19, preFix: false },
-  { label: `Post-fix (${N_TRIALS}t, ${N_TARGETS}T, ${N_LURES}L, maxSep=20)`,  nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 20, preFix: false },
+  { label: `PM-first (${N_TRIALS}t, ${N_TARGETS}T, <=${N_LURES}L, maxSep=16)`, nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 16 },
+  { label: `PM-first (${N_TRIALS}t, ${N_TARGETS}T, <=${N_LURES}L, maxSep=17)`, nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 17 },
+  { label: `PM-first (${N_TRIALS}t, ${N_TARGETS}T, <=${N_LURES}L, maxSep=18)`, nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 18 },
+  { label: `PM-first (${N_TRIALS}t, ${N_TARGETS}T, <=${N_LURES}L, maxSep=19)`, nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 19 },
+  { label: `PM-first (${N_TRIALS}t, ${N_TARGETS}T, <=${N_LURES}L, maxSep=20)`, nTrials: N_TRIALS, nTargets: N_TARGETS, nLures: N_LURES, maxSep: 20 },
 ];
 
-console.log('Scenario                                     elig  success  Pr(all fail in 30)');
+console.log('Scenario                                     success   fail(pm)  fail(target)   lures placed (avg|min|max)');
 console.log('─'.repeat(80));
 
 for (const s of scenarios) {
-  const { rate, avgElig } = successRate(s.nTrials, s.nTargets, s.nLures, s.maxSep, s.preFix ?? false);
-  const failProb = pAllFail(rate, RETRY_BUDGET);
+  const summary = runMonteCarlo(s.nTrials, s.nTargets, s.nLures, s.maxSep);
   console.log(
     `${s.label.padEnd(45)}` +
-    `  ${String(Math.round(avgElig)).padStart(3)}` +
-    `   ${rate.toFixed(1).padStart(6)}%` +
-    `   ${failProb}`
+    `  ${summary.successRate.toFixed(1).padStart(6)}%` +
+    `   ${String(summary.failuresPm).padStart(7)}` +
+    `   ${String(summary.failuresTarget).padStart(12)}` +
+    `   ${summary.avgLuresPlaced.toFixed(1).padStart(5)}|${String(summary.minLuresPlaced).padStart(3)}|${String(summary.maxLuresPlaced).padStart(3)}`
   );
 }
 }); });

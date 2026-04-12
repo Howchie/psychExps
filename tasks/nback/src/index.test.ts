@@ -422,6 +422,96 @@ describe('NbackTaskAdapter', () => {
     console.log('\n✓ All assertions passed: locked source positions were protected.');
   });
 
+  it('PM-first generation keeps PM categorization valid and prevents downstream overwrites', () => {
+    const { injectNBackTargets, injectNBackLures } = __testing__;
+    const injector = new StimulusInjectorModule();
+
+    const N_TRIALS = 60;
+    const PM_COUNT = 5;
+    const N_LEVEL = 2;
+    const TARGET_COUNT = 12;
+    const LURE_COUNT = 8;
+    const LURE_LAG_PASSES = [[4, 5], [6, 7]];
+
+    const baseTrials = Array.from({ length: N_TRIALS }, (_, i) => ({
+      trialIndex: i,
+      blockIndex: 0,
+      trialType: 'F',
+      item: `base_${i + 1}`,
+      sourceCategory: 'other',
+      itemCategory: 'other',
+      correctResponse: 'z',
+      locked: false,
+      usedAsSource: false,
+    })) as NbackTrial[];
+
+    const pmItems = Array.from({ length: 20 }, (_, i) => `pm_${i + 1}`);
+    const injectedBlock = injector.transformBlockPlan(
+      { blockIndex: 0, trials: baseTrials.map((trial) => ({ ...trial })) },
+      {
+        enabled: true,
+        injections: [
+          {
+            id: 'pm_first_pass',
+            enabled: true,
+            eligibleTrialTypes: ['F'],
+            schedule: { count: PM_COUNT, minSeparation: 6, maxSeparation: 10 },
+            source: { type: 'literal', items: pmItems, sourceCategory: 'animals' },
+            set: { trialType: 'PM', itemCategory: 'PM', correctResponse: 'space', responseCategory: 'pm' },
+          },
+        ],
+      },
+      {
+        rng: new SeededRandom(1234),
+        stimuliByCategory: {},
+      } as any,
+    ) as { trials: NbackTrial[]; injectionLog?: Array<{ id: string; positions: number[] }> };
+
+    const pmPositions = injectedBlock.injectionLog?.[0]?.positions ?? [];
+    expect(pmPositions.length).toBe(PM_COUNT);
+
+    const pmSnapshot = new Map<number, string>();
+    for (const pos of pmPositions) {
+      pmSnapshot.set(pos, injectedBlock.trials[pos].item);
+    }
+
+    const nbackRng = new SeededRandom(5678);
+    injectNBackTargets(nbackRng, injectedBlock.trials, N_LEVEL, TARGET_COUNT, 'm');
+    let insertedLures = 0;
+    for (const lagPass of LURE_LAG_PASSES) {
+      insertedLures += injectNBackLures(nbackRng, injectedBlock.trials, N_LEVEL, LURE_COUNT - insertedLures, lagPass);
+    }
+
+    // PM trials remain PM, categorized as PM, and unchanged after target/lure insertion.
+    for (const pos of pmPositions) {
+      const trial = injectedBlock.trials[pos];
+      expect(trial.trialType).toBe('PM');
+      expect(trial.item).toBe(pmSnapshot.get(pos));
+      expect(trial.itemCategory).toBe('PM');
+      expect((trial as any).expectedCategory).toBe('pm');
+      expect(trial.sourceCategory).toBe('animals');
+      expect(trial.locked).toBeTruthy();
+    }
+
+    // N-back targets must not use PM as their source.
+    for (let i = 0; i < injectedBlock.trials.length; i += 1) {
+      const trial = injectedBlock.trials[i];
+      if (trial.trialType !== 'N') continue;
+      const source = injectedBlock.trials[i - N_LEVEL];
+      expect(source.trialType, `N trial at ${i} sourced from PM trial at ${i - N_LEVEL}`).not.toBe('PM');
+    }
+
+    // Lures must not use PM as their source.
+    for (let i = 0; i < injectedBlock.trials.length; i += 1) {
+      const trial = injectedBlock.trials[i];
+      const lureMatch = /^L(\d+)$/.exec(trial.trialType);
+      if (!lureMatch) continue;
+      const lag = Number(lureMatch[1]);
+      const source = injectedBlock.trials[i - lag];
+      expect(source.trialType, `Lure trial at ${i} sourced from PM trial at ${i - lag}`).not.toBe('PM');
+    }
+  });
+
   it('should calculate relative RT correctly when response window is segmented', () => {
     const timeline: any[] = [];
     const capture = __testing__.appendJsPsychNbackTrial({

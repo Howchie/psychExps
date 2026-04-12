@@ -59,12 +59,16 @@ These values will be merged into the trial object:
 - `itemCategory`: e.g., `"injected"`.
 - `correctResponse`: The response key expected (e.g., `"space"`).
 - `responseCategory`: Semantic category (e.g., `"pm"`).
+- `locked`: Optional boolean lock flag. When `true`, later injectors/samplers that respect `locked` will skip this trial.
+
+For compatibility with PM workflows, injector trials are auto-locked when `set.locked` is not provided and either `set.trialType` is `"PM"` or `set.responseCategory` is `"pm"`.
 
 ## 2. Integration Mechanics
 
 1.  **Plan Interception:** The module processes injections in the order they are defined.
 2.  **Replacement:** The module replaces the trial at the selected position with the injected item.
 3.  **Semantic Mapping:** Any `correctResponse` set by the injector is automatically added to the task's allowed key set.
+4.  **Feasibility Guard:** If `schedule.count > 0` and no eligible positions exist, injection fails with an explicit error instead of silently skipping.
 
 ## 3. Data Output
 

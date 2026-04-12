@@ -1276,25 +1276,21 @@ function buildBlockPlanWithChecks(
   participantScopedDrawPlan: ParticipantScopedNbackDrawPlan | null,
 ): PlannedBlock {
   const maxAttempts = Math.max(5, config.nbackRule.maxInsertionAttempts * 3);
+  const resolvedModuleConfigs = resolveBlockScopedModuleConfigs(moduleConfigs, variableResolver, blockIndex, block.variables);
+  const modulePasses = splitNbackModulePasses(resolvedModuleConfigs);
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const purePlan = buildBlockPlanAttempt(
+      return buildBlockPlanAttempt(
         block,
         blockIndex,
         config,
         rng,
         stimulusVariant,
+        moduleRunner,
+        modulePasses,
         participantScopedDrawPlan,
       );
-      // Allow modules to transform the block plan (e.g. inject PM)
-      return moduleRunner.transformBlockPlan(purePlan, moduleConfigs, {
-        rng,
-        stimuliByCategory: config.stimuliByCategory,
-        resolver: variableResolver,
-        blockIndex,
-        locals: purePlan.variables,
-      });
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -1308,6 +1304,8 @@ function buildBlockPlanAttempt(
   config: ParsedNbackConfig,
   rng: SeededRandom,
   stimulusVariant: number | null,
+  moduleRunner: TaskModuleRunner,
+  modulePasses: NbackModulePasses,
   participantScopedDrawPlan: ParticipantScopedNbackDrawPlan | null,
 ): PlannedBlock {
   const nbackCandidates = collectPoolCandidates(config.stimuliByCategory, block.nbackSourceCategories, new Set<string>());
@@ -1340,25 +1338,7 @@ function buildBlockPlanAttempt(
     });
   }
 
-  let insertedTargets = 0;
-  for (let i = 0; i < config.nbackRule.maxInsertionAttempts; i += 1) {
-    insertedTargets += injectNBackTargets(
-      rng,
-      trials,
-      block.nLevel,
-      block.targetCount - insertedTargets,
-      config.mapping.targetKey,
-    );
-    if (insertedTargets >= block.targetCount) break;
-  }
-
-  let insertedLures = 0;
-  for (const lagPass of config.nbackRule.lureLagPasses) {
-    insertedLures += injectNBackLures(rng, trials, block.nLevel, block.lureCount - insertedLures, lagPass);
-    if (insertedLures >= block.lureCount) break;
-  }
-
-  const planned: PlannedBlock = {
+  let planned: PlannedBlock = {
     blockIndex,
     label: block.label,
     blockType: block.isPractice ? "practice" : "main",
@@ -1376,6 +1356,48 @@ function buildBlockPlanAttempt(
     drt: block.drt,
     variables: block.variables,
   };
+
+  if (Object.keys(modulePasses.early).length > 0) {
+    planned = moduleRunner.transformBlockPlan(planned, modulePasses.early, {
+      rng,
+      stimuliByCategory: config.stimuliByCategory,
+      blockIndex,
+      locals: planned.variables,
+    });
+    lockPmTrials(planned.trials);
+  }
+
+  let insertedTargets = 0;
+  for (let i = 0; i < config.nbackRule.maxInsertionAttempts; i += 1) {
+    insertedTargets += injectNBackTargets(
+      rng,
+      planned.trials,
+      block.nLevel,
+      block.targetCount - insertedTargets,
+      config.mapping.targetKey,
+    );
+    if (insertedTargets >= block.targetCount) break;
+  }
+  if (insertedTargets < block.targetCount) {
+    throw new Error(
+      `Block '${block.label}' could only place ${insertedTargets}/${block.targetCount} targets after PM-locked placement constraints.`,
+    );
+  }
+
+  let insertedLures = 0;
+  for (const lagPass of config.nbackRule.lureLagPasses) {
+    insertedLures += injectNBackLures(rng, planned.trials, block.nLevel, block.lureCount - insertedLures, lagPass);
+    if (insertedLures >= block.lureCount) break;
+  }
+
+  if (Object.keys(modulePasses.late).length > 0) {
+    planned = moduleRunner.transformBlockPlan(planned, modulePasses.late, {
+      rng,
+      stimuliByCategory: config.stimuliByCategory,
+      blockIndex,
+      locals: planned.variables,
+    });
+  }
   return planned;
 }
 
@@ -1397,6 +1419,7 @@ function injectNBackTargets(
     if (inserted >= nTargets) break;
     if (prevPos >= 0 && trials[prevPos].trialType !== "F") continue;
     if (nextPos < trials.length && trials[nextPos].trialType === "N") continue;
+    if (trials[pos].locked || trials[backPos].locked) continue;
     if (trials[pos].usedAsSource) continue;
     if (trials[backPos].usedAsSource) continue;
     if (trials[pos].trialType !== "F" || trials[backPos].trialType !== "F") continue;
@@ -1424,12 +1447,14 @@ function injectNBackLures(
   const start = Math.max(...lureLags);
   for (let pos = start; pos < trials.length; pos += 1) {
     if (trials[pos].trialType !== "F") continue;
+    if (trials[pos].locked) continue;
     if (trials[pos].usedAsSource) continue;
     for (const lag of lureLags) {
       if (lag === nLevel) continue;
       const lurePos = pos - lag;
       if (lurePos < 0) continue;
       if (trials[lurePos].trialType !== "F") continue;
+      if (trials[lurePos].locked) continue;
       if (trials[lurePos].usedAsSource) continue;
       candidates.push([pos, lurePos, lag]);
     }
@@ -1451,6 +1476,81 @@ function injectNBackLures(
     inserted += 1;
   }
   return inserted;
+}
+
+interface NbackModulePasses {
+  early: Record<string, any>;
+  late: Record<string, any>;
+}
+
+function resolveBlockScopedModuleConfigs(
+  moduleConfigs: Record<string, any>,
+  resolver: VariableResolver,
+  blockIndex: number,
+  blockVariables: Record<string, unknown>,
+): Record<string, any> {
+  const resolved: Record<string, any> = {};
+  for (const [moduleId, rawConfig] of Object.entries(moduleConfigs)) {
+    resolved[moduleId] = resolver.resolveInValue(rawConfig, {
+      blockIndex,
+      locals: blockVariables,
+    });
+  }
+  return resolved;
+}
+
+function splitNbackModulePasses(resolvedModuleConfigs: Record<string, any>): NbackModulePasses {
+  const early: Record<string, any> = {};
+  const late: Record<string, any> = {};
+
+  for (const [moduleId, moduleConfigRaw] of Object.entries(resolvedModuleConfigs)) {
+    const moduleConfig = asObject(moduleConfigRaw);
+    if (!moduleConfig) continue;
+
+    if (moduleId === "pm") {
+      early[moduleId] = moduleConfig;
+      continue;
+    }
+
+    if (moduleId === "injector") {
+      const injections = asArray(moduleConfig.injections);
+      if (injections.length === 0) {
+        late[moduleId] = moduleConfig;
+        continue;
+      }
+
+      const earlyInjections = injections.filter((spec) => isPmLikeInjectionSpec(spec));
+      const lateInjections = injections.filter((spec) => !isPmLikeInjectionSpec(spec));
+      if (earlyInjections.length > 0) {
+        early[moduleId] = { ...moduleConfig, injections: earlyInjections };
+      }
+      if (lateInjections.length > 0) {
+        late[moduleId] = { ...moduleConfig, injections: lateInjections };
+      }
+      continue;
+    }
+
+    late[moduleId] = moduleConfig;
+  }
+
+  return { early, late };
+}
+
+function isPmLikeInjectionSpec(spec: unknown): boolean {
+  const set = asObject(asObject(spec)?.set);
+  const trialType = (asString(set?.trialType) || "").trim().toLowerCase();
+  const responseCategory = (asString(set?.responseCategory) || "").trim().toLowerCase();
+  return trialType === "pm" || responseCategory === "pm";
+}
+
+function lockPmTrials(trials: PlannedTrial[]): void {
+  for (const trial of trials) {
+    const trialType = (trial.trialType || "").trim().toUpperCase();
+    const responseCategory = (asString(trial.expectedCategory) || "").trim().toLowerCase();
+    if (trialType === "PM" || responseCategory === "pm") {
+      trial.locked = true;
+    }
+  }
 }
 
 function resolveStimulusPath(

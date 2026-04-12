@@ -53,7 +53,13 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
       }
     }
 
-    if (eligibleIndices.length === 0) return block;
+    if (eligibleIndices.length === 0) {
+      const requestedCount = Math.max(0, Math.floor(Number(config.schedule?.count ?? 0)));
+      if (requestedCount > 0) {
+        throw new Error("PM module cannot place any trials: no eligible positions.");
+      }
+      return block;
+    }
 
     const pmPositions = generateProspectiveMemoryPositions(context.rng!, trials.length, config.schedule, new Set(eligibleIndices));
     
@@ -83,6 +89,7 @@ export class ProspectiveMemoryModule implements TaskModule<ProspectiveMemoryModu
         sourceCategory,
         correctResponse: rule.responseKey,
         itemCategory: "PM",
+        locked: true,
       };
     }
 

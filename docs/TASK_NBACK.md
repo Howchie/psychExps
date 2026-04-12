@@ -145,6 +145,8 @@ NBack supports additive functionality via the `task.modules` system. These modul
 - [**Module: Detection Response Task (DRT)**](./MODULE_DRT.md): Concurrent detection task (ISO-standard).
 - [**Module: Stimulus Injector**](./MODULE_INJECTOR.md): Low-level trial injection for custom PM and control trials.
 
+NBack applies PM-like injections (`trialType: "PM"` or `responseCategory: "pm"`) in an early pass before target/lure sampling. Those PM trials are locked so later N-back target/lure placement will not use them as either source or target positions.
+
 ## 4. Stimulus Management
 
 - **CSV Loading:** Use `stimuliCsv` to load large pools. Path templates like `{runtime.assetsBase}` are supported.
@@ -165,7 +167,7 @@ Controls how targets and lures are inserted into the trial sequence.
 
 - `nbackRule.lureLagPasses`: Array of lag arrays defining which non-target lags count as lures. Each entry is one injection pass. Default produces standard N±1 lures.
   - Example: `[[1], [2]]` — first inject 1-back lures, then 2-back lures.
-- `nbackRule.maxInsertionAttempts`: Maximum retries when placing a lure fails due to sequence constraints (default `10`).
+- `nbackRule.maxInsertionAttempts`: Maximum retries used for target insertion attempts within one generated block (default `10`).
 
 ## 5. Output Data
 

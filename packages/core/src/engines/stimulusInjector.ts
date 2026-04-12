@@ -27,6 +27,7 @@ export interface StimulusInjectionSetters {
   itemCategory?: string;
   correctResponse?: string;
   responseCategory?: string;
+  locked?: boolean;
 }
 
 export interface StimulusInjectionSpec {
@@ -111,7 +112,15 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
         return injection.eligibleTrialTypes.includes(entry.trialType);
       })
       .map((entry: { trialType: string; locked: boolean; idx: number }) => entry.idx);
-    if (eligibleIndices.length === 0) return block;
+    if (eligibleIndices.length === 0) {
+      const requestedCount = Math.max(0, Math.floor(Number(injection.schedule?.count ?? 0)));
+      if (requestedCount > 0) {
+        throw new Error(
+          `Injection '${String(injection.id ?? `inj_${injectionIndex + 1}`)}' cannot place any trials: no eligible positions.`,
+        );
+      }
+      return block;
+    }
 
     const positions = generateProspectiveMemoryPositions(
       context.rng!,
@@ -129,6 +138,10 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
       if (!base) continue;
       const pick = draw();
       const set = injection.set ?? {};
+      const setTrialType = String(set.trialType ?? "").trim().toUpperCase();
+      const setResponseCategory = String(set.responseCategory ?? "").trim().toLowerCase();
+      const inferredPmLock = set.locked === undefined && (setTrialType === "PM" || setResponseCategory === "pm");
+      const shouldLock = set.locked === true || inferredPmLock;
       nextTrials[pos] = {
         ...base,
         item: pick.item,
@@ -137,6 +150,7 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
         ...(set.itemCategory ? { itemCategory: set.itemCategory } : {}),
         ...(set.correctResponse ? { correctResponse: set.correctResponse } : {}),
         ...(set.responseCategory ? { expectedCategory: set.responseCategory } : {}),
+        ...(shouldLock ? { locked: true } : {}),
         injectionId,
       };
     }

@@ -68,6 +68,9 @@ Triggers when a custom flag in the trial context matches a value.
 
 1.  **Plan Transformation:** During the `Research` phase (block plan generation), the PM module intercepts the plan and replaces eligible trials with `trialType: "PM"`.
 2.  **Semantic Mapping:** The module automatically adds its `responseKey`s to the task's allowed key set for blocks where the module is enabled.
+3.  **Locking:** Injected PM trials are marked `locked: true` so downstream injectors/samplers can preserve them.
+
+If `schedule.count > 0` but no eligible positions exist, PM placement throws an explicit error.
 3.  **Correctness:** Host tasks (like N-Back) query the module's semantics to determine the `correctResponse` for a given trial.
 
 ## 3. Data Output
