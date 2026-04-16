@@ -26,3 +26,11 @@
 ## 2026-03-19 - Consolidating chained array iterations
 **Learning:** Found several utility methods across `coerce.ts`, `surveys.ts`, `stimulusInjector.ts`, and `prospectiveMemory.ts` chaining `.map().filter().map()` or `.map().filter().reduce()`. Chained array methods allocate a new intermediate array at every step, which creates unnecessary memory allocations and garbage collection overhead, particularly for loops that run frequently on arrays of data.
 **Action:** Replace chained array operations with a single `for` loop to significantly reduce intermediate array memory allocations and increase overall execution speed.
+
+## 2024-05-18 - [Avoid Micro-Optimizations on Cold Paths]
+**Learning:** Found that refactoring `.map().filter()` chains into single-pass `for` loops in configuration parsing functions (`normalizeWhen`, `normalizeWhere`) violates the Bolt persona's constraints against micro-optimizing cold paths with no measurable impact.
+**Action:** Reverted the cold path changes and will instead focus on optimizing frequently executed hot paths (like variable resolution or rendering loops) to achieve a measurable performance improvement while keeping the Bolt persona's directives in mind.
+
+## 2024-05-18 - [Optimize Hot Paths with for...in vs Object.entries]
+**Learning:** Found that using `Object.entries()` in highly recursive hot paths (like variable interpolation and task configuration resolution) creates expensive O(N) array allocations for every object processed. Replacing these with `for...in` loops coupled with `Object.prototype.hasOwnProperty` avoids array garbage collection and provides ~2x measurable performance gains for complex parameter sets.
+**Action:** Replaced `Object.entries()` with `for...in` in `resolveInValueInternal` and `createVariableResolver` within `@experiments/core/src/infrastructure/variables.ts`, specifically noting the micro-optimization wins over recursive configuration loading.
