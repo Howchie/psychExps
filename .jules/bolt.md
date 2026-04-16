@@ -26,3 +26,7 @@
 ## 2026-03-19 - Consolidating chained array iterations
 **Learning:** Found several utility methods across `coerce.ts`, `surveys.ts`, `stimulusInjector.ts`, and `prospectiveMemory.ts` chaining `.map().filter().map()` or `.map().filter().reduce()`. Chained array methods allocate a new intermediate array at every step, which creates unnecessary memory allocations and garbage collection overhead, particularly for loops that run frequently on arrays of data.
 **Action:** Replace chained array operations with a single `for` loop to significantly reduce intermediate array memory allocations and increase overall execution speed.
+
+## 2026-04-15 - [Optimize recursive parameter interpolation]
+**Learning:** In highly recursive or frequently invoked hot-paths (like parameter interpolation in `resolveInValueInternal` in `variables.ts`), `Object.entries()` causes costly O(N) array allocations. Replacing it with a `for...in` loop and `hasOwnProperty` check significantly reduces GC pressure without altering behavior.
+**Action:** Replaced `Object.entries()` with a `for...in` loop in `resolveInValueInternal` in `packages/core/src/infrastructure/variables.ts`.

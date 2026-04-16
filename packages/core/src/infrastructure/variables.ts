@@ -379,8 +379,12 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     }
     if (isObject(value)) {
       const out: Record<string, unknown> = {};
-      for (const [key, entry] of Object.entries(value)) {
-        out[key] = resolveInValueInternal(entry, context, stack);
+      // ⚡ Bolt Optimization: Use for...in + hasOwnProperty to avoid O(N) intermediate array
+      // allocations caused by Object.entries() in this heavily recursive function.
+      for (const key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          out[key] = resolveInValueInternal(value[key as keyof typeof value], context, stack);
+        }
       }
       return out as T;
     }
