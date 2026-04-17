@@ -200,7 +200,7 @@ async function runChangeDetectionTrial(
     const shapes = asStringArray(itemConfig?.shapes, ["circle", "square"]);
 
     const generateItem = (): SceneItem => ({
-      id: Math.random().toString(), 
+      id: crypto.randomUUID(),
       category: "shape",
       features: {
         type: shapes[Math.floor(rng.next() * shapes.length)],
