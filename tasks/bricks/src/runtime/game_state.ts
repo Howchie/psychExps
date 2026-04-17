@@ -116,6 +116,31 @@ interface PointerPos {
   y?: number | null;
 }
 
+interface CategorySelections {
+  color: CategoryEntry | null;
+  width: CategoryEntry | null;
+  borderColor: CategoryEntry | null;
+  shape: CategoryEntry | null;
+  texture: CategoryEntry | null;
+}
+
+interface ResolvedBrickTraits {
+  categories: CategorySelections;
+  traits: Record<string, unknown>;
+}
+
+interface BrickCreationOptions {
+  categories?: Record<string, any> | null;
+  traits?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface SpawnBrickOptions extends BrickCreationOptions {
+  x?: number;
+  reason?: string;
+  bypassSpacing?: boolean;
+}
+
 /**
  * Represents the trial-level game state, including conveyors, bricks, and
  * high-level statistics. Rendering and jsPsych plugin orchestrate updates
@@ -805,8 +830,8 @@ export class GameState {
     };
   }
 
-  _resolveBrickTraits({ categories = null, traits = null, metadata = null }: { categories?: Record<string, any> | null; traits?: Record<string, unknown> | null; metadata?: Record<string, unknown> | null } = {}) {
-    const resolvedCategories = {
+  _resolveBrickTraits({ categories = null, traits = null, metadata = null }: BrickCreationOptions = {}): ResolvedBrickTraits {
+    const resolvedCategories: CategorySelections = {
       color: categories?.color ?? this._pickRandomCategory('color'),
       width: categories?.width ?? this._pickRandomCategory('width'),
       borderColor: categories?.borderColor ?? this._pickRandomCategory('borderColor'),
@@ -1023,7 +1048,8 @@ export class GameState {
   /**
    * Spawns a new brick on the given conveyor if safety constraints permit.
    */
-  _spawnBrick(conveyor: ConveyorRecord, { x = 0, reason = 'spawn', bypassSpacing = false, categories = null, traits = null, metadata = null }: { x?: number; reason?: string; bypassSpacing?: boolean; categories?: Record<string, any> | null; traits?: Record<string, unknown> | null; metadata?: Record<string, unknown> | null } = {}): boolean {
+  _spawnBrick(conveyor: ConveyorRecord, options: SpawnBrickOptions = {}): boolean {
+    const { x = 0, reason = 'spawn', bypassSpacing = false, categories = null, traits = null, metadata = null } = options;
     const cfg = this.config;
     const { categories: selectedCategories, traits: resolvedTraits } = this._resolveBrickTraits({
       categories,

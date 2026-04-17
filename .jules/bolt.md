@@ -30,3 +30,9 @@
 ## 2024-05-18 - [Optimizing String segment parsing in objects]
 **Learning:** Found a hot path in `packages/core/src/runtime/blockSummary.ts` (`getFieldValue`) where an object path string was split using `.split(".").map(...).filter(...)` to find nested object values. This chained array method execution allocates three separate arrays for every invocation. When this function is called inside a hot loop (like a trial summary block where it checks every row's field criteria), this creates substantial memory allocations and garbage collection overhead.
 **Action:** Replace `string.split('.').map(...).filter(...)` chains with a single-pass `for` loop that uses index-based slicing or token tracking, keeping track of boundaries with cursors. In a Node benchmark, this optimization alone reduced string path tokenizing operations by ~50%.
+## 2026-04-13 - [Consolidating Chained Array Operations in `stimulusInjector.ts`]
+**Learning:** Found an inefficient `.map().filter().map()` chain in `packages/core/src/engines/stimulusInjector.ts` when building `eligibleIndices`. Because `trials` can be large, this chain created three intermediate arrays per execution, causing unnecessary garbage collection overhead and iterating over the array multiple times.
+**Action:** Replaced the chained array operations with a single `for` loop to eliminate all intermediate array allocations and reduce iterations from 3 to 1.
+## 2026-04-12 - Optimize style lookup in renderer loop
+**Learning:** Repeated Object.entries() and linear search in hot rendering paths create significant CPU and allocation overhead. WeakMap combined with pre-normalized Maps provides O(1) lookups with safe memory management.
+**Action:** Replaced Object.entries().find() with a WeakMap-backed cached lookup in ConveyorRenderer.
