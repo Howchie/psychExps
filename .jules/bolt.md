@@ -26,6 +26,9 @@
 ## 2026-03-19 - Consolidating chained array iterations
 **Learning:** Found several utility methods across `coerce.ts`, `surveys.ts`, `stimulusInjector.ts`, and `prospectiveMemory.ts` chaining `.map().filter().map()` or `.map().filter().reduce()`. Chained array methods allocate a new intermediate array at every step, which creates unnecessary memory allocations and garbage collection overhead, particularly for loops that run frequently on arrays of data.
 **Action:** Replace chained array operations with a single `for` loop to significantly reduce intermediate array memory allocations and increase overall execution speed.
+## 2026-04-13 - [Consolidating Chained Array Operations in `stimulusInjector.ts`]
+**Learning:** Found an inefficient `.map().filter().map()` chain in `packages/core/src/engines/stimulusInjector.ts` when building `eligibleIndices`. Because `trials` can be large, this chain created three intermediate arrays per execution, causing unnecessary garbage collection overhead and iterating over the array multiple times.
+**Action:** Replaced the chained array operations with a single `for` loop to eliminate all intermediate array allocations and reduce iterations from 3 to 1.
 ## 2026-04-12 - Optimize style lookup in renderer loop
 **Learning:** Repeated Object.entries() and linear search in hot rendering paths create significant CPU and allocation overhead. WeakMap combined with pre-normalized Maps provides O(1) lookups with safe memory management.
 **Action:** Replaced Object.entries().find() with a WeakMap-backed cached lookup in ConveyorRenderer.

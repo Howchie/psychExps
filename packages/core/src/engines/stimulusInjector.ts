@@ -104,14 +104,21 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
     const trials = Array.isArray(block?.trials) ? block.trials : [];
     if (trials.length === 0) return block;
 
-    const eligibleIndices = trials
-      .map((t: any, idx: number) => ({ trialType: String(t?.trialType ?? ""), locked: Boolean(t?.locked), idx }))
-      .filter((entry: { trialType: string; locked: boolean; idx: number }) => {
-        if (entry.locked) return false;
-        if (!Array.isArray(injection.eligibleTrialTypes) || injection.eligibleTrialTypes.length === 0) return true;
-        return injection.eligibleTrialTypes.includes(entry.trialType);
-      })
-      .map((entry: { trialType: string; locked: boolean; idx: number }) => entry.idx);
+    // ⚡ Bolt: Consolidated chained array map/filter/map passes into a single loop to prevent intermediate allocations
+    const eligibleIndices: number[] = [];
+    const hasEligibleTypes = Array.isArray(injection.eligibleTrialTypes) && injection.eligibleTrialTypes.length > 0;
+
+    for (let idx = 0; idx < trials.length; idx++) {
+      const t = trials[idx];
+      const locked = Boolean(t?.locked);
+      if (locked) continue;
+
+      const trialType = String(t?.trialType ?? "");
+      if (!hasEligibleTypes || (injection.eligibleTrialTypes && injection.eligibleTrialTypes.includes(trialType))) {
+        eligibleIndices.push(idx);
+      }
+    }
+
     if (eligibleIndices.length === 0) {
       const requestedCount = Math.max(0, Math.floor(Number(injection.schedule?.count ?? 0)));
       if (requestedCount > 0) {
