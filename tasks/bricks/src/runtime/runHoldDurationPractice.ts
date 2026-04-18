@@ -1,5 +1,6 @@
 // @ts-nocheck
 import {
+  nextSecureUint32,
   applyButtonStyleOverrides,
   createDrtPresentationBridge,
   createScaledCanvasHost,
@@ -67,18 +68,7 @@ export interface HoldDurationPracticeDrtRuntime {
   detachBindings?: () => void;
 }
 
-const randomUint32 = () => {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      const buf = new Uint32Array(1);
-      crypto.getRandomValues(buf);
-      return buf[0] >>> 0;
-    }
-  } catch {
-    // fall through
-  }
-  return Math.floor(Math.random() * 0x100000000) >>> 0;
-};
+const randomUint32 = nextSecureUint32;
 
 const materializeSeed = (seedSpec: unknown) => {
   if (seedSpec === undefined || seedSpec === null) return randomUint32();
@@ -671,7 +661,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         if (gameState.elapsed >= nextAutoActionAt) {
           const activeBricks = gameState.activeBricks;
           if (activeBricks.length > 0) {
-            const candidate = activeBricks[Math.floor(Math.random() * activeBricks.length)] ?? activeBricks[0];
+            const candidate = activeBricks[Math.floor(gameState.rng.nextFloat() * activeBricks.length)] ?? activeBricks[0];
             const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
             const point = candidate?.sprite ?? { x: 0, y: 0 };
             processPracticeHold(String(candidate.id), holdDurationMs, Number(point.x ?? 0), Number(point.y ?? 0));

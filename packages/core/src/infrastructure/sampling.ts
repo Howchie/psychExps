@@ -1,4 +1,4 @@
-import { SeededRandom } from "../infrastructure/random";
+import { SeededRandom, nextSecureFloat, nextSecureUint32 } from "../infrastructure/random";
 
 export interface SamplerRng {
   next: () => number;
@@ -40,13 +40,13 @@ export interface CreateSamplerOptions {
 }
 
 const defaultRng: SamplerRng = {
-  next: () => Math.random(),
-  nextFloat: () => Math.random(),
-  nextRange: (min, max) => min + (max - min) * Math.random(),
+  next: nextSecureUint32,
+  nextFloat: nextSecureFloat,
+  nextRange: (min, max) => min + (max - min) * nextSecureFloat(),
   nextNormal: (mu = 0, sigma = 1) => {
     let u1 = 0;
-    while (u1 === 0) u1 = Math.random();
-    const u2 = Math.random();
+    while (u1 === 0) u1 = nextSecureFloat();
+    const u2 = nextSecureFloat();
     const mag = Math.sqrt(-2 * Math.log(u1));
     return mu + sigma * mag * Math.cos(2 * Math.PI * u2);
   },
@@ -77,7 +77,7 @@ const nextFloat = (rng: SamplerRng): number => {
   if (typeof rng.nextFloat === "function") return rng.nextFloat();
   const raw = rng.next();
   const normalized = raw >= 1 ? raw / 0x100000000 : raw;
-  if (!Number.isFinite(normalized)) return Math.random();
+  if (!Number.isFinite(normalized)) return nextSecureFloat();
   return Math.min(0.999999999999, Math.max(0, normalized));
 };
 

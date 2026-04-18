@@ -113,18 +113,35 @@ class SeededCoreRng implements CoreRng {
   }
 }
 
+/**
+ * Generates a cryptographically secure random float in [0, 1).
+ */
+export function nextSecureFloat(): number {
+  const array = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(array);
+  return array[0] / 4294967296;
+}
+
+/**
+ * Generates a cryptographically secure random 32-bit unsigned integer.
+ */
+export function nextSecureUint32(): number {
+  const array = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(array);
+  return array[0] >>> 0;
+}
+
 function createUnseededCoreRng(): CoreRng {
-  const nextFloat = (): number => Math.random();
   return {
-    next: () => Math.floor(nextFloat() * 0x100000000) >>> 0,
-    nextFloat,
+    next: nextSecureUint32,
+    nextFloat: nextSecureFloat,
     nextRange: (min: number, max: number) => {
       if (max <= min) {
         throw new Error(`RNG.nextRange expects max > min (got ${min}, ${max})`);
       }
-      return min + (max - min) * nextFloat();
+      return min + (max - min) * nextSecureFloat();
     },
-    nextNormal: (mu = 0, sigma = 1) => sampleNormal(nextFloat, mu, sigma),
+    nextNormal: (mu = 0, sigma = 1) => sampleNormal(nextSecureFloat, mu, sigma),
   };
 }
 

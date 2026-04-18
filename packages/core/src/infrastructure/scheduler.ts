@@ -1,8 +1,12 @@
+import { nextSecureFloat } from "./random";
+
 export interface RNG {
   next(): number;
 }
 
-const defaultRng: RNG = { next: () => Math.random() };
+const defaultRng: RNG = {
+  next: nextSecureFloat,
+};
 
 const asObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
