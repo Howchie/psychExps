@@ -523,6 +523,59 @@ describe('TaskOrchestrator', () => {
     );
   });
 
+  it('should support per-line block summary filters', async () => {
+    mockContext.taskConfig.instructions = {
+      blockSummary: {
+        enabled: true,
+        at: 'before_post',
+        title: 'Feedback',
+        lines: [
+          { text: 'Target accuracy: {accuracyPct}% ({correct}/{total})', where: { trialType: ['N'] } },
+          { text: 'Non-target accuracy: {accuracyPct}% ({correct}/{total})', where: { trialType: ['F', 'L4'] } },
+        ],
+        metrics: { correctField: 'responseCorrect', rtField: 'responseRtMs' },
+      },
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Practice 1',
+        blockType: 'practice',
+        isPractice: true,
+        trials: 4,
+      },
+    ];
+
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi
+      .fn()
+      .mockResolvedValueOnce({ trialType: 'N', responseCorrect: 1, responseRtMs: 400 })
+      .mockResolvedValueOnce({ trialType: 'F', responseCorrect: 1, responseRtMs: 450 })
+      .mockResolvedValueOnce({ trialType: 'L4', responseCorrect: 0, responseRtMs: 700 })
+      .mockResolvedValueOnce({ trialType: 'N', responseCorrect: 0, responseRtMs: 500 });
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    expect(taskUiFlow.runBlockEndFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        beforePostInsertions: expect.arrayContaining([
+          expect.arrayContaining([
+            {
+              text:
+                'Feedback\n' +
+                'Target accuracy: 50.0% (1/2)\n' +
+                'Non-target accuracy: 50.0% (1/2)',
+            },
+          ]),
+        ]),
+      }),
+    );
+  });
+
   it('should emit session events and trial results to a custom data sink', async () => {
     const orchestrator = new TaskOrchestrator(mockContext);
     const runTrial = vi.fn().mockResolvedValue({ score: 1 });

@@ -1,42 +1,49 @@
 import { describe, it, expect } from 'vitest';
-import { ProspectiveMemoryModule } from './prospectiveMemory';
+import { SeededRandom } from '../infrastructure/random';
+import { generateProspectiveMemoryPositions, resolveProspectiveMemoryCueMatch } from './prospectiveMemory';
 
-describe('ProspectiveMemoryModule', () => {
-  it('should be identified as "pm"', () => {
-    const module = new ProspectiveMemoryModule();
-    expect(module.id).toBe('pm');
+describe('prospectiveMemory helpers', () => {
+  it('generates PM positions that satisfy spacing and eligibility constraints', () => {
+    const rng = new SeededRandom(42);
+    const eligible = new Set<number>([3, 5, 8, 10, 14, 17]);
+    const positions = generateProspectiveMemoryPositions(
+      rng,
+      20,
+      { count: 3, minSeparation: 3, maxSeparation: 7 },
+      eligible,
+    );
+
+    expect(positions).toHaveLength(3);
+    expect(positions.every((p) => eligible.has(p))).toBe(true);
+    for (let i = 1; i < positions.length; i += 1) {
+      const gap = positions[i] - positions[i - 1];
+      expect(gap).toBeGreaterThanOrEqual(3);
+      expect(gap).toBeLessThanOrEqual(7);
+    }
   });
 
-  describe('transformPlan', () => {
-    it('should inject PM trials into eligible trials', () => {
-      const module = new ProspectiveMemoryModule();
-      const plan = [
-        {
-          blockIndex: 0,
-          trials: Array.from({ length: 20 }, (_, i) => ({ trialIndex: i, trialType: 'F', item: 'filler' }))
-        }
-      ];
-      const config = {
-        enabled: true,
-        eligibleTrialTypes: ['F'],
-        schedule: { count: 2, minSeparation: 5, maxSeparation: 10 },
-        rules: [{ type: 'category_in', categories: ['animals'], responseKey: 'space' }]
-      };
-      const context = {
-        rng: { 
-          int: (min: number, _max: number) => min, // Deterministic mock
-          shuffle: (arr: any[]) => arr 
-        } as any,
-        stimuliByCategory: { animals: ['cat'] }
-      };
+  it('throws when spacing and eligibility make PM placement impossible', () => {
+    const rng = new SeededRandom(7);
+    const eligible = new Set<number>([5, 6]);
+    expect(() =>
+      generateProspectiveMemoryPositions(
+        rng,
+        10,
+        { count: 3, minSeparation: 3, maxSeparation: 4 },
+        eligible,
+      ),
+    ).toThrow(/Cannot place PM trials/);
+  });
 
-      const transformed = module.transformBlockPlan(plan[0], config, context as any);
-      const trials = transformed.trials;
-      const pmTrials = trials.filter((t: any) => t.trialType === 'PM');
-      
-      expect(pmTrials.length).toBeGreaterThan(0);
-      expect(pmTrials[0].item).toBe('cat');
-      expect(pmTrials[0].correctResponse).toBe('space');
-    });
+  it('matches cue rules in order and returns matching response key', () => {
+    const match = resolveProspectiveMemoryCueMatch(
+      { category: 'animals', stimulusText: 'cat', stimulusColor: 'red', flags: { special: true } },
+      [
+        { type: 'text_starts_with', prefixes: ['do'], responseKey: 'k', id: 'prefix' },
+        { type: 'category_in', categories: ['animals'], responseKey: 'space', id: 'category' },
+      ],
+    );
+
+    expect(match).toEqual({ matched: true, responseKey: 'space', ruleId: 'category' });
   });
 });

@@ -17,19 +17,33 @@
       "responseTerminatesTrial": false
     },
     "modules": {
-      "pm": {
+      "injector": {
         "enabled": true,
-        "eligibleTrialTypes": ["F"],
-        "schedule": {
-          "count": "$var.pmCount",
-          "minSeparation": 8,
-          "maxSeparation": 11
-        },
-        "rules": [
+        "injections": [
           {
-            "type": "category_in",
-            "categories": ["$var.pmCategory"],
-            "responseKey": "space"
+            "id": "pm_injection",
+            "enabled": true,
+            "eligibleTrialTypes": ["F"],
+            "schedule": {
+              "count": "$var.pmCount",
+              "minSeparation": 8,
+              "maxSeparation": 11
+            },
+            "source": {
+              "type": "category_in",
+              "categories": ["$var.pmCategory"]
+            },
+            "sourceDraw": {
+              "mode": "without_replacement",
+              "scope": "block",
+              "shuffle": true
+            },
+            "set": {
+              "trialType": "PM",
+              "itemCategory": "PM",
+              "correctResponse": "space",
+              "responseCategory": "pm"
+            }
           }
         ]
       }

@@ -3,7 +3,6 @@ import { createEventLogger } from "../infrastructure/events";
 import { createVariableResolver } from "../infrastructure/variables";
 import { TaskModuleRunner } from "./taskModule";
 import { DrtModule } from "../engines/drt";
-import { ProspectiveMemoryModule } from "../engines/prospectiveMemory";
 import { StimulusInjectorModule } from "../engines/stimulusInjector";
 import type { TaskManifest, TaskAdapterContext, JSONObject } from "./types";
 
@@ -128,7 +127,6 @@ export class LifecycleManager {
     // Initialize module runner with standard core modules
     const moduleRunner = new TaskModuleRunner([
       new DrtModule(),
-      new ProspectiveMemoryModule(),
       new StimulusInjectorModule(),
     ]);
 

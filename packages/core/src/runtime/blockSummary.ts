@@ -21,11 +21,17 @@ export interface BlockSummaryWhere {
   [field: string]: BlockSummaryWhereValue | BlockSummaryWhereValue[];
 }
 
+export interface BlockSummaryLineConfig {
+  text: string;
+  where?: BlockSummaryWhere;
+  metrics?: Partial<BlockSummaryMetrics>;
+}
+
 export interface BlockSummaryConfig {
   enabled: boolean;
   at: BlockSummaryPlacement;
   title: string;
-  lines: string[];
+  lines: BlockSummaryLineConfig[];
   when?: BlockSummaryWhen;
   where?: BlockSummaryWhere;
   metrics: BlockSummaryMetrics;
@@ -51,7 +57,7 @@ const DEFAULT_SUMMARY: BlockSummaryConfig = {
   enabled: false,
   at: "block_end_before_post",
   title: "End of {blockLabel}",
-  lines: ["Accuracy: {accuracyPct}% ({correct}/{total})"],
+  lines: [{ text: "Accuracy: {accuracyPct}% ({correct}/{total})" }],
   metrics: {
     correctField: "responseCorrect",
     rtField: "responseRtMs",
@@ -83,9 +89,90 @@ function toStringScreens(value: unknown): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
+function normalizeMetrics(raw: Record<string, unknown> | null): Partial<BlockSummaryMetrics> | undefined {
+  if (!raw) return undefined;
+  const correctField = asString(raw.correctField) || undefined;
+  const rtField = asString(raw.rtField) || undefined;
+  const metricField = asString(raw.metricField) || undefined;
+  if (!correctField && !rtField && !metricField) return undefined;
+  return {
+    ...(correctField ? { correctField } : {}),
+    ...(rtField ? { rtField } : {}),
+    ...(metricField ? { metricField } : {}),
+  };
+}
+
+function normalizeLine(value: unknown): BlockSummaryLineConfig | null {
+  const textFromString = asString(value);
+  if (textFromString) return { text: textFromString };
+
+  const raw = asObject(value);
+  if (!raw) return null;
+  const text = asString(raw.text) || asString(raw.template) || asString(raw.line);
+  if (!text) return null;
+  const where = normalizeWhere(asObject(raw.where));
+  const metrics = normalizeMetrics(asObject(raw.metrics));
+  return {
+    text,
+    ...(where ? { where } : {}),
+    ...(metrics ? { metrics } : {}),
+  };
+}
+
+function normalizeLines(value: unknown): BlockSummaryLineConfig[] {
+  const fromStrings = toStringScreens(value).map((text) => ({ text }));
+  if (fromStrings.length > 0) return fromStrings;
+  const rawArray = asArray(value);
+  const parsed = rawArray
+    .map((entry) => normalizeLine(entry))
+    .filter((entry): entry is BlockSummaryLineConfig => entry !== null);
+  return parsed;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function compileWhereMatcher(values: BlockSummaryWhereValue[]): { exact: Set<string>; patterns: RegExp[] } {
+  const exact = new Set<string>();
+  const patterns: RegExp[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") {
+      exact.add(String(value));
+      continue;
+    }
+    const raw = value.trim();
+    if (!raw) {
+      exact.add("");
+      continue;
+    }
+    if (raw.startsWith("regex:")) {
+      const pattern = raw.slice("regex:".length).trim();
+      if (!pattern) continue;
+      try {
+        patterns.push(new RegExp(pattern));
+      } catch {
+        exact.add(raw);
+      }
+      continue;
+    }
+    if (raw.includes("*")) {
+      const regexSource = `^${escapeRegexLiteral(raw).replace(/\\\*/g, ".*")}$`;
+      try {
+        patterns.push(new RegExp(regexSource));
+      } catch {
+        exact.add(raw);
+      }
+      continue;
+    }
+    exact.add(raw);
+  }
+  return { exact, patterns };
 }
 
 function getFieldValue(record: Record<string, unknown> | null, fieldPath: string): unknown {
@@ -164,7 +251,7 @@ export function coerceBlockSummaryConfig(value: unknown): BlockSummaryConfig | n
   const atRaw = (asString(raw.at) || "").toLowerCase();
   const at: BlockSummaryPlacement =
     atRaw === "block_end_after_post" || atRaw === "after_post" ? "block_end_after_post" : "block_end_before_post";
-  const lines = toStringScreens(raw.lines);
+  const lines = normalizeLines(raw.lines);
   const metrics = asObject(raw.metrics);
   return {
     enabled,
@@ -176,6 +263,7 @@ export function coerceBlockSummaryConfig(value: unknown): BlockSummaryConfig | n
     metrics: {
       correctField: asString(metrics?.correctField) || DEFAULT_SUMMARY.metrics.correctField,
       rtField: asString(metrics?.rtField) || DEFAULT_SUMMARY.metrics.rtField,
+      metricField: asString(metrics?.metricField) || undefined,
     },
   };
 }
@@ -225,6 +313,45 @@ function matchesWhen(
   return true;
 }
 
+function combineWhere(base?: BlockSummaryWhere, extra?: BlockSummaryWhere): BlockSummaryWhere | undefined {
+  if (!base && !extra) return undefined;
+  if (!base) return extra;
+  if (!extra) return base;
+
+  const merged: BlockSummaryWhere = { ...base };
+  for (const [field, extraValue] of Object.entries(extra)) {
+    const baseValue = merged[field];
+    if (baseValue === undefined) {
+      merged[field] = extraValue;
+      continue;
+    }
+    const baseValues = Array.isArray(baseValue) ? baseValue : [baseValue];
+    const extraValues = Array.isArray(extraValue) ? extraValue : [extraValue];
+    const extraSet = new Set(extraValues.map(String));
+    const intersection = baseValues.filter((value) => extraSet.has(String(value)));
+    merged[field] = intersection;
+  }
+  return merged;
+}
+
+function toStatsVars(args: {
+  total: number;
+  correct: number;
+  accuracyPct: number;
+  meanRtMs: number;
+  validRtCount: number;
+}): Record<string, string> {
+  const incorrect = Math.max(0, args.total - args.correct);
+  return {
+    total: String(args.total),
+    correct: String(args.correct),
+    incorrect: String(incorrect),
+    accuracyPct: toTextNumber(args.accuracyPct, 1),
+    meanRtMs: toTextNumber(args.meanRtMs, 1),
+    validRtCount: String(args.validRtCount),
+  };
+}
+
 export function computeBlockSummaryStats(args: {
   trialResults: unknown[];
   where?: BlockSummaryWhere;
@@ -235,11 +362,11 @@ export function computeBlockSummaryStats(args: {
 
   // ⚡ Bolt: Hoist Object.entries and Set creation outside the filter loop
   // to avoid redundant O(N) allocations for every trial row.
-  let whereEntries: Array<[string, Set<string>]> | null = null;
+  let whereEntries: Array<[string, { exact: Set<string>; patterns: RegExp[] }]> | null = null;
   if (where) {
     whereEntries = Object.entries(where).map(([field, expectedRaw]) => {
       const expectedArray = Array.isArray(expectedRaw) ? expectedRaw : [expectedRaw];
-      return [field, new Set(expectedArray.map(String))];
+      return [field, compileWhereMatcher(expectedArray)];
     });
   }
 
@@ -247,9 +374,12 @@ export function computeBlockSummaryStats(args: {
     if (!whereEntries) return true;
     const record = asObject(row);
     if (!record) return false;
-    for (const [field, expectedSet] of whereEntries) {
+    for (const [field, matcher] of whereEntries) {
       const actual = getFieldValue(record, field);
-      if (!expectedSet.has(String(actual))) return false;
+      const actualString = String(actual);
+      if (matcher.exact.has(actualString)) continue;
+      if (matcher.patterns.some((pattern) => pattern.test(actualString))) continue;
+      return false;
     }
     return true;
   });
@@ -330,7 +460,6 @@ export function buildBlockSummaryModel(args: {
   });
   const total = fromTrials.total > 0 ? fromTrials.total : Math.max(0, Math.floor(args.fallbackStats?.total ?? 0));
   const correct = fromTrials.total > 0 ? fromTrials.correct : Math.max(0, Math.floor(args.fallbackStats?.correct ?? 0));
-  const incorrect = Math.max(0, total - correct);
   const accuracyPct = fromTrials.total > 0
     ? fromTrials.accuracyPct
     : (Number.isFinite(Number(args.fallbackStats?.accuracyPct)) ? Number(args.fallbackStats?.accuracyPct) : (total > 0 ? (correct / total) * 100 : 0));
@@ -358,18 +487,12 @@ export function buildBlockSummaryModel(args: {
   const experimentDropped = pickTotal(latestExperimentTotals, "dropped", blockDropped);
   const experimentPoints = pickTotal(latestExperimentTotals, "points", blockPoints);
 
-  const vars: Record<string, string> = {
+  const baseVars: Record<string, string> = {
     blockLabel,
     blockIndex: String(args.blockIndex),
     blockIndex1: String(args.blockIndex + 1),
     blockType,
     isPractice: isPractice ? "1" : "0",
-    total: String(total),
-    correct: String(correct),
-    incorrect: String(incorrect),
-    accuracyPct: toTextNumber(accuracyPct, 1),
-    meanRtMs: toTextNumber(meanRtMs, 1),
-    validRtCount: String(validRtCount),
     blockSpawned: toTextNumber(blockSpawned, 0),
     blockCleared: toTextNumber(blockCleared, 0),
     blockDropped: toTextNumber(blockDropped, 0),
@@ -379,9 +502,40 @@ export function buildBlockSummaryModel(args: {
     experimentDropped: toTextNumber(experimentDropped, 0),
     experimentPoints: toTextNumber(experimentPoints, 0),
   };
-
-  const title = applyTemplate(cfg.title, vars);
-  const lines = cfg.lines.map((line) => applyTemplate(line, vars));
+  const globalVars = {
+    ...baseVars,
+    ...toStatsVars({
+      total,
+      correct,
+      accuracyPct,
+      meanRtMs,
+      validRtCount,
+    }),
+  };
+  const title = applyTemplate(cfg.title, globalVars);
+  const lines = cfg.lines.map((lineCfg) => {
+    const lineWhere = combineWhere(cfg.where, lineCfg.where);
+    const lineMetrics: BlockSummaryMetrics = {
+      ...cfg.metrics,
+      ...(lineCfg.metrics ?? {}),
+    };
+    const lineStats = computeBlockSummaryStats({
+      trialResults: args.trialResults ?? [],
+      where: lineWhere,
+      metrics: lineMetrics,
+    });
+    const lineVars = {
+      ...globalVars,
+      ...toStatsVars({
+        total: lineStats.total,
+        correct: lineStats.correct,
+        accuracyPct: lineStats.accuracyPct,
+        meanRtMs: lineStats.meanRtMs,
+        validRtCount: lineStats.validRtCount,
+      }),
+    };
+    return applyTemplate(lineCfg.text, lineVars);
+  });
   const text = [title, ...lines].filter((line) => line.trim().length > 0).join("\n");
   if (!text) return null;
   return { at: cfg.at, title, lines, text };

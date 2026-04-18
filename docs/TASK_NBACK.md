@@ -7,7 +7,7 @@ This document describes the unified `tasks/nback` implementation, which serves a
 The NBack task is built on the core `TaskOrchestrator` and `createTaskAdapter` factory. It uses **jsPsych** as its primary runner.
 
 - **Adapter Path:** `tasks/nback/src/index.ts`
-- **Canonical PM Path:** NBack task + `task.modules.pm` (or `task.modules.injector`)
+- **Canonical PM Path:** NBack task + `task.modules.injector`
 
 ## 1.1 Variants
 
@@ -15,8 +15,8 @@ The NBack task is built on the core `TaskOrchestrator` and `createTaskAdapter` f
 | :--- | :--- | :--- |
 | `default` | `nback/default` | Standard N-Back |
 | `drt_block_demo` | `nback/drt_block_demo` | N-Back with block-scoped DRT |
-| `pm_module_demo` | `nback/pm_module_demo` | N-Back + PM module demo |
-| `pm_module_export_demo` | `nback/pm_module_export_demo` | PM module with stimulus export |
+| `pm_module_demo` | `nback/pm_module_demo` | N-Back + PM injector demo |
+| `pm_module_export_demo` | `nback/pm_module_export_demo` | PM injector with stimulus export |
 | `annikaHons` | `nback/annikaHons` | Custom Honours study config |
 | `nirvanaExp1` | `nback/nirvanaExp1` | Nirvana Experiment 1 config |
 | `modern` | `nback/nirvanaExp1` | Legacy URL-compat entry pointing to `nirvanaExp1` config; kept so old `?variant=modern` links still resolve |
@@ -31,7 +31,7 @@ The task configuration is resolved through the core `VariableResolver`, allowing
 | :--- | :--- | :--- |
 | `task.title` | string | Title shown on the task intro card. |
 | `task.rtTask` | object | Global RT phase configuration (see [RT Task](#rt-task)). |
-| `task.modules` | object | Active modules (e.g., `pm`, `drt`, `injector`). |
+| `task.modules` | object | Active modules (e.g., `drt`, `injector`). |
 | `mapping.targetKey` | string | Required. Key for N-Back matches (e.g., `"m"`). |
 | `mapping.nonTargetKey`| string | Optional. Key for non-matches. If omitted or `"withhold"`, non-targets require no response. |
 | `timing` | object | Legacy timing shortcuts (mapped to `rtTask` defaults). |
@@ -131,8 +131,10 @@ Configured under `instructions`.
   "enabled": true,
   "at": "before_post",
   "title": "Block Feedback",
-  "lines": ["Accuracy: {accuracyPct}%", "Mean RT: {meanRtMs} ms"],
-  "where": { "trialType": ["N"] },
+  "lines": [
+    { "text": "Target accuracy: {accuracyPct}%", "where": { "trialType": ["N"] } },
+    { "text": "Non-target accuracy: {accuracyPct}%", "where": { "trialType": ["F", "L*"] } }
+  ],
   "when": { "isPractice": true }
 }
 ```
@@ -141,7 +143,6 @@ Configured under `instructions`.
 
 NBack supports additive functionality via the `task.modules` system. These modules are task-independent and can be plugged into other adapters.
 
-- [**Module: Prospective Memory (PM)**](./MODULE_PM.md): Rule-based PM trial injection.
 - [**Module: Detection Response Task (DRT)**](./MODULE_DRT.md): Concurrent detection task (ISO-standard).
 - [**Module: Stimulus Injector**](./MODULE_INJECTOR.md): Low-level trial injection for custom PM and control trials.
 
@@ -175,7 +176,7 @@ The NBack task produces a consolidated CSV/JSON payload with suffix `nback_trial
 
 - **Trial Records:** Every N-Back, PM, and Injector trial is exported as a primary row.
 - **Fields:** `trialType` (`N`, `F`, `PM`, `L<lag>`), `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`, etc.
-- **Module Results:** Detailed DRT and PM module outputs (e.g., transform estimates, raw module logs) are included in the `moduleResults` object in the final JSON payload.
+- **Module Results:** Detailed DRT and injector module outputs (e.g., transform estimates, raw module logs) are included in the `moduleResults` object in the final JSON payload.
 
 ## 6. Stimulus Export Mode
 

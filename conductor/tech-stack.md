@@ -19,7 +19,7 @@
 - **LifecycleManager:** Standardized orchestrator for task execution, ensuring consistent initialization (including high-level variable resolution) and cleanup.
 - **TaskOrchestrator:** Unified orchestrator for managing high-level task UI flows (intros, block transitions) and automated modular hooks (DRT, PM) during execution.
 - **TaskModuleRunner:** Modular system for managing dynamic task extensions (TaskModules), allowing them to transform experiment plans and handle scoped events/keys.
-- **ProspectiveMemoryModule:** Reusable core engine for injecting prospective memory trials and responses into any host task.
+- **StimulusInjectorModule:** Reusable core engine for injecting PM-like or generic trials into any host task with configurable draw behavior.
 - **SpatialLayoutManager:** Core utility for generating non-overlapping programmatic positioning of stimuli using various templates (circular, grid, random).
 - **SceneRenderer:** Standardized canvas renderer for structured SceneStimulus models, supporting modular rendering hooks.
 - **Generalized Trial Runner:** Enhanced rtTask engine supporting arbitrary multi-phase trial structures (e.g., Encode -> Mask -> Delay -> Probe).

@@ -377,7 +377,7 @@ Fields:
 - `minCorrect` (optional integer)
 - `minTotal` (optional integer)
 - `maxMeanMetric`, `minMeanMetric` (optional thresholds on the mean absolute value of `metrics.metricField`)
-- `where` (optional trial filter object, same shape as block-summary filtering)
+- `where` (optional trial filter object, same shape as block-summary filtering; supports dotted paths, `*` wildcard strings, and `regex:` patterns)
 - `metrics.correctField` (field used for correct/incorrect scoring; `true`/`1` count as correct)
 - `metrics.metricField` (optional field used for mean-metric thresholds; array values are expanded)
 

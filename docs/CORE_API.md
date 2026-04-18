@@ -747,9 +747,14 @@ Supports:
 - `enabled`
 - `at`: `before_post`/`after_post` (aliases for block-end insertion slots)
 - `title`
-- `lines` (string or string[])
+- `lines`:
+  - string or string[] (shared summary stats for all lines)
+  - line object or line object[] with:
+    - `text` (or `line` / `template`) template
+    - optional `where` filters (field -> value or array; dotted paths supported; string values support `*` wildcard and `regex:` prefix)
+    - optional `metrics` overrides (`correctField`, `rtField`, `metricField`)
 - `when` filters (`blockIndex`, `blockLabel`, `blockType`, `isPractice`)
-- `where` trial-result filters (field -> value or array of values; supports dotted paths)
+- `where` trial-result filters (field -> value or array of values; supports dotted paths, `*` wildcard strings, and `regex:` string patterns)
 - `metrics.correctField`, `metrics.rtField` (supports dotted paths)
 
 ### `buildBlockSummaryModel(args): BlockSummaryModel | null`

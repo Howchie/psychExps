@@ -192,8 +192,8 @@ export const nbackAdapter = createTaskAdapter({
     variants: [
       { id: "default", label: "NBack Default", configPath: "nback/default" },
       { id: "drt_block_demo", label: "NBack DRT Block Demo", configPath: "nback/drt_block_demo" },
-      { id: "pm_module_demo", label: "NBack PM Module Demo", configPath: "nback/pm_module_demo" },
-      { id: "pm_module_export_demo", label: "NBack PM Module Export Demo", configPath: "nback/pm_module_export_demo" },
+      { id: "pm_module_demo", label: "NBack PM Injector Demo", configPath: "nback/pm_module_demo" },
+      { id: "pm_module_export_demo", label: "NBack PM Injector Export Demo", configPath: "nback/pm_module_export_demo" },
       { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
       { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
       { id: "modern", label: "NBack Modern", configPath: "nback/nirvanaExp1" },
@@ -458,16 +458,6 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
   );
 
   let moduleConfigs = asObject(asObject(context.rawTaskConfig.task)?.modules) ?? {};
-  const mappingRaw = asObject(context.rawTaskConfig.mapping);
-  if (asString(asObject(context.rawTaskConfig.task)?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
-    moduleConfigs = {
-      ...moduleConfigs,
-      pm: {
-        enabled: true,
-        key: asString(mappingRaw?.pmKey) || "space",
-      },
-    };
-  }
   let plan = buildExperimentPlan(parsed, rng, context.moduleRunner, moduleConfigs, context.resolver);
 
   const eventLogger = context.eventLogger;
@@ -753,17 +743,6 @@ function parseNbackConfig(
 
   // Modular semantics: extract response keys from all active modules
   let moduleConfigs = asObject(taskRaw?.modules) ?? {};
-
-  // Support legacy jspsych_pm implementation by injecting a pm module
-  if (asString(taskRaw?.implementation) === "jspsych_pm" && !moduleConfigs.pm) {
-    moduleConfigs = {
-      ...moduleConfigs,
-      pm: {
-        enabled: true,
-        key: asString(mappingRaw?.pmKey) || "space",
-      },
-    };
-  }
 
   const modularSemantics = variableResolver.resolveInValue(
     moduleRunner.getModularSemantics(moduleConfigs, { resolver: variableResolver }),

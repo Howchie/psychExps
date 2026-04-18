@@ -62,7 +62,7 @@ Prefer `?config=<taskId>/<file>` — it works for any bundled JSON without needi
 # NBack default
 http://localhost:5173/?task=nback&config=nback/default
 
-# NBack with PM module demo
+# NBack with PM injector demo
 http://localhost:5173/?task=nback&config=nback/pm_module_demo
 
 # Bricks spotlight

@@ -37,7 +37,7 @@ export class ConfigurationManager {
     if (config.pm) {
       throw new Error(
         "Legacy configuration detected: Top-level 'pm' key is no longer supported. " +
-        "Please move Prospective Memory configuration to 'task.modules.pm'."
+        "Please move Prospective Memory configuration to 'task.modules.injector.injections'."
       );
     }
   }

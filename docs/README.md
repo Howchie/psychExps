@@ -29,7 +29,6 @@ This documentation is implementation-first and tracks current behavior in this r
 
 These components can be integrated into any compatible task adapter via `task.modules`:
 
-- [**Module: Prospective Memory (PM)**](./MODULE_PM.md): Rule-based PM trial injection.
 - [**Module: Detection Response Task (DRT)**](./MODULE_DRT.md): Concurrent detection task (ISO-standard).
 - [**Module: Stimulus Injector**](./MODULE_INJECTOR.md): Generic trial injection and block-plan modification.
 

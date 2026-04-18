@@ -125,14 +125,22 @@
       "at": "before_post",
       "title": "Feedback",
       "lines": [
-        "Target accuracy: {accuracyPct}% ({correct}/{total})"
+        {
+          "text": "Target accuracy: {accuracyPct}% ({correct}/{total})",
+          "where": {
+            "trialType": ["N"]
+          }
+        },
+        {
+          "text": "Non-target accuracy: {accuracyPct}% ({correct}/{total})",
+          "where": {
+            "trialType": ["F", "L*"]
+          }
+        }
       ],
       "metrics": {
         "correctField": "responseCorrect",
         "rtField": "responseRtMs"
-      },
-      "where": {
-        "trialType": ["N"]
       },
       "when": {
         "isPractice": true
