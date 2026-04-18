@@ -78,9 +78,13 @@ function toStringScreens(value: unknown): string[] {
     const text = value.trim();
     return text ? [text] : [];
   }
-  return asArray(value)
-    .map((item) => asString(item))
-    .filter((item): item is string => Boolean(item));
+  const out: string[] = [];
+  const arrayValue = asArray(value);
+  for (let i = 0; i < arrayValue.length; i += 1) {
+    const item = asString(arrayValue[i]);
+    if (item) out.push(item);
+  }
+  return out;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -93,15 +97,26 @@ function getFieldValue(record: Record<string, unknown> | null, fieldPath: string
   const direct = record[fieldPath];
   if (direct !== undefined) return direct;
   if (!fieldPath.includes(".")) return direct;
-  const segments = fieldPath.split(".").map((segment) => segment.trim()).filter((segment) => segment.length > 0);
-  if (segments.length === 0) return undefined;
+
   let cursor: unknown = record;
-  for (const segment of segments) {
-    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
-    cursor = (cursor as Record<string, unknown>)[segment];
-    if (cursor === undefined) return undefined;
+  let start = 0;
+  let hasSegments = false;
+
+  for (let i = 0; i <= fieldPath.length; i += 1) {
+    if (i === fieldPath.length || fieldPath[i] === ".") {
+      if (i > start) {
+        const segment = fieldPath.substring(start, i).trim();
+        if (segment.length > 0) {
+          hasSegments = true;
+          if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+          cursor = (cursor as Record<string, unknown>)[segment];
+          if (cursor === undefined) return undefined;
+        }
+      }
+      start = i + 1;
+    }
   }
-  return cursor;
+  return hasSegments ? cursor : undefined;
 }
 
 function toTextNumber(value: number, digits = 1): string {
@@ -111,17 +126,28 @@ function toTextNumber(value: number, digits = 1): string {
 
 function normalizeWhen(raw: Record<string, unknown> | null): BlockSummaryWhen | undefined {
   if (!raw) return undefined;
-  const blockIndex = asArray(raw.blockIndex)
-    .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item))
-    .map((item) => Math.floor(item));
-  const blockLabel = asArray(raw.blockLabel)
-    .map((item) => asString(item))
-    .filter((item): item is string => Boolean(item));
-  const blockType = asArray(raw.blockType)
-    .map((item) => asString(item))
-    .filter((item): item is string => Boolean(item))
-    .map((item) => item.toLowerCase());
+
+  const blockIndex: number[] = [];
+  const rawIndex = asArray(raw.blockIndex);
+  for (let i = 0; i < rawIndex.length; i += 1) {
+    const item = Number(rawIndex[i]);
+    if (Number.isInteger(item)) blockIndex.push(Math.floor(item));
+  }
+
+  const blockLabel: string[] = [];
+  const rawLabel = asArray(raw.blockLabel);
+  for (let i = 0; i < rawLabel.length; i += 1) {
+    const item = asString(rawLabel[i]);
+    if (item) blockLabel.push(item);
+  }
+
+  const blockType: string[] = [];
+  const rawType = asArray(raw.blockType);
+  for (let i = 0; i < rawType.length; i += 1) {
+    const item = asString(rawType[i]);
+    if (item) blockType.push(item.toLowerCase());
+  }
+
   const isPractice = typeof raw.isPractice === "boolean" ? raw.isPractice : undefined;
   if (blockIndex.length === 0 && blockLabel.length === 0 && blockType.length === 0 && typeof isPractice !== "boolean") {
     return undefined;
@@ -137,24 +163,33 @@ function normalizeWhen(raw: Record<string, unknown> | null): BlockSummaryWhen | 
 function normalizeWhere(raw: Record<string, unknown> | null): BlockSummaryWhere | undefined {
   if (!raw) return undefined;
   const out: BlockSummaryWhere = {};
-  for (const [field, value] of Object.entries(raw)) {
+  let hasKeys = false;
+
+  for (const field in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, field)) continue;
+
     const key = String(field || "").trim();
     if (!key) continue;
-    const values = asArray(value)
-      .map((entry) => {
-        if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") return entry;
-        return null;
-      })
-      .filter((entry): entry is BlockSummaryWhereValue => entry !== null);
-    if (values.length > 0) {
-      out[key] = values;
-      continue;
-    }
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+
+    const value = raw[field];
+    if (Array.isArray(value)) {
+      const validValues: BlockSummaryWhereValue[] = [];
+      for (let i = 0; i < value.length; i += 1) {
+        const entry = value[i];
+        if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") {
+          validValues.push(entry);
+        }
+      }
+      if (validValues.length > 0) {
+        out[key] = validValues;
+        hasKeys = true;
+      }
+    } else if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       out[key] = value;
+      hasKeys = true;
     }
   }
-  return Object.keys(out).length > 0 ? out : undefined;
+  return hasKeys ? out : undefined;
 }
 
 export function coerceBlockSummaryConfig(value: unknown): BlockSummaryConfig | null {
@@ -243,16 +278,28 @@ export function computeBlockSummaryStats(args: {
     });
   }
 
-  const filteredRows = rows.filter((row) => {
-    if (!whereEntries) return true;
-    const record = asObject(row);
-    if (!record) return false;
-    for (const [field, expectedSet] of whereEntries) {
-      const actual = getFieldValue(record, field);
-      if (!expectedSet.has(String(actual))) return false;
+  const filteredRows: unknown[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!whereEntries) {
+      filteredRows.push(row);
+      continue;
     }
-    return true;
-  });
+    const record = asObject(row);
+    if (!record) continue;
+
+    let isMatch = true;
+    for (let j = 0; j < whereEntries.length; j += 1) {
+      const entry = whereEntries[j];
+      const actual = getFieldValue(record, entry[0]);
+      if (!entry[1].has(String(actual))) {
+        isMatch = false;
+        break;
+      }
+    }
+    if (isMatch) filteredRows.push(row);
+  }
+
   let total = 0;
   let correct = 0;
   let rtSum = 0;
