@@ -483,6 +483,7 @@ export class ConveyorRenderer {
     peakActiveEffects: number;
     peakBrickSprites: number;
   };
+  _styleLookupCache: WeakMap<Record<string, any>, Map<string, any>>;
   seed: number;
   _rngState: number;
   beltLayer!: PIXI.Container;
@@ -539,6 +540,7 @@ export class ConveyorRenderer {
     this.spotlightRect = null;
     this.activeBrickId = null;
     this.brickHoldStart = new Map();
+    this._styleLookupCache = new WeakMap();
     this.canvasView = null;
     this.pointerInCanvas = false;
     this.pointerCanvasPos = { x: null, y: null };
@@ -695,12 +697,27 @@ export class ConveyorRenderer {
     this.pointerDebugText.text = `POINTER DEBUG\n${lines.join('\n')}`;
   }
 
+  _findCustomStyle(customStyles: Record<string, any>, styleId: string) {
+    if (!customStyles || typeof customStyles !== 'object') {
+      return undefined;
+    }
+    let cache = this._styleLookupCache.get(customStyles);
+    if (!cache) {
+      cache = new Map();
+      for (const key of Object.keys(customStyles)) {
+        cache.set(normalizeTextureStyleId(key), customStyles[key]);
+      }
+      this._styleLookupCache.set(customStyles, cache);
+    }
+    return cache.get(styleId);
+  }
+
   _resolveBeltProceduralStyleConfig(texCfg: Record<string, any>) {
     const styleId = normalizeTextureStyleId(texCfg?.style ?? '');
     const builtin = (BUILTIN_BELT_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const base = (builtin && typeof builtin === 'object') ? builtin : {};
     const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
-    const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
+    const custom = this._findCustomStyle(customStyles, styleId);
     const customObj = (custom && typeof custom === 'object') ? custom : {};
     const procedural = (texCfg?.proceduralTopdown && typeof texCfg.proceduralTopdown === 'object')
       ? texCfg.proceduralTopdown
@@ -713,7 +730,7 @@ export class ConveyorRenderer {
     const builtin = (BUILTIN_WAREHOUSE_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const base = (builtin && typeof builtin === 'object') ? builtin : {};
     const customStyles = texCfg?.styles && typeof texCfg.styles === 'object' ? texCfg.styles : {};
-    const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
+    const custom = this._findCustomStyle(customStyles, styleId);
     const customObj = (custom && typeof custom === 'object') ? custom : {};
     const procedural = (texCfg?.proceduralWarehouse && typeof texCfg.proceduralWarehouse === 'object')
       ? texCfg.proceduralWarehouse
@@ -3195,7 +3212,7 @@ export class ConveyorRenderer {
       return base;
     }
     const customStyles = base?.styles && typeof base.styles === 'object' ? base.styles : {};
-    const custom = Object.entries(customStyles).find(([key]) => normalizeTextureStyleId(key) === styleId)?.[1];
+    const custom = this._findCustomStyle(customStyles, styleId);
     const builtin = (BUILTIN_BRICK_TEXTURE_STYLES as Record<string, any>)?.[styleId];
     const override = custom && typeof custom === 'object'
       ? custom

@@ -1,3 +1,4 @@
+import { nextSecureFloat } from "../infrastructure/random";
 import type { RNG } from "../infrastructure/scheduler";
 
 export interface ConditionFactor {
@@ -25,7 +26,9 @@ export interface BuildConditionSequenceArgs {
   maxAttempts?: number;
 }
 
-const defaultRng: RNG = { next: () => Math.random() };
+const defaultRng: RNG = {
+  next: nextSecureFloat,
+};
 
 const asFinitePositive = (value: unknown, fallback: number): number => {
   const numeric = Number(value);

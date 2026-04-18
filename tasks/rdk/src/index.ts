@@ -20,6 +20,8 @@ import {
   resolveBlockScreenSlotValue,
   maybeExportStimulusRows,
   createTaskAdapter,
+  hashSeed,
+  createCoreRng,
   type ScopedDrtConfig,
   type TaskAdapterContext,
   type TaskModuleAddress,
@@ -233,9 +235,19 @@ function parseRdkConfig(taskConfig: Record<string, unknown>, selection: Selectio
 }
 
 async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
+  const { selection, taskConfig } = context;
   const runner = context.moduleRunner;
-  const parsed = parseRdkConfig(context.taskConfig, context.selection);
+  const parsed = parseRdkConfig(taskConfig, selection);
   const eventLogger = context.eventLogger;
+
+  const rng = createCoreRng(
+    hashSeed(
+      selection.participant.participantId,
+      selection.participant.sessionId,
+      selection.variantId,
+      "rdk",
+    ),
+  );
 
   runner.setOptions({
     onEvent: (event) => {
@@ -290,30 +302,41 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
       const promptEl = stageShell.querySelector("#rdk-prompt") as HTMLElement;
 
       const renderer = await createRdkRenderer(rendererHost, {
-          backend: parsed.display.rendererBackend,
-          width: parsed.display.aperturePx,
-          height: parsed.display.aperturePx,
-          backgroundColor: parsed.display.canvasBackground,
+        backend: parsed.display.rendererBackend,
+        width: parsed.display.aperturePx,
+        height: parsed.display.aperturePx,
+        backgroundColor: parsed.display.canvasBackground,
       });
 
       promptEl.style.opacity = "0";
 
       let trialDirection = block.trialTemplate.direction;
       if (block.trialTemplate.direction === "right" || block.trialTemplate.direction === "left") {
-        trialDirection = Math.random() > 0.5 ? "left" : "right";
+        trialDirection = rng.nextFloat() > 0.5 ? "left" : "right";
       } else if (block.trialTemplate.direction === "up" || block.trialTemplate.direction === "down") {
-        trialDirection = Math.random() > 0.5 ? "up" : "down";
+        trialDirection = rng.nextFloat() > 0.5 ? "up" : "down";
       }
 
       let predominantColor = "black";
       if (block.trialTemplate.mode === "static") {
-          predominantColor = Math.random() > 0.5 ? "black" : "white";
+        predominantColor = rng.nextFloat() > 0.5 ? "black" : "white";
       }
 
-      const result = await runTrialWithEnvelope<{ block: ParsedRdkBlock; blockIndex: number; trialIndex: number }, RdkTrialRecord>({
+      const result = await runTrialWithEnvelope<
+        { block: ParsedRdkBlock; blockIndex: number; trialIndex: number },
+        RdkTrialRecord
+      >({
         context: { block, blockIndex, trialIndex },
         execute: async () => {
-          const res = await renderRdkTrial(renderer, parsed.display.aperturePx, block.trialTemplate, trialDirection, predominantColor, promptEl);
+          const res = await renderRdkTrial(
+            renderer,
+            parsed.display.aperturePx,
+            block.trialTemplate,
+            trialDirection,
+            predominantColor,
+            promptEl,
+            rng,
+          );
 
           return {
             taskId: "rdk",
@@ -364,6 +387,7 @@ async function renderRdkTrial(
   trialDirection: string,
   predominantColor: string,
   promptEl: HTMLElement,
+  rng: any,
 ): Promise<{ durationMs: number; responseKey: string | null; rtMs: number | null; correct: boolean | null }> {
   return new Promise((resolve) => {
     let animationId: number;
@@ -390,13 +414,13 @@ async function renderRdkTrial(
     const cy = aperturePx / 2;
 
     for (let i = 0; i < dotCount; i++) {
-      const r = radius * Math.sqrt(Math.random());
-      const theta = Math.random() * 2 * Math.PI;
+      const r = radius * Math.sqrt(rng.nextFloat());
+      const theta = rng.nextFloat() * 2 * Math.PI;
       dots.push({
         x: cx + r * Math.cos(theta),
         y: cy + r * Math.sin(theta),
-        age: Math.floor(Math.random() * 20),
-        maxAge: Math.floor(Math.random() * 20) + 10,
+        age: Math.floor(rng.nextFloat() * 20),
+        maxAge: Math.floor(rng.nextFloat() * 20) + 10,
         isCoherent: false,
       });
     }
@@ -475,10 +499,10 @@ async function renderRdkTrial(
         // Coherence is determined when dot is (re)born or every frame if we want standard RDK
         // Typically coherence is assigned per-frame or per-life.
         // Let's do standard per-frame reassignment to match common Psychopy/jsPsych RDK implementations.
-        dot.isCoherent = Math.random() < currentCoherence;
+        dot.isCoherent = rng.nextFloat() < currentCoherence;
 
         if (mode === "dynamic") {
-          let moveAngle = Math.random() * 2 * Math.PI;
+          let moveAngle = rng.nextFloat() * 2 * Math.PI;
           if (dot.isCoherent) {
             if (trialDirection === "right") moveAngle = 0;
             else if (trialDirection === "left") moveAngle = Math.PI;
@@ -494,22 +518,22 @@ async function renderRdkTrial(
           const distSq = dx * dx + dy * dy;
 
           if (distSq > radius * radius || dot.age > dot.maxAge) {
-             const r = radius * Math.sqrt(Math.random());
-             const theta = Math.random() * 2 * Math.PI;
-             dot.x = cx + r * Math.cos(theta);
-             dot.y = cy + r * Math.sin(theta);
-             dot.age = 0;
+            const r = radius * Math.sqrt(rng.nextFloat());
+            const theta = rng.nextFloat() * 2 * Math.PI;
+            dot.x = cx + r * Math.cos(theta);
+            dot.y = cy + r * Math.sin(theta);
+            dot.age = 0;
           }
         } else if (mode === "static") {
-             if (dot.age > dot.maxAge) {
-                 const r = radius * Math.sqrt(Math.random());
-                 const theta = Math.random() * 2 * Math.PI;
-                 dot.x = cx + r * Math.cos(theta);
-                 dot.y = cy + r * Math.sin(theta);
-                 dot.age = 0;
-             }
-             // Static mode: coherence determines the color mix
-             const isSignalColor = dot.isCoherent ? true : Math.random() > 0.5;
+          if (dot.age > dot.maxAge) {
+            const r = radius * Math.sqrt(rng.nextFloat());
+            const theta = rng.nextFloat() * 2 * Math.PI;
+            dot.x = cx + r * Math.cos(theta);
+            dot.y = cy + r * Math.sin(theta);
+            dot.age = 0;
+          }
+          // Static mode: coherence determines the color mix
+          const isSignalColor = dot.isCoherent ? true : rng.nextFloat() > 0.5;
              dot.color = isSignalColor 
                 ? (predominantColor === "black" ? dotColorAlternate : dotColor)
                 : (predominantColor === "black" ? dotColor : dotColorAlternate);

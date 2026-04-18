@@ -1,4 +1,4 @@
-import { createMulberry32, hashSeed } from "../infrastructure/random";
+import { createMulberry32, hashSeed, nextSecureFloat } from "../infrastructure/random";
 import { isJatosAvailable, readJatosUrlQueryParameters } from "../infrastructure/jatos";
 import type { AutoResponderConfig, CoreConfig, JSONObject, SelectionContext } from "../api/types";
 
@@ -170,7 +170,9 @@ export function configureAutoResponder(profile: ResolvedAutoResponderProfile): v
 }
 
 function random(): number {
-  if (!rng) return Math.random();
+  if (!rng) {
+    return nextSecureFloat();
+  }
   return rng();
 }
 
