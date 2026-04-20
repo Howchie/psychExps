@@ -18,6 +18,7 @@
     },
     "completionParams": {
       "target_hold_ms": 1000,
+      "min_hold_ms_for_progress": 500,
       "progress_per_perfect": 0.27,
       "progress_curve": 0.8,
       "overshoot_tolerance_ms": 500,

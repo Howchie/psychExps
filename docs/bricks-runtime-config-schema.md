@@ -511,6 +511,7 @@ Built-in conveyor procedural style IDs (`display.beltTexture.style`):
   completionParams?: {
     clicks_required?: number;        // multi_click
     target_hold_ms?: number;         // hold_duration
+    min_hold_ms_for_progress?: number;// hold_duration; holds shorter than this add zero progress
     progress_per_perfect?: number;   // hold_duration
     progress_curve?: number;         // hold_duration
     overshoot_tolerance_ms?: number; // hold_duration

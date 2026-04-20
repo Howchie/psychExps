@@ -130,6 +130,10 @@ Completion-mode note (`hold_to_clear`):
 - Supports all interaction targeting areas (`brick`, `conveyor`, `spotlight`).
 - If that key is omitted, runtime falls back to `brick.speed`.
 
+Completion-mode note (`hold_duration`):
+- Optional `completionParams.min_hold_ms_for_progress` (aliases: `min_hold_ms`, `hold_floor_ms`) applies a low-end floor.
+- Holds shorter than this floor contribute zero progress, while overshoot still respects `completionParams.overshoot_tolerance_ms`.
+
 Interaction targeting note:
 - Default targeting is direct brick hit-testing.
 - Preferred selector is `bricks.interaction.targetingArea`:

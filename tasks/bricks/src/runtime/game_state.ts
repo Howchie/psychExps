@@ -1361,19 +1361,31 @@ export class GameState {
       const clearPx = sdPx > 0
         ? Math.max(minPx, this.rng.nextNormal(meanPx, sdPx))
         : Math.max(minPx, meanPx);
+      const progressBefore = Math.max(0, Math.min(1, Number(brick.clearProgress ?? 0)));
       const progressDelta = clearPx / Math.max(1, brick.initialWidth);
       brick.clicks += 1;
-      brick.clearProgress = Math.min(1, (brick.clearProgress ?? 0) + progressDelta);
+      brick.clearProgress = Math.min(1, progressBefore + progressDelta);
+      const progressAfter = Math.max(0, Math.min(1, Number(brick.clearProgress ?? 0)));
+      const remainingWidthBeforePx = Math.max(0, (1 - progressBefore) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
+      const remainingWidthAfterPx = Math.max(0, (1 - progressAfter) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
       this._log('brick_click_progress', {
         brick_id: brick.id,
         clicks: brick.clicks,
         clear_px: clearPx,
-        progress: brick.clearProgress,
+        progress: progressAfter,
+        progress_before: progressBefore,
+        progress_after: progressAfter,
+        remaining_width_px_before: remainingWidthBeforePx,
+        remaining_width_px_after: remainingWidthAfterPx,
       });
       if (brick.clearProgress >= 1) {
         this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
           completion_mode: mode,
           clicks: brick.clicks,
+          progress_before: progressBefore,
+          progress_after: progressAfter,
+          remaining_width_px_before: remainingWidthBeforePx,
+          remaining_width_px_after: remainingWidthAfterPx,
           x: brick.x,
           y: brick.y,
         });
@@ -1435,6 +1447,15 @@ export class GameState {
     }
     const params = this.config.bricks.completionParams || {};
     const targetHoldMs = Math.max(50, Number(brick.targetHoldMs ?? params.target_hold_ms ?? 700));
+    const minHoldMsForProgress = Math.max(
+      0,
+      Number(
+        params.min_hold_ms_for_progress ??
+        params.min_hold_ms ??
+        params.hold_floor_ms ??
+        0,
+      ),
+    );
     const overshootToleranceMs = Math.max(0, Number(params.overshoot_tolerance_ms ?? 0));
     const progressPerPerfect = Math.max(
       0.01,
@@ -1446,12 +1467,17 @@ export class GameState {
     const widthScalingExponent = Math.max(0, Number(params.width_scaling_exponent ?? 1));
     const widthFactorRaw = widthScalingEnabled ? (brick.width / widthReferencePx) : 1;
     const widthFactor = Math.max(0.2, Math.pow(Math.max(0.01, widthFactorRaw), widthScalingExponent));
+    const belowMinHoldThreshold = holdMs < minHoldMsForProgress;
     const overshoot = holdMs > targetHoldMs + overshootToleranceMs;
-    const ratio = overshoot ? 0 : Math.max(0, Math.min(1, holdMs / targetHoldMs));
+    const ratio = (overshoot || belowMinHoldThreshold) ? 0 : Math.max(0, Math.min(1, holdMs / targetHoldMs));
     const gainedUnscaled = Math.pow(ratio, progressCurve) * progressPerPerfect;
     const gained = gainedUnscaled / widthFactor;
+    const progressBefore = Math.max(0, Math.min(1, Number(brick.clearProgress ?? 0)));
     brick.holds += 1;
-    brick.clearProgress = Math.max(0, Math.min(1, (brick.clearProgress ?? 0) + gained));
+    brick.clearProgress = Math.max(0, Math.min(1, progressBefore + gained));
+    const progressAfter = Math.max(0, Math.min(1, Number(brick.clearProgress ?? 0)));
+    const remainingWidthBeforePx = Math.max(0, (1 - progressBefore) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
+    const remainingWidthAfterPx = Math.max(0, (1 - progressAfter) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
     this._log('brick_hold', {
       brick_id: brick.id,
       conveyor_id: brick.conveyorId,
@@ -1460,11 +1486,17 @@ export class GameState {
       valid: true,
       hold_ms: holdMs,
       target_hold_ms: targetHoldMs,
+      min_hold_ms_for_progress: minHoldMsForProgress,
+      below_min_hold_threshold: belowMinHoldThreshold,
       overshoot,
       width_factor: widthFactor,
       width_reference_px: widthReferencePx,
       progress_gained: gained,
-      progress_total: brick.clearProgress,
+      progress_total: progressAfter,
+      progress_before: progressBefore,
+      progress_after: progressAfter,
+      remaining_width_px_before: remainingWidthBeforePx,
+      remaining_width_px_after: remainingWidthAfterPx,
       holds: brick.holds
     });
 
@@ -1474,7 +1506,11 @@ export class GameState {
       this._finalizeBrick(brick, BRICK_STATUS.CLEARED, {
         completion_mode: mode,
         holds: brick.holds,
-        progress: brick.clearProgress,
+        progress: progressAfter,
+        progress_before: progressBefore,
+        progress_after: progressAfter,
+        remaining_width_px_before: remainingWidthBeforePx,
+        remaining_width_px_after: remainingWidthAfterPx,
         hold_ms: holdMs,
         x: brick.x,
         y: brick.y

@@ -86,6 +86,29 @@ describe("DrtController autoresponder integration", () => {
     expect(data.stats.hits).toBe(0);
   });
 
+  it("ignores repeated held-key keydown events until keyup", () => {
+    configureAutoResponder({ enabled: false } as any);
+
+    const controller = new DrtController({
+      enabled: true,
+      key: "space",
+      responseWindowMs: 1000,
+      displayDurationMs: 120,
+      nextIsiMs: () => 1,
+    }, {}, { now: () => nowMs });
+    controller.start(0);
+    vi.advanceTimersByTime(25);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+
+    const data = controller.stop();
+    const responseEvents = data.events.filter((event) => event.type === "drt_response");
+    expect(data.stats.hits).toBe(1);
+    expect(data.stats.falseAlarms).toBe(0);
+    expect(responseEvents).toHaveLength(1);
+  });
+
   it("generates DRT module data in data-only auto mode without wall-clock run time", () => {
     configureAutoResponder({
       enabled: true,

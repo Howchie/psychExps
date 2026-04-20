@@ -2736,10 +2736,10 @@ export class ConveyorRenderer {
   }
 
   _setupHUD() {
-    if (!this.config.display.ui?.showHUD) {
+    const uiCfg = this.config?.display?.ui ?? this.config?.ui ?? {};
+    if (uiCfg.showHUD === false) {
       return;
     }
-    const uiCfg = this.config.display.ui || {};
     const hudFontFamily = String(uiCfg.hudFontFamily || uiCfg.hudFont || 'Inter, Arial, sans-serif');
     const hudFontSize = Number(uiCfg.hudFontSize ?? 16);
     const hudColor = toPixiColor(uiCfg.hudColor ?? '#f5f6fa');
@@ -3801,7 +3801,7 @@ export class ConveyorRenderer {
     if (!text) {
       return;
     }
-    const uiCfg = this.config?.display?.ui || {};
+    const uiCfg = this.config?.display?.ui ?? this.config?.ui ?? {};
     const clearCfg = this._resolveClearAnimationConfig();
     const useCoinsLabel = clearCfg.enable && clearCfg.coin.enable;
     const hudUiConfig = useCoinsLabel

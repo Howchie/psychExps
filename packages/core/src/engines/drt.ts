@@ -739,10 +739,27 @@ export class DrtController {
   private activePresentation: ActivePresentation | null = null;
   private autoResponseTimer: ReturnType<typeof setTimeout> | null = null;
   private virtualNowMs: number | null = null;
+  private readonly pressedResponseKeys = new Set<string>();
 
   private readonly onKeyDownBound = (event: KeyboardEvent) => {
     if (!this.started || !this.enabled) return;
-    this.handleKey(event.key);
+    const normalizedEventKey = normalizeDrtKey(event.key);
+    const normalizedResponseKey = normalizeDrtKey(this.config.key);
+    if (normalizedEventKey === normalizedResponseKey) {
+      if (this.pressedResponseKeys.has(normalizedEventKey)) return;
+      this.pressedResponseKeys.add(normalizedEventKey);
+    }
+    this.handleKeyInternal(event.key, { fromKeyboardListener: true });
+  };
+
+  private readonly onKeyUpBound = (event: KeyboardEvent) => {
+    const normalizedEventKey = normalizeDrtKey(event.key);
+    if (!normalizedEventKey) return;
+    this.pressedResponseKeys.delete(normalizedEventKey);
+  };
+
+  private readonly onWindowBlurBound = () => {
+    this.pressedResponseKeys.clear();
   };
 
   constructor(
@@ -781,6 +798,8 @@ export class DrtController {
     this.engine.start(Math.max(0, Number(startOffsetMs) || 0));
     if (typeof window !== "undefined") {
       window.addEventListener("keydown", this.onKeyDownBound, { capture: true });
+      window.addEventListener("keyup", this.onKeyUpBound, { capture: true });
+      window.addEventListener("blur", this.onWindowBlurBound);
     }
     this.scheduleNextFrame();
   }
@@ -794,7 +813,10 @@ export class DrtController {
     this.presenter.dispose();
     if (typeof window !== "undefined") {
       window.removeEventListener("keydown", this.onKeyDownBound, { capture: true });
+      window.removeEventListener("keyup", this.onKeyUpBound, { capture: true });
+      window.removeEventListener("blur", this.onWindowBlurBound);
     }
+    this.pressedResponseKeys.clear();
     if (this.rafId != null && typeof cancelAnimationFrame === "function") {
       cancelAnimationFrame(this.rafId);
     }
@@ -843,7 +865,20 @@ export class DrtController {
   }
 
   handleKey(eventKey: unknown): boolean {
+    return this.handleKeyInternal(eventKey, { fromKeyboardListener: false });
+  }
+
+  private handleKeyInternal(eventKey: unknown, options: { fromKeyboardListener: boolean }): boolean {
     if (!this.started || !this.enabled) return false;
+    const normalizedEventKey = normalizeDrtKey(eventKey);
+    const normalizedResponseKey = normalizeDrtKey(this.config.key);
+    if (
+      !options.fromKeyboardListener &&
+      normalizedEventKey === normalizedResponseKey &&
+      this.pressedResponseKeys.has(normalizedEventKey)
+    ) {
+      return false;
+    }
     const handled = this.engine.handleKey(eventKey, this.elapsedNowMs(), {
       onStimEnd: (stimulus) => this.handleStimEnd(stimulus),
     });

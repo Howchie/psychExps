@@ -188,6 +188,67 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     resolvedDrtConfig.scope === 'trial' &&
     (trialCfg.stopDrtOnBrickQuotaMet === true || trialCfg.endDrtOnBrickQuotaMet === true);
 
+  // Fast headless path: skip renderer and run virtual-time loop.
+  if (autoEnabled && autoProfile?.jsPsychSimulationMode === 'data-only') {
+    injectedDrtRuntime?.attachBindings?.({
+      displayElement: null,
+      getElapsedMs: () => gameState.elapsed,
+      onEvent: (event) => { event.time = gameState.elapsed; logEvent(event); },
+      onStimStart: () => {},
+      onStimEnd: () => {},
+    });
+    const DATA_ONLY_STEP_MS = 16;
+    let nextAutoActionAt = Math.max(40, sampleAutoInteractionDelayMs() ?? 900);
+    let pendingEnd: { reason: string; dueAtMs: number } | null = null;
+    while (!pendingEnd || gameState.elapsed < pendingEnd.dueAtMs) {
+      gameState.step(DATA_ONLY_STEP_MS);
+      if (gameState.elapsed >= nextAutoActionAt) {
+        const activeBricks = gameState.activeBricks;
+        if (activeBricks.length > 0) {
+          const focusState = gameState.getFocusState();
+          const focusId = focusState.enabled ? focusState.activeBrickId : null;
+          const candidate = (focusId ? activeBricks.find((b) => b.id === focusId) : null)
+            ?? activeBricks[Math.floor(gameState.rng.nextFloat() * activeBricks.length)]
+            ?? activeBricks[0];
+          const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
+          gameState.handleBrickHold(String(candidate.id), holdDurationMs, gameState.elapsed, { x: 0, y: 0 });
+        }
+        nextAutoActionAt = gameState.elapsed + Math.max(40, sampleAutoInteractionDelayMs() ?? 900);
+      }
+      if (!pendingEnd && enforceBrickQuota) {
+        const completed = gameState.stats.cleared + gameState.stats.dropped;
+        if (completed >= brickQuota && gameState.bricks.size === 0) {
+          pendingEnd = { reason: 'brick_quota_met', dueAtMs: gameState.elapsed + brickQuotaEndDelayMs };
+        }
+      }
+      if (!pendingEnd && maxDuration !== null && gameState.elapsed >= maxDuration) {
+        pendingEnd = { reason: 'time_limit', dueAtMs: gameState.elapsed };
+      }
+      // Safety valve: prevent infinite loop if maxDuration is null and quota never met
+      if (!pendingEnd && gameState.elapsed > 600_000) {
+        pendingEnd = { reason: 'safety_limit', dueAtMs: gameState.elapsed };
+      }
+    }
+    injectedDrtRuntime?.detachBindings?.();
+    const drtData = drtController
+      ? (injectedDrtRuntime?.stopOnCleanup === false ? drtController.exportData() : drtController.stop())
+      : { enabled: false, stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 }, events: [] };
+    return {
+      block_label: trial.blockLabel,
+      block_index: trial.blockIndex,
+      trial_index: trial.trialIndex,
+      trial_duration_ms: gameState.elapsed,
+      end_reason: pendingEnd?.reason ?? 'time_limit',
+      runtime_conveyor_lengths: runtimeConveyorLengths,
+      difficulty_estimate: difficultyEstimate,
+      resolved_display_preset_id: resolvedDisplayPresetId,
+      config_snapshot: resolvedCfg,
+      game: gameState.exportData(),
+      drt: drtData,
+      timeline_events: timelineEvents,
+    };
+  }
+
   const renderer = new ConveyorRenderer(resolvedCfg, {
     onBrickClick: (brickId: string, x: number, y: number) => {
       gameState.handleBrickInteraction(brickId, gameState.elapsed, { x, y });
@@ -493,7 +554,11 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         if (gameState.elapsed >= nextAutoActionAt) {
           const activeBricks = gameState.activeBricks;
           if (activeBricks.length > 0) {
-            const candidate = activeBricks[Math.floor(gameState.rng.nextFloat() * activeBricks.length)] ?? activeBricks[0];
+            const focusState = gameState.getFocusState();
+            const focusId = focusState.enabled ? focusState.activeBrickId : null;
+            const candidate = (focusId ? activeBricks.find((b) => b.id === focusId) : null)
+              ?? activeBricks[Math.floor(gameState.rng.nextFloat() * activeBricks.length)]
+              ?? activeBricks[0];
             const holdDurationMs = sampleAutoHoldDurationMs() ?? 500;
             const point = candidate?.sprite ?? { x: 0, y: 0 };
             gameState.handleBrickHold(String(candidate.id), holdDurationMs, gameState.elapsed, {
@@ -523,7 +588,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
         points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
       };
-      const hudUiCfg = (resolvedCfg?.display?.ui || {}) as Record<string, unknown>;
+      const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
       const hudShowTimer = hudUiCfg.showTimer !== false;
       const hudShowDrt = drtEnabled && hudUiCfg.showDRT !== false;
       const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));

@@ -27,6 +27,8 @@ import {
   resolveBlockScreenSlotValue,
   maybeExportStimulusRows,
   createTaskAdapter,
+  isAutoResponderEnabled,
+  getAutoResponderProfile,
   type DrtEvent,
   type ScopedDrtConfig,
   type TaskAdapterContext,
@@ -493,6 +495,76 @@ function buildTrackingStimulusRows(parsed: ParsedTrackingConfig): Array<Record<s
 }
 
 async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrialRuntimeResult> {
+  const autoEnabled = isAutoResponderEnabled();
+  const autoProfile = getAutoResponderProfile();
+
+  // Fast headless path: skip renderer and run virtual-time loop.
+  if (autoEnabled && autoProfile?.jsPsychSimulationMode === "data-only") {
+    const DATA_ONLY_STEP_MS = 16;
+    const rawSamples: TrackingRawSample[] = [];
+    const binner = new TrackingBinSummarizer({ binMs: args.trialTemplate.binMs, includeEmptyBins: true });
+    const motion = new TrackingMotionController({
+      config: args.trialTemplate.motion,
+      rng: { next: args.rng },
+      bounds: {
+        widthPx: args.display.aperturePx,
+        heightPx: args.display.aperturePx,
+        marginPx: Math.max(1, args.trialTemplate.target.sizePx / 2),
+      },
+    });
+    let sampleCount = 0;
+    let insideCount = 0;
+    let outsideCount = 0;
+    let distanceSampleCount = 0;
+    let distanceSum = 0;
+    let elapsed = 0;
+    let lastSampleElapsed = -Infinity;
+    while (elapsed < args.trialTemplate.durationMs) {
+      elapsed += DATA_ONLY_STEP_MS;
+      const state = motion.step(DATA_ONLY_STEP_MS);
+      const target = toTargetGeometry(args.trialTemplate.target.shape, state.x, state.y, args.trialTemplate.target.sizePx);
+      // Auto cursor tracks the target exactly.
+      const pointer = { x: state.x, y: state.y };
+      const insideAndDistance = computeSampleDistance(pointer, target);
+      if (elapsed - lastSampleElapsed >= args.trialTemplate.sampleIntervalMs) {
+        sampleCount += 1;
+        if (insideAndDistance.inside) insideCount += 1; else outsideCount += 1;
+        if (Number.isFinite(insideAndDistance.boundaryDistancePx)) {
+          distanceSampleCount += 1;
+          distanceSum += Number(insideAndDistance.boundaryDistancePx);
+        }
+        const timeMs = Math.max(0, Math.round(elapsed));
+        binner.add({
+          timeMs,
+          inside: insideAndDistance.inside,
+          boundaryDistancePx: Number.isFinite(insideAndDistance.boundaryDistancePx) ? Number(insideAndDistance.boundaryDistancePx) : null,
+        });
+        if (args.trialTemplate.storeRawSamples) {
+          rawSamples.push({
+            blockIndex: args.blockIndex,
+            trialIndex: args.trialIndex,
+            timeMs,
+            cursorX: state.x,
+            cursorY: state.y,
+            targetX: state.x,
+            targetY: state.y,
+            inside: insideAndDistance.inside,
+            boundaryDistancePx: Number.isFinite(insideAndDistance.boundaryDistancePx) ? Number(insideAndDistance.boundaryDistancePx) : null,
+          });
+        }
+        lastSampleElapsed = elapsed;
+      }
+    }
+    const elapsedMs = args.trialTemplate.durationMs;
+    const bins = binner.export(elapsedMs).map((bin) => ({
+      blockIndex: args.blockIndex,
+      blockLabel: args.blockLabel,
+      trialIndex: args.trialIndex,
+      ...bin,
+    }));
+    return { kind: "pursuit", elapsedMs, sampleCount, insideCount, outsideCount, distanceSampleCount, meanBoundaryDistancePx: distanceSampleCount > 0 ? distanceSum / distanceSampleCount : null, bins, rawSamples };
+  }
+
   args.stageHost.innerHTML = "";
 
   const frame = createDisplayFrame(args.stageHost, args.display);
@@ -539,6 +611,10 @@ async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrial
       previousMs = now;
 
       const state = motion.step(dtMs);
+      if (autoEnabled) {
+        renderer.pointer.x = state.x;
+        renderer.pointer.y = state.y;
+      }
       const target = toTargetGeometry(args.trialTemplate.target.shape, state.x, state.y, args.trialTemplate.target.sizePx);
       const insideAndDistance = computeSampleDistance(renderer.pointer, target);
       const inside = insideAndDistance.inside;
@@ -619,6 +695,44 @@ async function runPursuitTrial(args: TrackingRunTrialArgs): Promise<PursuitTrial
 }
 
 async function runMotTrial(args: TrackingRunTrialArgs): Promise<MotTrialRuntimeResult> {
+  const autoEnabled = isAutoResponderEnabled();
+  const autoProfile = getAutoResponderProfile();
+
+  // Fast headless path: skip renderer and run virtual-time loop.
+  if (autoEnabled && autoProfile?.jsPsychSimulationMode === "data-only") {
+    const DATA_ONLY_STEP_MS = 16;
+    const mot = args.trialTemplate.mot;
+    const objectCount = Math.max(2, Math.round(mot.objectCount));
+    const targetCount = Math.max(1, Math.min(objectCount - 1, Math.round(mot.targetCount)));
+    const radiusPx = Math.max(3, mot.objectRadiusPx);
+    const initialPoints = sampleInitialPoints({
+      widthPx: args.display.aperturePx, heightPx: args.display.aperturePx,
+      radiusPx, count: objectCount, rng: args.rng,
+    });
+    const targetIndices = sampleUniqueIndices(objectCount, targetCount, args.rng).sort((a, b) => a - b);
+    const targetSet = new Set<number>(targetIndices);
+    const controllers = initialPoints.map((point) => new TrackingMotionController({
+      config: args.trialTemplate.motion, rng: { next: args.rng },
+      bounds: { widthPx: args.display.aperturePx, heightPx: args.display.aperturePx, marginPx: radiusPx },
+      initial: { x: point.x, y: point.y },
+    }));
+    const cueDurationMs = Math.max(0, mot.cueDurationMs);
+    const trackingDurationMs = Math.max(250, args.trialTemplate.durationMs);
+    let elapsed = 0;
+    while (elapsed < cueDurationMs + trackingDurationMs) {
+      elapsed += DATA_ONLY_STEP_MS;
+      for (const controller of controllers) controller.step(DATA_ONLY_STEP_MS);
+    }
+    // Auto response: select all target indices (perfect score)
+    const selectedIndices = targetIndices.slice();
+    const hits = targetCount;
+    const misses = 0;
+    const falseAlarms = 0;
+    const correctRejections = objectCount - targetCount;
+    const accuracy = objectCount > 0 ? (hits + correctRejections) / objectCount : 0;
+    return { kind: "mot", elapsedMs: Math.round(elapsed), hits, misses, falseAlarms, correctRejections, accuracy, objectCount, targetCount, targetIndices, selectedIndices };
+  }
+
   args.stageHost.innerHTML = "";
 
   const frame = createDisplayFrame(args.stageHost, args.display);
@@ -706,9 +820,14 @@ async function runMotTrial(args: TrackingRunTrialArgs): Promise<MotTrialRuntimeR
         phase = "response";
         responseStartedAtMs = elapsedMs;
         renderer.setCursorStyle("crosshair");
+        if (autoEnabled) {
+          // Auto-select all target indices and immediately complete.
+          for (const idx of targetIndices) selected.add(idx);
+          responseComplete = true;
+        }
       }
 
-      if (phase === "response") {
+      if (phase === "response" && !autoEnabled) {
         const clicks = renderer.consumeClicks();
         for (const click of clicks) {
           const clickedIndex = findClickedDotIndex(click.x, click.y, controllers, radiusPx);

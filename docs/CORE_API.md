@@ -423,8 +423,9 @@ Cue-rule primitives support:
 Current shared policy for concurrent keyboard modules (primary task + DRT):
 1. Primary task keys remain task-owned and are handled in task runtime order.
 2. DRT uses controller-level capture listeners and only consumes configured DRT response key.
-3. If keys overlap by configuration, overlap is allowed and task adapters must explicitly prevent default/propagation where needed.
-4. Recommended practice is non-overlapping key maps per task/module pair.
+3. DRT ignores repeated `keydown` events for its response key until a `keyup` is observed.
+4. If keys overlap by configuration, overlap is allowed and task adapters must explicitly prevent default/propagation where needed.
+5. Recommended practice is non-overlapping key maps per task/module pair.
 
 ## 6. Staircase API
 
