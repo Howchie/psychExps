@@ -99,4 +99,33 @@ describe("resolveRtTaskConfig", () => {
     expect(merged.timing.stimulusOnsetMs).toBe(750);
     expect(merged.timing.fixationDurationMs).toBe(500);
   });
+
+  it("should force all RT timing fields via URL rt_fast_ms", () => {
+    window.history.replaceState({}, "", "?rt_fast_ms=10");
+    const resolved = resolveRtTaskConfig({
+      baseTiming,
+      override: {
+        timing: {
+          trialDurationMs: 4500,
+          fixationOnsetMs: 250,
+          fixationDurationMs: 500,
+          stimulusOnsetMs: 700,
+          stimulusDurationMs: 3800,
+          responseWindowStartMs: 700,
+          responseWindowEndMs: 4200,
+        },
+      },
+      defaultEnabled: false,
+      defaultResponseTerminatesTrial: false,
+    });
+
+    expect(resolved.timing.trialDurationMs).toBe(50);
+    expect(resolved.timing.fixationOnsetMs).toBe(0);
+    expect(resolved.timing.fixationDurationMs).toBe(10);
+    expect(resolved.timing.stimulusOnsetMs).toBe(20);
+    expect(resolved.timing.stimulusDurationMs).toBe(20);
+    expect(resolved.timing.responseWindowStartMs).toBe(20);
+    expect(resolved.timing.responseWindowEndMs).toBe(40);
+    window.history.replaceState({}, "", "/");
+  });
 });

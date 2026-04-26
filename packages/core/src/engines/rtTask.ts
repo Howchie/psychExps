@@ -86,6 +86,44 @@ const asObject = (value: unknown): Record<string, unknown> | null => {
 const hasOwn = (obj: Record<string, unknown> | null, key: string): boolean =>
   Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
 
+const RT_FAST_URL_KEYS = ["rt_fast_ms", "rtFastMs"] as const;
+
+function coercePositiveMs(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.max(1, Math.round(numeric));
+}
+
+function resolveRtFastModeMsFromUrl(): number | null {
+  if (typeof window === "undefined") return null;
+
+  const fromParams = (params: URLSearchParams): number | null => {
+    for (const key of RT_FAST_URL_KEYS) {
+      const raw = params.get(key);
+      if (raw == null || raw.trim().length === 0) continue;
+      const parsed = coercePositiveMs(raw);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  };
+
+  const fromLocation = fromParams(new URLSearchParams(window.location.search));
+  if (fromLocation != null) return fromLocation;
+
+  const jatosParamsRaw = (window as unknown as { jatos?: { urlQueryParameters?: unknown } }).jatos?.urlQueryParameters;
+  if (!jatosParamsRaw) return null;
+  if (jatosParamsRaw instanceof URLSearchParams) return fromParams(jatosParamsRaw);
+  if (typeof jatosParamsRaw === "object") {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(jatosParamsRaw as Record<string, unknown>)) {
+      if (value == null) continue;
+      params.set(key, String(value));
+    }
+    return fromParams(params);
+  }
+  return null;
+}
+
 function resolveRtTiming(
   raw: Record<string, unknown> | null,
   fallback: RtTiming,
@@ -109,9 +147,23 @@ function resolveRtTiming(
 export function resolveRtTaskConfig(options: ResolveRtTaskOptions): ResolvedRtTaskConfig {
   const { baseTiming, override, defaultEnabled = false, defaultResponseTerminatesTrial = false } = options;
   const raw = asObject(override);
+  const fastModeMs = resolveRtFastModeMsFromUrl();
+  const resolvedTiming = resolveRtTiming(asObject(raw?.timing), baseTiming);
+  const timing = fastModeMs == null
+    ? resolvedTiming
+    : {
+      // Use a compressed but valid schedule (non-zero response window).
+      trialDurationMs: fastModeMs * 5,
+      fixationOnsetMs: 0,
+      fixationDurationMs: fastModeMs,
+      stimulusOnsetMs: fastModeMs * 2,
+      stimulusDurationMs: fastModeMs * 2,
+      responseWindowStartMs: fastModeMs * 2,
+      responseWindowEndMs: fastModeMs * 4,
+    };
   return {
     enabled: hasOwn(raw, "enabled") ? raw!.enabled !== false : defaultEnabled,
-    timing: resolveRtTiming(asObject(raw?.timing), baseTiming),
+    timing,
     responseTerminatesTrial: hasOwn(raw, "responseTerminatesTrial")
       ? raw!.responseTerminatesTrial === true
       : defaultResponseTerminatesTrial,

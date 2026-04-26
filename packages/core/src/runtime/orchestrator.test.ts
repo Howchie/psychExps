@@ -354,6 +354,47 @@ describe('TaskOrchestrator', () => {
     );
   });
 
+  it('resolves nested variable expressions in block intro text', async () => {
+    mockContext.resolver.resolveInValue = vi.fn().mockImplementation((value: any, ctx?: any) => {
+      const locals = ctx?.locals ?? {};
+      if (value === '$var.blockIntro') {
+        return locals.blockIntro ?? value;
+      }
+      if (typeof value === 'string') {
+        return value.replace(/\$\{var\.pmOrder\.0\.descriptor\}/g, 'A fruit or vegetable.');
+      }
+      return value;
+    });
+    mockContext.taskConfig.instructions = {
+      blockIntroTemplate: '$var.blockIntro',
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Block A',
+        nLevel: 2,
+        trials: 1,
+        variables: {
+          blockIntro: "Press 's' for PM items in this category:\n${var.pmOrder.0.descriptor}",
+        },
+      },
+    ];
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi.fn().mockResolvedValue({});
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    expect(taskUiFlow.runBlockStartFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        introText: "Press 's' for PM items in this category:\nA fruit or vegetable.",
+      }),
+    );
+  });
+
   it('should resolve insertion pages with block-local vars at render time', async () => {
     mockContext.resolver.resolveInValue = vi.fn().mockImplementation((value: any, ctx?: any) => {
       const locals = ctx?.locals ?? {};
@@ -664,5 +705,78 @@ describe('TaskOrchestrator', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0][0].postBlockPages).toEqual([{ text: 'Retry page' }]);
     expect(calls[1][0].postBlockPages).toEqual([{ text: 'Regular end page' }]);
+  });
+
+  it('should skip block-level beforeBlockScreens on repeat attempts when configured', async () => {
+    mockContext.taskConfig.instructions = {
+      skipBeforeBlockScreensOnRepeat: true,
+      preBlockPages: ['Global pre'],
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Practice 1',
+        trials: 1,
+        beforeBlockScreens: ['Local pre'],
+        repeatUntil: {
+          enabled: true,
+          maxAttempts: 2,
+          minAccuracy: 1,
+          metrics: { correctField: 'responseCorrect' },
+        },
+      },
+    ];
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi
+      .fn()
+      .mockResolvedValueOnce({ responseCorrect: 0 })
+      .mockResolvedValueOnce({ responseCorrect: 0 });
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    const calls = (taskUiFlow.runBlockStartFlow as any).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][0].preBlockPages).toEqual([{ text: 'Global pre' }, { text: 'Local pre' }]);
+    expect(calls[1][0].preBlockPages).toEqual([{ text: 'Global pre' }]);
+  });
+
+  it('should keep beforeBlockScreens on repeats by default', async () => {
+    mockContext.taskConfig.instructions = {
+      preBlockPages: ['Global pre'],
+    };
+    mockContext.taskConfig.plan.blocks = [
+      {
+        label: 'Practice 1',
+        trials: 1,
+        beforeBlockScreens: ['Local pre'],
+        repeatUntil: {
+          enabled: true,
+          maxAttempts: 2,
+          minAccuracy: 1,
+          metrics: { correctField: 'responseCorrect' },
+        },
+      },
+    ];
+    const orchestrator = new TaskOrchestrator(mockContext);
+    const runTrial = vi
+      .fn()
+      .mockResolvedValueOnce({ responseCorrect: 0 })
+      .mockResolvedValueOnce({ responseCorrect: 0 });
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial,
+      buttonIdPrefix: 'test',
+    });
+
+    const calls = (taskUiFlow.runBlockStartFlow as any).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][0].preBlockPages).toEqual([{ text: 'Global pre' }, { text: 'Local pre' }]);
+    expect(calls[1][0].preBlockPages).toEqual([{ text: 'Global pre' }, { text: 'Local pre' }]);
   });
 });

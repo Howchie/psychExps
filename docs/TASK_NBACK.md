@@ -122,6 +122,7 @@ Configured under `instructions`.
 - `endPages`: Screens shown after all blocks are complete.
 - `showBlockLabel`: boolean (default `true`).
 - `preBlockBeforeBlockIntro`: boolean (default `false`).
+- `skipBeforeBlockScreensOnRepeat`: boolean (default `false`); skips block-level `beforeBlockScreens` on retry attempts.
 - `insertions`: Array of generic page insertions at specific lifecycle points.
 - `blockSummary`: Configuration for a computed performance summary screen (see example below).
 

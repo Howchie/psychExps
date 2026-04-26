@@ -131,7 +131,7 @@ Completion-mode note (`hold_to_clear`):
 - If that key is omitted, runtime falls back to `brick.speed`.
 
 Completion-mode note (`hold_duration`):
-- Optional `completionParams.min_hold_ms_for_progress` (aliases: `min_hold_ms`, `hold_floor_ms`) applies a low-end floor.
+- Optional `completionParams.hold_floor_ms` applies a low-end floor.
 - Holds shorter than this floor contribute zero progress, while overshoot still respects `completionParams.overshoot_tolerance_ms`.
 
 Interaction targeting note:

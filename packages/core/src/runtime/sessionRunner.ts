@@ -39,7 +39,7 @@ export interface TaskSessionRunnerHooks<TBlock = unknown, TTrial = unknown, TTri
 
 export interface TaskSessionRunnerArgs<TBlock, TTrial, TTrialResult> {
   blocks: TBlock[];
-  getTrials: (ctx: { block: TBlock; blockIndex: number }) => TTrial[] | Promise<TTrial[]>;
+  getTrials: (ctx: { block: TBlock; blockIndex: number; blockAttempt?: number }) => TTrial[] | Promise<TTrial[]>;
   runTrial: (
     ctx: {
       block: TBlock;
@@ -100,7 +100,7 @@ export async function runTaskSession<TBlock, TTrial, TTrialResult>(
         await hooks?.onBlockStart?.({ block, blockIndex, blockAttempt });
         await emitHookEvent(hooks, { type: "block_start", blockIndex, blockAttempt });
 
-        const trials = await args.getTrials({ block, blockIndex });
+        const trials = await args.getTrials({ block, blockIndex, blockAttempt });
         for (let trialIndex = 0; trialIndex < trials.length; trialIndex += 1) {
           const trial = trials[trialIndex];
           await hooks?.onTrialStart?.({ block, blockIndex, blockAttempt, trial, trialIndex });

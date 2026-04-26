@@ -177,9 +177,14 @@ function deepGet(source: unknown, path: string): unknown {
 
     if (end > start) {
       const segment = path.slice(start, end);
-      if (!isObject(cursor) || !Object.prototype.hasOwnProperty.call(cursor, segment)) {
-        return undefined;
+      if (Array.isArray(cursor)) {
+        const index = Number(segment);
+        if (!Number.isInteger(index) || index < 0 || index >= cursor.length) return undefined;
+        cursor = cursor[index];
+        start = end + 1;
+        continue;
       }
+      if (!isObject(cursor) || !Object.prototype.hasOwnProperty.call(cursor, segment)) return undefined;
       cursor = cursor[segment];
     }
     start = end + 1;
@@ -308,6 +313,19 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     if (typeof token !== "string") return token;
     const text = token.trim();
 
+    const resolveNestedStringResult = (resolved: unknown): unknown => {
+      if (typeof resolved !== "string") return resolved;
+      let current = resolved;
+      for (let i = 0; i < 5; i += 1) {
+        if (!(current.includes("${") || current.startsWith("$"))) break;
+        const next = resolveTokenInternal(current, context, stack);
+        if (typeof next !== "string") return next;
+        if (next === current || next === token) break;
+        current = next;
+      }
+      return current;
+    };
+
     const sampleMatch = text.match(SAMPLE_TOKEN_RE);
     if (sampleMatch) {
       const name = sampleMatch[1];
@@ -324,14 +342,14 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     if (varMatch) {
       const name = varMatch[1];
       const direct = resolveVarInternal(name, context, stack);
-      if (typeof direct !== "undefined") return direct;
+      if (typeof direct !== "undefined") return resolveNestedStringResult(direct);
       const dot = name.indexOf(".");
       if (dot > 0) {
         const base = name.slice(0, dot);
         const path = name.slice(dot + 1);
         const baseValue = resolveVarInternal(base, context, stack);
         const nested = deepGet(baseValue, path);
-        if (typeof nested !== "undefined") return nested;
+        if (typeof nested !== "undefined") return resolveNestedStringResult(nested);
       }
       return token;
     }
@@ -344,13 +362,13 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
       // Special case: if it's $var.foo, we already handled it above.
       if (namespace !== "var" && namespace !== "sample") {
         const resolved = resolveNamespace(namespace, path, context, stack);
-        if (typeof resolved !== "undefined") return resolved;
+        if (typeof resolved !== "undefined") return resolveNestedStringResult(resolved);
 
         // Fallback: maybe the namespace is actually a variable name?
         const baseValue = resolveVarInternal(namespace, context, stack);
         if (typeof baseValue !== "undefined") {
           const nested = deepGet(baseValue, path);
-          if (typeof nested !== "undefined") return nested;
+          if (typeof nested !== "undefined") return resolveNestedStringResult(nested);
         }
       }
     }

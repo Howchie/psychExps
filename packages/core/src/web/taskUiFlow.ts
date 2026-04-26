@@ -300,6 +300,7 @@ export interface RunTaskEndFlowArgs {
   completeTitle?: string;
   completeMessage?: string;
   doneButtonLabel?: string;
+  skipCompleteScreen?: boolean;
   continueButtonStyle?: ButtonStyleOverrides;
   autoFocusContinueButton?: boolean;
   cardWidth?: string;
@@ -380,6 +381,10 @@ export async function runTaskEndFlow(args: RunTaskEndFlowArgs): Promise<void> {
       cardFontFamily: args.cardFontFamily,
       renderHtml: args.renderHtml,
     });
+  }
+
+  if (args.skipCompleteScreen) {
+    return;
   }
 
   await waitForContinue(

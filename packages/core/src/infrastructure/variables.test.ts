@@ -53,4 +53,95 @@ describe("createVariableResolver interpolation", () => {
     expect(["animals", "colours"]).toContain(pm);
     expect(control).toBe(`${pm}_controls`);
   });
+
+  it("resolves indexed paths into array entries", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        pmOrder: {
+          value: [
+            { label: "animals", descriptor: "An animal." },
+            { label: "colour", descriptor: "A colour." },
+          ],
+        },
+      },
+    });
+    expect(resolver.resolveInValue("$var.pmOrder.0.label")).toBe("animals");
+    expect(resolver.resolveInValue("$var.pmOrder.1.descriptor")).toBe("A colour.");
+  });
+
+  it("interpolates indexed array paths inside template strings", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        pmOrder: {
+          value: [
+            { label: "animals", descriptor: "An animal." },
+            { label: "colour", descriptor: "A colour." },
+            { label: "fruit_veg", descriptor: "A fruit or vegetable." },
+          ],
+        },
+      },
+    });
+    expect(resolver.resolveInValue("${var.pmOrder.0.label}|${var.pmOrder.1.label}|${var.pmOrder.2.label}"))
+      .toBe("animals|colour|fruit_veg");
+  });
+
+  it("resolves nested indirection through between vars into indexed pmOrder descriptors", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        pmOrder: {
+          scope: "participant",
+          count: 4,
+          sampler: {
+            type: "list",
+            without_replacement: true,
+            values: [
+              { descriptor: "D1" },
+              { descriptor: "D2" },
+              { descriptor: "D3" },
+              { descriptor: "D4" },
+            ],
+          },
+        },
+        between: {
+          scope: "participant",
+          sampler: {
+            type: "list",
+            values: [
+              {
+                cell2Intro: "X:${var.pmOrder.1.descriptor}|${var.pmOrder.2.descriptor}|${var.pmOrder.3.descriptor}",
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const resolved = String(
+      resolver.resolveInValue("$var.blockIntro", {
+        blockIndex: 0,
+        locals: {
+          blockIntro: "$between.cell2Intro",
+        },
+      }),
+    );
+    expect(resolved.startsWith("X:")).toBe(true);
+    expect(resolved).not.toContain("${var.pmOrder.");
+  });
+
+  it("fully resolves embedded templates returned by namespace path tokens", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        pmOrder: {
+          value: [{ descriptor: "A colour." }],
+        },
+        between: {
+          value: {
+            cellIntro: "For this block:\n${var.pmOrder.0.descriptor}",
+          },
+        },
+      },
+    });
+
+    expect(resolver.resolveInValue("$between.cellIntro")).toBe("For this block:\nA colour.");
+  });
 });

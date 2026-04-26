@@ -22,7 +22,7 @@ import { maybeExportStimulusRows } from "./stimulusExport";
 
 export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   getBlocks: (taskConfig: JSONObject) => TBlock[];
-  getTrials: (ctx: { block: TBlock; blockIndex: number }) => TTrial[] | Promise<TTrial[]>;
+  getTrials: (ctx: { block: TBlock; blockIndex: number; blockAttempt?: number }) => TTrial[] | Promise<TTrial[]>;
   runTrial: (ctx: { 
     block: TBlock; 
     blockIndex: number; 
@@ -305,9 +305,17 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       return Array.isArray(trialsList) ? trialsList.length : 0;
     };
     const resolveBlockIntroText = (templateRaw: unknown, block: Record<string, unknown>, blockIndex: number): string | null => {
-      const resolvedTemplate = asString(
-        context.resolver.resolveInValue(templateRaw, resolveBlockContext(block, blockIndex)),
+      const resolverContext = resolveBlockContext(block, blockIndex);
+      let resolvedTemplate = asString(
+        context.resolver.resolveInValue(templateRaw, resolverContext),
       );
+      // Resolve one level of indirection where blockIntro is sampled from another
+      // variable that itself contains ${...} expressions.
+      for (let i = 0; i < 3 && resolvedTemplate?.includes("${"); i += 1) {
+        const next = asString(context.resolver.resolveInValue(resolvedTemplate, resolverContext));
+        if (!next || next === resolvedTemplate) break;
+        resolvedTemplate = next;
+      }
       if (!resolvedTemplate) {
         return asString(block.introText);
       }
@@ -323,7 +331,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
         return token;
       });
     };
-    const resolveDefaultBlockUi = (ctx: { block: unknown; blockIndex: number }): ResolvedBlockUi => {
+    const resolveDefaultBlockUi = (ctx: { block: unknown; blockIndex: number; blockAttempt?: number }): ResolvedBlockUi => {
       const block = toBlockObject(ctx.block);
       const preBlockGlobal = resolveScreens(
         instructions?.preBlockPages ?? args.instructionDefaults?.preBlockPages,
@@ -336,6 +344,9 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
         ctx.blockIndex,
       );
       const beforeBlockScreens = toInstructionScreenSpecs(block.beforeBlockScreens);
+      const skipBeforeBlockScreensOnRepeat = instructions?.skipBeforeBlockScreensOnRepeat === true;
+      const includeBeforeBlockScreens = !(skipBeforeBlockScreensOnRepeat && (ctx.blockAttempt ?? 0) > 0);
+      const effectiveBeforeBlockScreens = includeBeforeBlockScreens ? beforeBlockScreens : [];
       const afterBlockScreens = toInstructionScreenSpecs(block.afterBlockScreens);
       const repeatPostBlockPages = resolveScreens(
         block.repeatAfterBlockScreens ?? block.repeatPostBlockScreens,
@@ -352,7 +363,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           (typeof instructions?.showBlockIntro === "boolean"
             ? instructions.showBlockIntro
             : args.instructionDefaults?.showBlockIntro) ?? true,
-        preBlockPages: mergeScreens(preBlockGlobal, beforeBlockScreens),
+        preBlockPages: mergeScreens(preBlockGlobal, effectiveBeforeBlockScreens),
         postBlockPages: mergeScreens(postBlockGlobal, afterBlockScreens),
         repeatPostBlockPages,
         showBlockLabel:
@@ -441,7 +452,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       sessionResult = await runTaskSession<TBlock, TTrial, TTrialResult>({
       blocks: args.getBlocks(taskConfig),
       getTrials: async (ctx) => {
-        const key = String(ctx.blockIndex);
+        const key = `${ctx.blockIndex}:${ctx.blockAttempt ?? 0}`;
         if (trialsCache.has(key)) {
           const trials = trialsCache.get(key)!;
           trialsCache.delete(key);
@@ -556,7 +567,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           const trials = await args.getTrials(ctx);
           
           // Cache trials for the session runner.
-          const key = String(ctx.blockIndex);
+          const key = `${ctx.blockIndex}:${ctx.blockAttempt ?? 0}`;
           trialsCache.set(key, trials);
 
           await runBlockStartFlow({
@@ -694,6 +705,10 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       );
       const endBeforeInsertions = selectInsertionGroups("task_end_before");
       const endAfterInsertions = selectInsertionGroups("task_end_after");
+      const redirectCfg = context.coreConfig.completion?.redirect;
+      const skipCompleteScreen = Boolean(
+        redirectCfg?.enabled && (redirectCfg?.completeUrlTemplate || redirectCfg?.incompleteUrlTemplate)
+      );
       if (
         (endPages && Array.isArray(endPages) && endPages.length > 0) ||
         endBeforeInsertions.length > 0 ||
@@ -719,6 +734,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           completeTitle: args.completeTitle,
           completeMessage: args.completeMessage,
           doneButtonLabel: args.doneButtonLabel,
+          skipCompleteScreen,
         });
       }
     } catch (error) {

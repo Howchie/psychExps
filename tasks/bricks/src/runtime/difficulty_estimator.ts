@@ -14,6 +14,11 @@ const holdDurationDemand = (brick, config) => {
   const display = config?.display || {};
   const width = Math.max(1, finiteOr(brick?.width, finiteOr(display.brickWidth, 160)));
   const targetHoldMs = Math.max(50, finiteOr(brick?.targetHoldMs, finiteOr(params.target_hold_ms, 700)));
+  const holdFloorMs = Math.max(0, finiteOr(params.hold_floor_ms, 0));
+  const holdCeilingMs = params.hold_ceiling_ms !== undefined
+    ? Number(params.hold_ceiling_ms)
+    : (targetHoldMs + Math.max(0, finiteOr(params.overshoot_tolerance_ms, 0)));
+
   const progressCurve = Math.max(0.1, finiteOr(params.progress_curve, 1));
   const widthScalingEnabled = params.width_scaling !== false;
   const widthReferencePx = Math.max(1, finiteOr(params.width_reference_px, finiteOr(display.brickWidth, 160)));
@@ -28,6 +33,7 @@ const holdDurationDemand = (brick, config) => {
   const perfectGain = progressPerPerfectBase / widthFactor;
 
   // user-level assumption: expected relative hold quality in [0, 1]
+  // In the symmetric model, this is the expected ratio (distance from perfection).
   const holdQualityMean = clamp01(
     finiteOr(config?.difficultyModel?.holdQualityMean, 0.5)
   );
@@ -39,6 +45,8 @@ const holdDurationDemand = (brick, config) => {
     mode: 'hold_duration',
     width_px: width,
     target_hold_ms: targetHoldMs,
+    hold_floor_ms: holdFloorMs,
+    hold_ceiling_ms: holdCeilingMs,
     hold_quality_mean: holdQualityMean,
     width_factor: widthFactor,
     progress_per_perfect_effective: perfectGain,

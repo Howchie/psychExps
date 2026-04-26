@@ -1447,16 +1447,11 @@ export class GameState {
     }
     const params = this.config.bricks.completionParams || {};
     const targetHoldMs = Math.max(50, Number(brick.targetHoldMs ?? params.target_hold_ms ?? 700));
-    const minHoldMsForProgress = Math.max(
-      0,
-      Number(
-        params.min_hold_ms_for_progress ??
-        params.min_hold_ms ??
-        params.hold_floor_ms ??
-        0,
-      ),
-    );
-    const overshootToleranceMs = Math.max(0, Number(params.overshoot_tolerance_ms ?? 0));
+    const holdFloorMs = Math.max(0, Number(params.hold_floor_ms ?? 0));
+    const holdCeilingMs = params.hold_ceiling_ms !== undefined
+      ? Number(params.hold_ceiling_ms)
+      : (targetHoldMs + Math.max(0, Number(params.overshoot_tolerance_ms ?? 0)));
+
     const progressPerPerfect = Math.max(
       0.01,
       Math.min(1, Number(brick.progressPerPerfect ?? params.progress_per_perfect ?? 0.35))
@@ -1467,9 +1462,22 @@ export class GameState {
     const widthScalingExponent = Math.max(0, Number(params.width_scaling_exponent ?? 1));
     const widthFactorRaw = widthScalingEnabled ? (brick.width / widthReferencePx) : 1;
     const widthFactor = Math.max(0.2, Math.pow(Math.max(0.01, widthFactorRaw), widthScalingExponent));
-    const belowMinHoldThreshold = holdMs < minHoldMsForProgress;
-    const overshoot = holdMs > targetHoldMs + overshootToleranceMs;
-    const ratio = (overshoot || belowMinHoldThreshold) ? 0 : Math.max(0, Math.min(1, holdMs / targetHoldMs));
+
+    let ratio = 0;
+    if (holdMs >= holdFloorMs && holdMs <= holdCeilingMs) {
+      if (holdMs < targetHoldMs) {
+        // Under-side: scale 0.0 at floor to 1.0 at target
+        const range = targetHoldMs - holdFloorMs;
+        const dist = (targetHoldMs - holdMs) / Math.max(1, range);
+        ratio = 1 - Math.max(0, Math.min(1, dist));
+      } else {
+        // Over-side: scale 1.0 at target to 0.0 at ceiling
+        const range = holdCeilingMs - targetHoldMs;
+        const dist = (holdMs - targetHoldMs) / Math.max(1, range);
+        ratio = 1 - Math.max(0, Math.min(1, dist));
+      }
+    }
+
     const gainedUnscaled = Math.pow(ratio, progressCurve) * progressPerPerfect;
     const gained = gainedUnscaled / widthFactor;
     const progressBefore = Math.max(0, Math.min(1, Number(brick.clearProgress ?? 0)));
@@ -1486,9 +1494,8 @@ export class GameState {
       valid: true,
       hold_ms: holdMs,
       target_hold_ms: targetHoldMs,
-      min_hold_ms_for_progress: minHoldMsForProgress,
-      below_min_hold_threshold: belowMinHoldThreshold,
-      overshoot,
+      hold_floor_ms: holdFloorMs,
+      hold_ceiling_ms: holdCeilingMs,
       width_factor: widthFactor,
       width_reference_px: widthReferencePx,
       progress_gained: gained,

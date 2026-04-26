@@ -482,6 +482,7 @@ Behavior:
 - block-level defaults: `instructions.preBlockPages`, `instructions.postBlockPages`
 - block intro template: `instructions.blockIntroTemplate`
 - block flags: `instructions.showBlockLabel`, `instructions.preBlockBeforeBlockIntro`
+- repeat behavior flag: `instructions.skipBeforeBlockScreensOnRepeat` (skip block-level `beforeBlockScreens` on retry attempts)
 - block page merging: global pre/post pages are merged with `block.beforeBlockScreens` / `block.afterBlockScreens`
 
 For adapters that parse/normalize instructions before orchestration, use `args.instructionDefaults` to provide the same surfaces once (instead of manually wiring `introPages`, `endPages`, and `getBlockUi` per task).

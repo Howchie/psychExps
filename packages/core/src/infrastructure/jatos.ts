@@ -1,3 +1,4 @@
+import { isAutoResponderEnabled } from "../runtime/autoresponder";
 import type { JSONObject } from "../api/types";
 
 declare global {
@@ -6,6 +7,7 @@ declare global {
       submitResultData: (payload: string | JSONObject) => Promise<void>;
       appendResultData?: (payload: string | JSONObject) => Promise<void>;
       endStudy: () => Promise<void>;
+      endStudyAndRedirect: (url: string) => Promise<void>;
       onLoad?: (cb: () => void) => void;
       componentJsonInput?: JSONObject | string;
       studySessionData?: JSONObject | string;
@@ -112,5 +114,30 @@ export async function endJatosStudy(): Promise<void> {
     await api.endStudy();
   } catch (error) {
     console.error("JATOS endStudy failed", error);
+  }
+}
+
+export async function endJatosStudyAndRedirect(url: string): Promise<void> {
+  const api = getJatosApi();
+  if (isAutoResponderEnabled()) {
+    console.log(`[AutoResponder] JATOS Redirecting to: ${url}`);
+  }
+  if (!api) return;
+  try {
+    if (typeof api.endStudyAndRedirect === "function") {
+      if (!isAutoResponderEnabled()) {
+        await api.endStudyAndRedirect(url);
+      }
+    } else {
+      await api.endStudy();
+      if (!isAutoResponderEnabled()) {
+        window.location.assign(url);
+      }
+    }
+  } catch (error) {
+    console.error("JATOS endStudyAndRedirect failed", error);
+    if (!isAutoResponderEnabled()) {
+      window.location.assign(url);
+    }
   }
 }

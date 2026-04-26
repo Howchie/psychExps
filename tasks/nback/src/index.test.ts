@@ -2,8 +2,9 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { __testing__, nbackAdapter } from './index';
-import { createResponseSemantics, createVariableResolver, SeededRandom, StimulusInjectorModule, generateProspectiveMemoryPositions } from '@experiments/core';
+import { createResponseSemantics, createVariableResolver, SeededRandom, StimulusInjectorModule, TaskModuleRunner, generateProspectiveMemoryPositions } from '@experiments/core';
 
 // PlannedTrial is a private interface — infer its shape from the inject function signature.
 type NbackTrial = Parameters<(typeof __testing__)['injectNBackTargets']>[1][number];
@@ -149,6 +150,36 @@ describe('NbackTaskAdapter', () => {
         responseRtMs: 450,
       }),
     );
+  });
+
+  it('resolves annikaHons PM category descriptors before block intros render', () => {
+    const config = JSON.parse(
+      readFileSync('../../configs/nback/annikaHons.json', 'utf8'),
+    );
+    const resolver = createVariableResolver({
+      variables: config.variables,
+      seedParts: ['participant', 'session', 'annikaHons', 'high_level_resolution'],
+    });
+    const moduleRunner = new TaskModuleRunner([new StimulusInjectorModule()]);
+    const parsed = __testing__.parseNbackConfig(
+      config,
+      {
+        participant: { participantId: 'participant', sessionId: 'session' },
+        taskId: 'nback',
+        variantId: 'annikaHons',
+      } as any,
+      resolver,
+      {
+        Control: Array.from({ length: 120 }, (_, i) => `control_${i}`),
+        practice: Array.from({ length: 30 }, (_, i) => `practice_${i}`),
+      },
+      moduleRunner,
+      config,
+    );
+
+    const blockIntroTexts = parsed.mainBlocks.map((block: any) => String(block.variables.blockIntro ?? ''));
+    expect(blockIntroTexts.some((text) => text.includes('fruit or vegetable') || text.includes('colour') || text.includes('animal') || text.includes('wear'))).toBe(true);
+    expect(blockIntroTexts.join('\n')).not.toContain('${var.pmOrder');
   });
 
   it('Monte Carlo: eligible positions and PM placement reliability post-fix', () => {

@@ -17,7 +17,7 @@ import {
   validateTaskConfigIsolation,
   ensureEegBridgeReady,
 } from "@experiments/core";
-import type { TaskAdapter } from "@experiments/core";
+import type { CoreConfig, JSONObject, TaskAdapter } from "@experiments/core";
 
 import { sftAdapter } from "@experiments/task-sft";
 import { nbackAdapter } from "@experiments/task-nback";
@@ -120,7 +120,15 @@ async function bootstrap(): Promise<void> {
     resolvedVariantConfig,
     selection.overrides ?? undefined,
   );
-
+  const mergedCoreConfig = configManager.merge(
+    coreDefaultConfig as unknown as JSONObject,
+    {},
+    {
+      ...(mergedTaskConfig.completion && typeof mergedTaskConfig.completion === "object" && !Array.isArray(mergedTaskConfig.completion)
+        ? { completion: mergedTaskConfig.completion as unknown as JSONObject }
+        : {}),
+    },
+  ) as unknown as CoreConfig;
   const query = new URLSearchParams(window.location.search);
   const exportStimuliFlag = query.get("exportStimuli") ?? query.get("export_stimuli");
   const exportStimuliOnly = exportStimuliFlag === "1" || exportStimuliFlag === "true";
@@ -133,7 +141,7 @@ async function bootstrap(): Promise<void> {
   }
   configureAutoResponder(
     resolveAutoResponderProfile({
-      coreConfig: coreDefaultConfig,
+      coreConfig: mergedCoreConfig,
       taskConfig: mergedTaskConfig,
       selection,
     }),
@@ -144,11 +152,11 @@ async function bootstrap(): Promise<void> {
     mergedTaskConfig,
     adapters.map((entry) => entry.manifest.taskId),
   );
-  await ensureEegBridgeReady(coreDefaultConfig, mergedTaskConfig);
+  await ensureEegBridgeReady(mergedCoreConfig, mergedTaskConfig);
 
   app.innerHTML = "";
   app.classList.add("app-experiment");
-  const pageBackground = resolvePageBackground({ coreConfig: coreDefaultConfig, taskConfig: mergedTaskConfig });
+  const pageBackground = resolvePageBackground({ coreConfig: mergedCoreConfig, taskConfig: mergedTaskConfig });
   app.style.background = pageBackground ?? "";
 
   const launchContainer = document.createElement("div");
@@ -163,7 +171,7 @@ async function bootstrap(): Promise<void> {
     await lifecycle.run({
       container: launchContainer,
       selection,
-      coreConfig: coreDefaultConfig,
+      coreConfig: mergedCoreConfig,
       taskConfig: mergedTaskConfig,
     });
   } finally {

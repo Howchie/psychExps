@@ -1,5 +1,5 @@
 import { downloadCsv, downloadJson, inferCsvFromPayload } from "../infrastructure/data";
-import { endJatosStudy, submitToJatos } from "../infrastructure/jatos";
+import { endJatosStudy, endJatosStudyAndRedirect, submitToJatos } from "../infrastructure/jatos";
 import { resolveTemplate } from "../infrastructure/redirect";
 import type { CoreConfig, SelectionContext } from "../api/types";
 
@@ -65,9 +65,6 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
   const submittedToJatos = args.jatosHandledBySink
     ? true
     : await submitToJatos(args.payload as Record<string, unknown>);
-  if (submittedToJatos && args.endJatosOnSubmit !== false) {
-    await endJatosStudy();
-  }
 
   const redirectCfg = args.coreConfig.completion?.redirect;
   const template =
@@ -75,6 +72,18 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
       ? redirectCfg?.incompleteUrlTemplate
       : redirectCfg?.completeUrlTemplate;
   const redirectEnabled = Boolean(redirectCfg?.enabled && template);
+
+  if (submittedToJatos && args.endJatosOnSubmit !== false) {
+    if (redirectEnabled) {
+      const resolved = resolveTemplate(template, args.selection);
+      if (resolved) {
+        await endJatosStudyAndRedirect(resolved);
+        return { submittedToJatos, redirected: true };
+      }
+    }
+    await endJatosStudy();
+  }
+
   if (redirectEnabled) {
     const resolved = resolveTemplate(template, args.selection);
     if (resolved) {

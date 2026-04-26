@@ -15,12 +15,19 @@ function printUsageAndExit(code = 0) {
       "Usage:",
       "  node tasks/bricks/scripts/run-difficulty-estimate.mjs --config moray1991 [--trials 10000] [--seed 123456]",
       "    [--no-by-trial-type] [--no-by-block-trial-type]",
+      "  node tasks/bricks/scripts/run-difficulty-estimate.mjs --config evanderHons --hold-sweep",
+      "    [--hold-ms-list 100,200,300] [--hold-ms-min 100 --hold-ms-max 1500 --hold-ms-step 50]",
+      "    [--sweep-block-label \"High Difficulty\" | --sweep-block-index 5]",
       "",
       "Notes:",
       "  - Config is resolved under configs/bricks/<config>.json",
       "  - Output includes overall summary plus breakdowns by block and trial_type (plan variant id).",
       "  - Use --no-by-trial-type to omit breakdown.by_trial_type.",
       "  - Use --no-by-block-trial-type (or --no-block-trial-type) to omit breakdown.by_block_trial_type.",
+      "  - Use --hold-sweep to add fixed-hold calibration outputs:",
+      "      • single_box_curve: progress gain per hold vs hold ms",
+      "      • trial_completion_by_hold_ms: fixed-hold and adaptive-final-hold clear-all rates",
+      "  - Use --sweep-block-label/--sweep-block-index to scope hold sweep to one block.",
       "  - Default config: moray1991",
       "  - Default trials: 10000",
       "  - Default seed: 123456",
@@ -36,6 +43,13 @@ function parseArgs(argv) {
     seed: 123456,
     includeByTrialType: true,
     includeByBlockTrialType: true,
+    holdSweep: false,
+    holdMsMin: 100,
+    holdMsMax: 1500,
+    holdMsStep: 50,
+    holdMsList: null,
+    sweepBlockLabel: null,
+    sweepBlockIndex: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -54,6 +68,26 @@ function parseArgs(argv) {
       out.includeByTrialType = false;
     } else if (arg === "--no-by-block-trial-type" || arg === "--no-block-trial-type") {
       out.includeByBlockTrialType = false;
+    } else if (arg === "--hold-sweep") {
+      out.holdSweep = true;
+    } else if (arg === "--hold-ms-min") {
+      out.holdMsMin = Number(argv[i + 1]);
+      i += 1;
+    } else if (arg === "--hold-ms-max") {
+      out.holdMsMax = Number(argv[i + 1]);
+      i += 1;
+    } else if (arg === "--hold-ms-step") {
+      out.holdMsStep = Number(argv[i + 1]);
+      i += 1;
+    } else if (arg === "--hold-ms-list") {
+      out.holdMsList = String(argv[i + 1] ?? "");
+      i += 1;
+    } else if (arg === "--sweep-block-label") {
+      out.sweepBlockLabel = String(argv[i + 1] ?? "").trim();
+      i += 1;
+    } else if (arg === "--sweep-block-index") {
+      out.sweepBlockIndex = Number(argv[i + 1]);
+      i += 1;
     } else if (!arg.startsWith("-") && !out._positionalConsumed) {
       out.config = String(arg).trim();
       out._positionalConsumed = true;
@@ -64,9 +98,37 @@ function parseArgs(argv) {
   if (!out.config) throw new Error("Missing config name.");
   if (!Number.isFinite(out.trials) || out.trials <= 0) throw new Error("--trials must be a positive number.");
   if (!Number.isFinite(out.seed)) throw new Error("--seed must be a finite number.");
+  if (!Number.isFinite(out.holdMsMin) || !Number.isFinite(out.holdMsMax) || !Number.isFinite(out.holdMsStep)) {
+    throw new Error("--hold-ms-min/--hold-ms-max/--hold-ms-step must be finite numbers.");
+  }
   out.trials = Math.floor(out.trials);
   out.seed = Math.floor(out.seed);
+  if (out.sweepBlockIndex !== null) {
+    if (!Number.isFinite(out.sweepBlockIndex) || out.sweepBlockIndex < 0) {
+      throw new Error("--sweep-block-index must be a non-negative number.");
+    }
+    out.sweepBlockIndex = Math.floor(out.sweepBlockIndex);
+  }
   delete out._positionalConsumed;
+  return out;
+}
+
+function buildHoldMsSweep(args) {
+  if (!args.holdSweep) return [];
+  if (args.holdMsList && args.holdMsList.trim()) {
+    const values = args.holdMsList
+      .split(",")
+      .map((part) => Number(part.trim()))
+      .filter((n) => Number.isFinite(n) && n >= 0)
+      .map((n) => Math.round(n));
+    return [...new Set(values)].sort((a, b) => a - b);
+  }
+  const min = Math.max(0, Math.round(args.holdMsMin));
+  const max = Math.max(min, Math.round(args.holdMsMax));
+  const step = Math.max(1, Math.round(args.holdMsStep));
+  const out = [];
+  for (let ms = min; ms <= max; ms += step) out.push(ms);
+  if (out[out.length - 1] !== max) out.push(max);
   return out;
 }
 
@@ -548,6 +610,142 @@ function estimateMaxOnTimeClears(bricks, conveyors, config) {
   return kept.length;
 }
 
+function holdDurationProgressGainPerHold({ holdMs, width, config }) {
+  const params = config?.bricks?.completionParams ?? {};
+  const display = config?.display ?? {};
+  const targetHoldMs = Math.max(50, toFinite(params.target_hold_ms, 700));
+  const holdFloorMs = Math.max(0, toFinite(params.hold_floor_ms, 0));
+  const holdCeilingMs = params.hold_ceiling_ms !== undefined
+    ? Number(params.hold_ceiling_ms)
+    : (targetHoldMs + Math.max(0, toFinite(params.overshoot_tolerance_ms, 0)));
+
+  const progressPerPerfect = clamp(toFinite(params.progress_per_perfect, 0.35), 0.01, 1);
+  const progressCurve = Math.max(0.1, toFinite(params.progress_curve, 1));
+  const widthScaling = params.width_scaling !== false;
+  const widthRef = Math.max(1, toFinite(params.width_reference_px, toFinite(display?.brickWidth, 160)));
+  const widthExp = Math.max(0, toFinite(params.width_scaling_exponent, 1));
+  const widthPx = Math.max(1, toFinite(width, toFinite(display?.brickWidth, 160)));
+  const widthFactorRaw = widthScaling ? (widthPx / widthRef) : 1;
+  const widthFactor = Math.max(0.2, Math.pow(Math.max(0.01, widthFactorRaw), widthExp));
+
+  if (holdMs < holdFloorMs || holdMs > holdCeilingMs) {
+    return 0;
+  }
+
+  let ratio = 0;
+  if (holdMs < targetHoldMs) {
+    const range = targetHoldMs - holdFloorMs;
+    const dist = (targetHoldMs - holdMs) / Math.max(1, range);
+    ratio = 1 - clamp(dist, 0, 1);
+  } else {
+    const range = holdCeilingMs - targetHoldMs;
+    const dist = (holdMs - targetHoldMs) / Math.max(1, range);
+    ratio = 1 - clamp(dist, 0, 1);
+  }
+
+  const gainedUnscaled = Math.pow(ratio, progressCurve) * progressPerPerfect;
+  return gainedUnscaled / widthFactor;
+}
+
+function requiredHoldMsForGain({ requiredGain, width, config }) {
+  if (!(requiredGain > 0)) return 0;
+  const params = config?.bricks?.completionParams ?? {};
+  const targetHoldMs = Math.max(50, toFinite(params.target_hold_ms, 700));
+  const holdFloorMs = Math.max(0, toFinite(params.hold_floor_ms, 0));
+  
+  // Peak gain is at targetHoldMs
+  const maxGain = holdDurationProgressGainPerHold({ holdMs: targetHoldMs, width, config });
+  if (requiredGain > maxGain + 1e-12) return Number.POSITIVE_INFINITY;
+
+  // Search under-side first (shortest time to reach gain)
+  let lo = holdFloorMs;
+  let hi = targetHoldMs;
+  for (let i = 0; i < 40; i += 1) {
+    const mid = (lo + hi) / 2;
+    const gain = holdDurationProgressGainPerHold({ holdMs: mid, width, config });
+    if (gain >= requiredGain) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+function estimateMaxOnTimeClearsAtFixedHold(bricks, conveyors, config, holdMs, options = {}) {
+  const mode = String(config?.bricks?.completionMode ?? "single_click");
+  if (mode !== "hold_duration") {
+    return estimateMaxOnTimeClears(bricks, conveyors, config);
+  }
+  const adaptiveFinalHold = options.adaptiveFinalHold === true;
+  const byConveyor = new Map(conveyors.map((c) => [c.id, c]));
+  const difficultyModel = config?.difficultyModel ?? {};
+  const clickAcquireMs = Math.max(0, toFinite(difficultyModel?.clickAcquireMs, 110));
+  const avgClickIntervalMs = Math.max(40, toFinite(difficultyModel?.avgClickIntervalMs, 240));
+  const interHoldGapMs = avgClickIntervalMs;
+
+  const jobs = bricks.map((b) => {
+    const conveyor = byConveyor.get(b.conveyorId);
+    const speed = Math.max(1e-6, toFinite(conveyor?.speed, 1));
+    const length = Math.max(0, toFinite(conveyor?.length, 0));
+    const width = Math.max(1, toFinite(b.width, toFinite(config?.display?.brickWidth, 160)));
+    const x = Math.max(0, toFinite(b.x, 0));
+    const remainingDistance = Math.max(0, length - (x + width));
+    const gainPerHold = holdDurationProgressGainPerHold({ holdMs, width, config });
+    let p = Number.POSITIVE_INFINITY;
+    if (gainPerHold > 0) {
+      if (!adaptiveFinalHold) {
+        const holdsNeeded = Math.ceil(1 / gainPerHold);
+        const holdTimeTotal = holdsNeeded * holdMs;
+        const interHoldGapTotal = Math.max(0, holdsNeeded - 1) * interHoldGapMs;
+        p = clickAcquireMs + holdTimeTotal + interHoldGapTotal;
+      } else {
+        const fullHolds = Math.floor((1 - 1e-12) / gainPerHold);
+        const progressAfterFull = fullHolds * gainPerHold;
+        const remainingGain = Math.max(0, 1 - progressAfterFull);
+        const finalHoldMs = requiredHoldMsForGain({ requiredGain: remainingGain, width, config });
+        if (Number.isFinite(finalHoldMs)) {
+          const totalHolds = fullHolds + 1;
+          const holdTimeTotal = (fullHolds * holdMs) + finalHoldMs;
+          const interHoldGapTotal = Math.max(0, totalHolds - 1) * interHoldGapMs;
+          p = clickAcquireMs + holdTimeTotal + interHoldGapTotal;
+        }
+      }
+    }
+    const d = (remainingDistance / speed) * 1000;
+    return { p, d };
+  });
+
+  const sorted = jobs.slice().sort((a, b) => a.d - b.d);
+  let total = 0;
+  const kept = [];
+  for (const job of sorted) {
+    if (!Number.isFinite(job.p)) continue;
+    kept.push(job);
+    total += job.p;
+    if (total > job.d) {
+      let maxIdx = 0;
+      for (let i = 1; i < kept.length; i += 1) {
+        if (kept[i].p > kept[maxIdx].p) maxIdx = i;
+      }
+      total -= kept[maxIdx].p;
+      kept.splice(maxIdx, 1);
+    }
+  }
+  return kept.length;
+}
+
+function buildSingleBoxCurve(config, holdMsSweep) {
+  const params = config?.bricks?.completionParams ?? {};
+  const display = config?.display ?? {};
+  const widthRef = Math.max(1, toFinite(params.width_reference_px, toFinite(display?.brickWidth, 160)));
+  return holdMsSweep.map((holdMs) => {
+    const gain = holdDurationProgressGainPerHold({ holdMs, width: widthRef, config });
+    return {
+      hold_ms: holdMs,
+      gain_per_hold: gain,
+      holds_to_clear: gain > 0 ? Math.ceil(1 / gain) : null,
+    };
+  });
+}
+
 function mean(values) {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
@@ -752,7 +950,15 @@ async function main() {
     seed,
     includeByTrialType,
     includeByBlockTrialType,
+    holdSweep,
+    holdMsMin,
+    holdMsMax,
+    holdMsStep,
+    holdMsList,
+    sweepBlockLabel,
+    sweepBlockIndex,
   } = parseArgs(process.argv.slice(2));
+  const holdMsSweep = buildHoldMsSweep({ holdSweep, holdMsMin, holdMsMax, holdMsStep, holdMsList });
   const { config, configPath, configId } = await loadConfig(configName);
 
   const templates = buildTrialTemplates(config, seed, configId);
@@ -765,6 +971,14 @@ async function main() {
   const byTrialType = includeByTrialType ? new Map() : null;
   const byBlockTrialType = includeByBlockTrialType ? new Map() : null;
   const pickTemplate = mulberry32((seed ^ 0xa341316c) >>> 0);
+  const holdSweepAcc = holdMsSweep.length > 0
+    ? new Map(holdMsSweep.map((ms) => [ms, {
+        n: 0,
+        totalBricks: 0,
+        fixed: { clearAll: 0, clears: 0 },
+        adaptive_final: { clearAll: 0, clears: 0 },
+      }]))
+    : null;
 
   for (let i = 0; i < trials; i += 1) {
     const template = templates[Math.floor(pickTemplate() * templates.length)] ?? templates[0];
@@ -775,6 +989,7 @@ async function main() {
     const feasibilityPct = Number(est.trial_feasibility_pct);
     const loadPct = Number(est.trial_load_pct);
     const maxClears = estimateMaxOnTimeClears(bricks, conveyors, trialCfg);
+    const totalBricks = bricks.length;
 
     updateAccumulator(overall, feasibilityPct, loadPct, maxClears);
 
@@ -790,6 +1005,29 @@ async function main() {
     if (byTrialType) updateAccumulator(byTrialType.get(trialTypeKey), feasibilityPct, loadPct, maxClears);
     if (byBlockTrialType) {
       updateAccumulator(byBlockTrialType.get(blockTrialTypeKey), feasibilityPct, loadPct, maxClears);
+    }
+    if (holdSweepAcc) {
+      const matchesSweepScope =
+        (sweepBlockIndex === null || template.block_index === sweepBlockIndex) &&
+        (!sweepBlockLabel || String(template.block_label) === sweepBlockLabel);
+      if (!matchesSweepScope) {
+        continue;
+      }
+      for (const holdMs of holdMsSweep) {
+        const clearsFixed = estimateMaxOnTimeClearsAtFixedHold(bricks, conveyors, trialCfg, holdMs, {
+          adaptiveFinalHold: false,
+        });
+        const clearsAdaptive = estimateMaxOnTimeClearsAtFixedHold(bricks, conveyors, trialCfg, holdMs, {
+          adaptiveFinalHold: true,
+        });
+        const acc = holdSweepAcc.get(holdMs);
+        acc.n += 1;
+        acc.totalBricks += totalBricks;
+        acc.fixed.clears += clearsFixed;
+        acc.adaptive_final.clears += clearsAdaptive;
+        if (totalBricks > 0 && clearsFixed >= totalBricks) acc.fixed.clearAll += 1;
+        if (totalBricks > 0 && clearsAdaptive >= totalBricks) acc.adaptive_final.clearAll += 1;
+      }
     }
   }
 
@@ -836,6 +1074,36 @@ async function main() {
     overall: summarizeAccumulator(overall),
     breakdown,
   };
+  if (holdSweepAcc) {
+    summary.hold_sweep = {
+      mode: "fixed_hold_duration",
+      scope: {
+        block_index: sweepBlockIndex,
+        block_label: sweepBlockLabel,
+      },
+      hold_ms_values: holdMsSweep,
+      single_box_curve: buildSingleBoxCurve(config, holdMsSweep),
+      trial_completion_by_hold_ms: holdMsSweep.map((holdMs) => {
+        const acc = holdSweepAcc.get(holdMs);
+        const n = Math.max(1, acc?.n ?? 0);
+        const clearAllRateFixed = (acc?.fixed?.clearAll ?? 0) / n;
+        const meanClearsFixed = (acc?.fixed?.clears ?? 0) / n;
+        const clearAllRateAdaptive = (acc?.adaptive_final?.clearAll ?? 0) / n;
+        const meanClearsAdaptive = (acc?.adaptive_final?.clears ?? 0) / n;
+        return {
+          hold_ms: holdMs,
+          trials: acc?.n ?? 0,
+          clear_all_rate: clearAllRateFixed,
+          mean_clears: meanClearsFixed,
+          clear_all_rate_fixed_hold: clearAllRateFixed,
+          mean_clears_fixed_hold: meanClearsFixed,
+          clear_all_rate_adaptive_final_hold: clearAllRateAdaptive,
+          mean_clears_adaptive_final_hold: meanClearsAdaptive,
+          mean_bricks: (acc?.totalBricks ?? 0) / n,
+        };
+      }),
+    };
+  }
 
   console.log(JSON.stringify(summary, null, 2));
 }

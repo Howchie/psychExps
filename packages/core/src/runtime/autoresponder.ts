@@ -167,6 +167,36 @@ export function configureAutoResponder(profile: ResolvedAutoResponderProfile): v
   }
   activeProfile = profile;
   rng = createMulberry32(hashSeed("autoresponder", String(profile.seed)));
+
+  // Mock navigation for testing redirection if enabled
+  if (typeof window !== "undefined") {
+    const originalAssign = window.location.assign.bind(window.location);
+    const originalReplace = window.location.replace.bind(window.location);
+    try {
+      Object.defineProperty(window.location, "assign", {
+        configurable: true,
+        writable: true,
+        value: (url: string) => {
+          console.log(`[AutoResponder] Redirecting to: ${url}`);
+          if (!isAutoResponderEnabled()) {
+            originalAssign(url);
+          }
+        },
+      });
+      Object.defineProperty(window.location, "replace", {
+        configurable: true,
+        writable: true,
+        value: (url: string) => {
+          console.log(`[AutoResponder] Replacing location with: ${url}`);
+          if (!isAutoResponderEnabled()) {
+            originalReplace(url);
+          }
+        },
+      });
+    } catch {
+      // Some environments don't allow redefining location properties; navigation mocking skipped
+    }
+  }
 }
 
 function random(): number {

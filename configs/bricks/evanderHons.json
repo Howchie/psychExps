@@ -18,10 +18,10 @@
     },
     "completionParams": {
       "target_hold_ms": 1000,
-      "min_hold_ms_for_progress": 500,
-      "progress_per_perfect": 0.27,
-      "progress_curve": 0.8,
-      "overshoot_tolerance_ms": 500,
+      "hold_floor_ms": 100,
+      "hold_ceiling_ms": 1500,
+      "progress_per_perfect": 0.4,
+      "progress_curve": 2.0,
       "width_scaling": true,
       "width_reference_px": 50,
       "width_scaling_exponent": 1
@@ -119,7 +119,8 @@
     }
   },
   "difficultyModel": {
-    "holdQualityMean": 0.8
+    "holdQualityMean": 0.8,
+    "avgClickIntervalMs": 125
   },
   "trial": {
     "mode": "max_bricks",
@@ -393,6 +394,7 @@
             {
               "conveyorIndex": 0,
               "xFraction": 0.5,
+              "width": 50,
               "textureCategoryId": "Other"
             }
           ]

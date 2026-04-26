@@ -85,6 +85,20 @@ Accepted truthy/falsy values:
 - truthy: `1`, `true`, `yes`, `on`
 - falsy: `0`, `false`, `no`, `off`
 
+### RT Fast-Mode URL toggle
+
+You can force all RT timing fields to a fixed value (in milliseconds) for rapid smoke tests:
+
+```text
+http://localhost:5173/?task=nback&variant=annikaHons&rt_fast_ms=10
+```
+
+Supported keys:
+- `rt_fast_ms`
+- `rtFastMs`
+
+When present, this override takes precedence over `task.rtTask.timing` and block-level `rtTask.timing` values, using a compressed valid schedule derived from that ms value.
+
 ### Config shape
 
 Global defaults belong in core config (`configs/core/default.json`), and task configs may override with an `autoresponder` object.
@@ -265,6 +279,7 @@ For tasks that use the shared instruction-slot parser (`pm`, `nback`, `tracking`
 - `preBlockPages`: string, object, or array (shown before every block)
 - `postBlockPages`: string, object, or array (shown after every block)
 - `endPages`: string, object, or array (shown before final completion screen)
+- `skipBeforeBlockScreensOnRepeat`: boolean (default `false`); when `true`, block-level `beforeBlockScreens` are skipped on retry attempts triggered by `repeatUntil`
 
 Instruction page object shape:
 - `text`: plain text (escaped)
@@ -406,6 +421,7 @@ Notes:
 - Retries stop as soon as thresholds are met or `maxAttempts` is reached.
 - Default post-block pages (`afterBlockScreens` / task-level post-block pages) are shown on the final attempt only.
 - Use `repeatAfterBlockScreens` (alias `repeatPostBlockScreens`) on a block for retry-attempt messaging.
+- Set `instructions.skipBeforeBlockScreensOnRepeat: true` when practice repeats should be silent and should not re-show block-level pre-screens.
 
 ---
 

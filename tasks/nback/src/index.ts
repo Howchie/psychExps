@@ -51,6 +51,7 @@ import {
   toPositiveNumber,
   toNonNegativeNumber,
   parseTrialFeedbackConfig,
+  coerceBlockRepeatUntilConfig,
   type TrialFeedbackConfig,
   type ResolvedRtTaskConfig,
   type DrtEvent,
@@ -114,7 +115,10 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
           drt: block.drt,
         },
       })),
-      getTrials: ({ block }) => block.trials,
+      getTrials: ({ block, blockAttempt }) => {
+        const attemptIndex = Math.max(0, Math.floor(blockAttempt ?? 0));
+        return block.attemptTrials?.[attemptIndex] ?? block.trials;
+      },
       csvOptions: {
         suffix: "nback_trials",
       },
@@ -322,6 +326,7 @@ interface PlannedBlock {
   nLevel: number;
   stimulusVariant: number | null;
   trials: PlannedTrial[];
+  attemptTrials?: PlannedTrial[][];
   feedback: TrialFeedbackConfig;
   rtTask: ResolvedRtTaskConfig;
   blockSummary: Record<string, unknown> | null;
@@ -378,7 +383,7 @@ interface ParsedNbackConfig {
 }
 
 interface ParticipantScopedNbackDrawPlan {
-  byBlockIndex: Map<number, { sequence: Array<{ item: string; category: string }> }>;
+  byBlockAttempt: Map<string, { sequence: Array<{ item: string; category: string }> }>;
 }
 
 interface TrialRecord {
@@ -999,6 +1004,11 @@ function parseBlock(
   const rawRepeatUntil = b.repeatUntil;
   const rawRtTask = b.rtTask;
   const rawDrt = resolveScopedModuleConfig(b, "drt");
+  const rawVariables = asObject(b.variables) ?? {};
+  const resolvedVariables = asObject(variableResolver.resolveInValue(rawVariables, {
+    ...scope,
+    locals: rawVariables,
+  })) ?? rawVariables;
   const resolvedBeforeBlockScreens = variableResolver.resolveInValue(rawBeforeBlockScreens, scope);
   const resolvedAfterBlockScreens = variableResolver.resolveInValue(rawAfterBlockScreens, scope);
   const resolvedRepeatAfterBlockScreens = variableResolver.resolveInValue(rawRepeatAfterBlockScreens, scope);
@@ -1084,7 +1094,7 @@ function parseBlock(
     afterBlockScreens: toStringScreens(resolvedAfterBlockScreens),
     repeatAfterBlockScreens: toStringScreens(resolvedRepeatAfterBlockScreens),
     drt,
-    variables: asObject(b.variables) ?? {},
+    variables: resolvedVariables,
   };
 }
 
@@ -1121,8 +1131,9 @@ function buildExperimentPlan(
   variableResolver: VariableResolver,
 ): PlannedBlock[] {
   const blocks = [...config.practiceBlocks, ...config.mainBlocks];
+  const plannedAttemptsByBlock = blocks.map((block) => resolvePlannedAttemptCount(block));
   const participantScopedDrawPlan = config.nbackPoolDrawScope === "participant"
-    ? buildParticipantScopedNbackDrawPlan(blocks, config, rng)
+    ? buildParticipantScopedNbackDrawPlan(blocks, plannedAttemptsByBlock, config, rng)
     : null;
   let mainCycleIndex = 0;
   return blocks.map((block, index) => {
@@ -1130,27 +1141,52 @@ function buildExperimentPlan(
     if (!block.isPractice && config.imageAssets.mainMode === "cycle" && config.imageAssets.mainVariants.length > 0) {
       mainCycleIndex += 1;
     }
-    return buildBlockPlanWithChecks(
-      block,
-      index,
-      config,
-      rng,
-      resolvedVariant,
-      moduleRunner,
-      moduleConfigs,
-      variableResolver,
-      participantScopedDrawPlan,
-    );
+    const attemptCount = plannedAttemptsByBlock[index] ?? 1;
+    const attemptPlans: PlannedBlock[] = [];
+    for (let blockAttempt = 0; blockAttempt < attemptCount; blockAttempt += 1) {
+      attemptPlans.push(
+        buildBlockPlanWithChecks(
+          block,
+          index,
+          blockAttempt,
+          config,
+          rng,
+          resolvedVariant,
+          moduleRunner,
+          moduleConfigs,
+          variableResolver,
+          participantScopedDrawPlan,
+        ),
+      );
+    }
+    const firstAttempt = attemptPlans[0];
+    if (!firstAttempt) {
+      throw new Error(`Failed to build attempt plans for block '${block.label}'.`);
+    }
+    firstAttempt.attemptTrials = attemptPlans.map((entry) => entry.trials);
+    return firstAttempt;
   });
+}
+
+function makeBlockAttemptKey(blockIndex: number, blockAttempt: number): string {
+  return `${blockIndex}:${blockAttempt}`;
+}
+
+function resolvePlannedAttemptCount(block: NbackBlockConfig): number {
+  const repeat = coerceBlockRepeatUntilConfig(block.repeatUntil);
+  if (!repeat?.enabled) return 1;
+  return Math.max(1, repeat.maxAttempts);
 }
 
 function buildParticipantScopedNbackDrawPlan(
   blocks: NbackBlockConfig[],
+  plannedAttemptsByBlock: number[],
   config: ParsedNbackConfig,
   rng: SeededRandom,
 ): ParticipantScopedNbackDrawPlan {
   type BlockSpec = {
     blockIndex: number;
+    blockAttempt: number;
     blockLabel: string;
     key: string;
     trials: number;
@@ -1172,16 +1208,20 @@ function buildParticipantScopedNbackDrawPlan(
       mode: config.nbackPoolDraw.mode,
       shuffle: config.nbackPoolDraw.shuffle,
     });
-    blockSpecs.push({
-      blockIndex,
-      blockLabel: block.label,
-      key,
-      trials: block.trials,
-    });
+    const plannedAttempts = Math.max(1, plannedAttemptsByBlock[blockIndex] ?? 1);
+    for (let blockAttempt = 0; blockAttempt < plannedAttempts; blockAttempt += 1) {
+      blockSpecs.push({
+        blockIndex,
+        blockAttempt,
+        blockLabel: block.label,
+        key,
+        trials: block.trials,
+      });
+    }
     if (!keyToCandidates.has(key)) {
       keyToCandidates.set(key, nbackCandidates);
     }
-    keyToNeeded.set(key, (keyToNeeded.get(key) ?? 0) + block.trials);
+    keyToNeeded.set(key, (keyToNeeded.get(key) ?? 0) + (block.trials * plannedAttempts));
   }
 
   const keyToSequence = new Map<string, Array<{ item: string; category: string }>>();
@@ -1220,7 +1260,7 @@ function buildParticipantScopedNbackDrawPlan(
     keyToSequence.set(key, sequence);
   }
 
-  const byBlockIndex = new Map<number, { sequence: Array<{ item: string; category: string }> }>();
+  const byBlockAttempt = new Map<string, { sequence: Array<{ item: string; category: string }> }>();
   const keyToCursor = new Map<string, number>();
   for (const spec of blockSpecs) {
     const sequence = keyToSequence.get(spec.key);
@@ -1236,16 +1276,17 @@ function buildParticipantScopedNbackDrawPlan(
         `(${slice.length} vs ${spec.trials}).`,
       );
     }
-    byBlockIndex.set(spec.blockIndex, { sequence: slice });
+    byBlockAttempt.set(makeBlockAttemptKey(spec.blockIndex, spec.blockAttempt), { sequence: slice });
     keyToCursor.set(spec.key, end);
   }
 
-  return { byBlockIndex };
+  return { byBlockAttempt };
 }
 
 function buildBlockPlanWithChecks(
   block: NbackBlockConfig,
   blockIndex: number,
+  blockAttempt: number,
   config: ParsedNbackConfig,
   rng: SeededRandom,
   stimulusVariant: number | null,
@@ -1263,6 +1304,7 @@ function buildBlockPlanWithChecks(
       return buildBlockPlanAttempt(
         block,
         blockIndex,
+        blockAttempt,
         config,
         rng,
         stimulusVariant,
@@ -1280,6 +1322,7 @@ function buildBlockPlanWithChecks(
 function buildBlockPlanAttempt(
   block: NbackBlockConfig,
   blockIndex: number,
+  blockAttempt: number,
   config: ParsedNbackConfig,
   rng: SeededRandom,
   stimulusVariant: number | null,
@@ -1293,7 +1336,9 @@ function buildBlockPlanAttempt(
   }
   if (nbackCandidates.length === 0) throw new Error(`Block '${block.label}' has no n-back candidate items.`);
 
-  const participantScopedSequence = participantScopedDrawPlan?.byBlockIndex.get(blockIndex)?.sequence ?? null;
+  const participantScopedSequence = participantScopedDrawPlan?.byBlockAttempt
+    .get(makeBlockAttemptKey(blockIndex, blockAttempt))
+    ?.sequence ?? null;
   if (participantScopedSequence && participantScopedSequence.length !== block.trials) {
     throw new Error(
       `Block '${block.label}' has mismatched participant-scoped draw plan ` +
@@ -1633,6 +1678,7 @@ export const __testing__ = {
   restoreNbackRootPresentation,
   injectNBackTargets,
   injectNBackLures,
+  parseNbackConfig,
 };
 
 function drawSizedImage(
