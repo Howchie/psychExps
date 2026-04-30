@@ -213,6 +213,7 @@ Override synthetic timing in the task config:
     "enabled": false,
     "jsPsychSimulationMode": "visual",
     "continueDelayMs": { "minMs": 800, "maxMs": 2600 },
+    "surveySubmitDelayMs": { "minMs": 120, "maxMs": 420 },
     "responseRtMs": { "meanMs": 720, "sdMs": 210, "minMs": 180, "maxMs": 3200 },
     "timeoutRate": 0.08,
     "errorRate": 0.12,
@@ -222,6 +223,8 @@ Override synthetic timing in the task config:
   }
 }
 ```
+
+When auto mode is enabled, survey forms are auto-filled and submitted automatically; single-choice and slider answers are sampled with variability.
 
 ---
 

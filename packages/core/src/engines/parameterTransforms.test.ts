@@ -20,11 +20,11 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
       minWindowSize: 2,
       maxWindowSize: 4,
       t0Mode: "fixed",
-      t0: 120,
+      t0: 0.12,
     });
     expect(transform.observe(obs(500))).toBeNull();
     const estimate = transform.observe(obs(550));
-    expect(estimate?.values.t0).toBeCloseTo(120, 6);
+    expect(estimate?.values.t0).toBeCloseTo(0.12, 6);
   });
 
   it("supports scope-wide min-RT multiplier t0 independent of moving window", () => {
@@ -38,15 +38,15 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
 
     expect(transform.observe(obs(500))).toBeNull();
     const estimate1 = transform.observe(obs(600));
-    expect(estimate1?.values.t0).toBeCloseTo(250, 6);
+    expect(estimate1?.values.t0).toBeCloseTo(0.25, 6);
 
     const estimate2 = transform.observe(obs(800));
-    expect(estimate2?.values.t0).toBeCloseTo(250, 6);
+    expect(estimate2?.values.t0).toBeCloseTo(0.25, 6);
 
     transform.reset();
     expect(transform.observe(obs(700))).toBeNull();
     const estimate3 = transform.observe(obs(800));
-    expect(estimate3?.values.t0).toBeCloseTo(350, 6);
+    expect(estimate3?.values.t0).toBeCloseTo(0.35, 6);
   });
 
   it("accepts t0 mode/multiplier aliases from JSON-style configs", () => {
@@ -60,7 +60,7 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
 
     expect(transform.observe(obs(400))).toBeNull();
     const estimate = transform.observe(obs(700));
-    expect(estimate?.values.t0).toBeCloseTo(200, 6);
+    expect(estimate?.values.t0).toBeCloseTo(0.2, 6);
   });
 
   it("matches R hybrid implementation (tmsa + mixed t0) on reference fixture", () => {
@@ -95,7 +95,7 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
     });
 
     for (const row of rows) {
-      const estimate = transform.observe(obs(row.rt));
+      const estimate = transform.observe(obs(row.rt * 1000));
       if (!Number.isFinite(row.drift_r)) {
         expect(estimate).toBeNull();
         continue;
@@ -109,5 +109,30 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
       expect(estimate!.intervals!.threshold.upper).toBeCloseTo(row.threshold_upper_r, 5);
       expect(estimate!.values.t0).toBeCloseTo(row.t0_r, 4);
     }
+  });
+
+  it("updates beta0 using the configured kappa0 (R parity)", () => {
+    const transform = new WaldConjugateOnlineTransform({
+      type: "wald_conjugate",
+      minWindowSize: 10,
+      maxWindowSize: 50,
+      t0Mode: "mix",
+      t0Multiplier: 0.5,
+      priors: {
+        mu0: 2,
+        precision0: 1,
+        kappa0: 3,
+        beta0: 0.4,
+      },
+    });
+
+    const rtMs = [672, 1344, 672, 760, 728, 592, 816, 744, 1432, 432];
+    let estimate = null as ReturnType<WaldConjugateOnlineTransform["observe"]>;
+    for (const rt of rtMs) estimate = transform.observe(obs(rt));
+    expect(estimate).not.toBeNull();
+
+    const expectedBeta0 = ((2 * 3) - 1) / (2 * estimate!.values.threshold * estimate!.values.threshold);
+    const beta0AfterUpdate = Number((estimate!.aux?.prior as { beta0?: number } | undefined)?.beta0);
+    expect(beta0AfterUpdate).toBeCloseTo(expectedBeta0, 10);
   });
 });

@@ -118,6 +118,8 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   const legacyDrtRaw = resolveScopedModuleConfig(resolvedCfg, "drt") ?? {};
   const resolvedDrtConfig =
     injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
+  const autoProfile = getAutoResponderProfile();
+  const shouldSimulateDataOnly = isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === 'data-only';
   const drtController = injectedDrtRuntime?.controller ?? null;
   if (resolvedDrtConfig.enabled && !drtController) {
     throw new Error('Bricks DRT is enabled but no module-scoped DRT runtime was injected.');
@@ -171,7 +173,6 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
   };
   const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
   let lastHudSignature = '';
-  const autoProfile = getAutoResponderProfile();
   const autoEnabled = isAutoResponderEnabled();
   const maxTimeSecRaw = resolvedCfg.trial?.maxTimeSec;
   const configuredMaxDuration =
@@ -231,7 +232,12 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     }
     injectedDrtRuntime?.detachBindings?.();
     const drtData = drtController
-      ? (injectedDrtRuntime?.stopOnCleanup === false ? drtController.exportData() : drtController.stop())
+      ? (() => {
+          if (shouldSimulateDataOnly && injectedDrtRuntime?.stopOnCleanup !== false) {
+            drtController.simulateDataOnlyWindow(gameState.elapsed);
+          }
+          return injectedDrtRuntime?.stopOnCleanup === false ? drtController.exportData() : drtController.stop();
+        })()
       : { enabled: false, stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 }, events: [] };
     return {
       block_label: trial.blockLabel,
@@ -421,6 +427,14 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     events: [],
   };
 
+  const finalizeTrialDrt = (durationMs: number): void => {
+    if (!drtController || finalizedDrtData !== null) return;
+    if (shouldSimulateDataOnly && injectedDrtRuntime?.stopOnCleanup !== false) {
+      drtController.simulateDataOnlyWindow(durationMs);
+    }
+    finalizedDrtData = drtController.stop();
+  };
+
   const cleanup = (keyHandler: (e: KeyboardEvent) => void) => {
     ended = true;
     window.removeEventListener('keydown', keyHandler);
@@ -436,7 +450,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         if (injectedDrtRuntime?.stopOnCleanup === false) {
           finalizedDrtData = drtController.exportData();
         } else {
-          finalizedDrtData = drtController.stop();
+          finalizeTrialDrt(gameState.elapsed);
         }
       } else {
         finalizedDrtData = emptyDrtData;
@@ -509,7 +523,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     };
     const stopDrtForPendingEnd = () => {
       if (finalizedDrtData !== null || !drtController) return;
-      finalizedDrtData = drtController.stop();
+      finalizeTrialDrt(gameState.elapsed);
       drtPresentation?.hideAll();
       activeStimulusId = null;
     };
@@ -656,13 +670,17 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       if (startOverlay && startOverlay.parentNode) {
         startOverlay.parentNode.removeChild(startOverlay);
       }
-      drtController?.start(0);
+      if (!shouldSimulateDataOnly) {
+        drtController?.start(0);
+      }
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
       startLoop();
     };
 
     if (trialStarted) {
-      drtController?.start(0);
+      if (!shouldSimulateDataOnly) {
+        drtController?.start(0);
+      }
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
       startLoop();
     }

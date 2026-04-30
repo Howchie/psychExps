@@ -698,7 +698,11 @@ function flattenUnknown(
 }
 
 function buildSpotlightLookup(row: ConveyorTrialData): {
-  findSpotlightAtMs: (timeMs: number) => { spotlightBrickId: string | null; spotlightConveyorId: string | null };
+  findSpotlightAtMs: (timeMs: number) => {
+    spotlightBrickId: string | null;
+    spotlightConveyorId: string | null;
+    spotlightBrickMeta: Record<string, unknown> | null;
+  };
 } {
   const timeline = Array.isArray((row as any).timeline_events) ? ((row as any).timeline_events as Array<Record<string, unknown>>) : [];
   const sorted = timeline
@@ -710,8 +714,14 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
     .sort((a, b) => a.time - b.time);
 
   const brickToConveyor = new Map<string, string | null>();
+  const brickSpawnMeta = new Map<string, Record<string, unknown>>();
   let spotlightBrickId: string | null = null;
-  const checkpoints: Array<{ time: number; spotlightBrickId: string | null; spotlightConveyorId: string | null }> = [];
+  const checkpoints: Array<{
+    time: number;
+    spotlightBrickId: string | null;
+    spotlightConveyorId: string | null;
+    spotlightBrickMeta: Record<string, unknown> | null;
+  }> = [];
 
   for (const entry of sorted) {
     const event = entry.event;
@@ -719,7 +729,10 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
     if (type === "brick_spawned") {
       const brickId = typeof event.brick_id === "string" ? event.brick_id : null;
       const conveyorId = typeof event.conveyor_id === "string" ? event.conveyor_id : null;
-      if (brickId) brickToConveyor.set(brickId, conveyorId);
+      if (brickId) {
+        brickToConveyor.set(brickId, conveyorId);
+        brickSpawnMeta.set(brickId, event);
+      }
     }
     if (type === "brick_focus_changed") {
       spotlightBrickId = typeof event.active_brick_id === "string" ? event.active_brick_id : null;
@@ -728,21 +741,30 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
       time: entry.time,
       spotlightBrickId,
       spotlightConveyorId: spotlightBrickId ? (brickToConveyor.get(spotlightBrickId) ?? null) : null,
+      spotlightBrickMeta: spotlightBrickId ? (brickSpawnMeta.get(spotlightBrickId) ?? null) : null,
     });
   }
 
   return {
     findSpotlightAtMs: (timeMs: number) => {
-      if (checkpoints.length === 0) return { spotlightBrickId: null, spotlightConveyorId: null };
-      let chosen: { spotlightBrickId: string | null; spotlightConveyorId: string | null } = {
+      if (checkpoints.length === 0) {
+        return { spotlightBrickId: null, spotlightConveyorId: null, spotlightBrickMeta: null };
+      }
+      let chosen: {
+        spotlightBrickId: string | null;
+        spotlightConveyorId: string | null;
+        spotlightBrickMeta: Record<string, unknown> | null;
+      } = {
         spotlightBrickId: null,
         spotlightConveyorId: null,
+        spotlightBrickMeta: null,
       };
       for (const checkpoint of checkpoints) {
         if (checkpoint.time > timeMs) break;
         chosen = {
           spotlightBrickId: checkpoint.spotlightBrickId,
           spotlightConveyorId: checkpoint.spotlightConveyorId,
+          spotlightBrickMeta: checkpoint.spotlightBrickMeta,
         };
       }
       return chosen;
@@ -898,7 +920,7 @@ function buildBricksBrickOutcomeRows(
 
 function buildBricksDrtRows(
   rows: ConveyorTrialData[],
-  blockPlan: BlockPlanItem[],
+  _blockPlan: BlockPlanItem[],
   ids: { participantId: string; configPath: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
@@ -915,27 +937,37 @@ function buildBricksDrtRows(
       const response = (responseRow.response ?? {}) as Record<string, unknown>;
       const responseTimeMs = Number(response.time ?? response.rt_ms ?? 0);
       const spotlightAtResponse = spotlightLookup.findSpotlightAtMs(responseTimeMs);
-      const flat: Record<string, string | number | boolean | null> = {
-        ...buildTrialCsvContext(row, blockPlan, ids),
+      const spotlightMeta = spotlightAtResponse.spotlightBrickMeta ?? {};
+      const estimate = (responseRow.estimate ?? null) as Record<string, unknown> | null;
+      const estimateValues = (estimate?.values ?? null) as Record<string, unknown> | null;
+      out.push({
+        participant_id: ids.participantId,
+        block_index: row.block_index,
+        block_label: row.block_label,
+        trial_index: row.trial_index,
         spotlight_brick_id: spotlightAtResponse.spotlightBrickId,
         spotlight_conveyor_id: spotlightAtResponse.spotlightConveyorId,
-      };
-      flattenUnknown(responseRow, "", flat);
-      out.push(flat);
+        spotlight_texture_category_id:
+          typeof spotlightMeta.texture_category_id === "string" ? spotlightMeta.texture_category_id : null,
+        spotlight_texture_category_label:
+          typeof spotlightMeta.texture_category_label === "string" ? spotlightMeta.texture_category_label : null,
+        response_time_s: Number.isFinite(responseTimeMs) ? responseTimeMs / 1000 : null,
+        response_hit: typeof response.hit === "boolean" ? response.hit : null,
+        response_rt_s: Number.isFinite(Number(response.rt_ms)) ? Number(response.rt_ms) / 1000 : null,
+        estimate_drift_rate: Number.isFinite(Number(estimateValues?.drift_rate))
+          ? Number(estimateValues?.drift_rate)
+          : null,
+        estimate_threshold: Number.isFinite(Number(estimateValues?.threshold))
+          ? Number(estimateValues?.threshold)
+          : null,
+        estimate_t0: Number.isFinite(Number(estimateValues?.t0))
+          ? Number(estimateValues?.t0)
+          : null,
+      });
     }
   }
 
-  if (out.length === 0) return out;
-  const allColumns = new Set<string>();
-  out.forEach((entry) => Object.keys(entry).forEach((key) => allColumns.add(key)));
-  const orderedColumns = Array.from(allColumns);
-  return out.map((entry) => {
-    const normalized: Record<string, string | number | boolean | null> = {};
-    orderedColumns.forEach((key) => {
-      normalized[key] = Object.prototype.hasOwnProperty.call(entry, key) ? entry[key] : null;
-    });
-    return normalized;
-  });
+  return out;
 }
 
 async function runConfiguredTrialSurveys(container: HTMLElement, trialConfig: Record<string, unknown>): Promise<SurveyRunResult[]> {

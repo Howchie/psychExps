@@ -68,6 +68,7 @@ export interface AutoResponderConfig {
   jsPsychSimulationMode?: "data-only" | "visual";
   seed?: string | number;
   continueDelayMs?: AutoResponderRangeConfig;
+  surveySubmitDelayMs?: AutoResponderRangeConfig;
   responseRtMs?: {
     meanMs?: number;
     sdMs?: number;

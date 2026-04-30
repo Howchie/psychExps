@@ -7,6 +7,7 @@ export interface ResolvedAutoResponderProfile {
   jsPsychSimulationMode: "data-only" | "visual";
   seed: string | number;
   continueDelayMs: { minMs: number; maxMs: number };
+  surveySubmitDelayMs?: { minMs: number; maxMs: number };
   responseRtMs: { meanMs: number; sdMs: number; minMs: number; maxMs: number };
   timeoutRate: number;
   errorRate: number;
@@ -20,6 +21,7 @@ const DEFAULT_PROFILE: ResolvedAutoResponderProfile = {
   jsPsychSimulationMode: "visual",
   seed: "auto",
   continueDelayMs: { minMs: 800, maxMs: 2600 },
+  surveySubmitDelayMs: { minMs: 120, maxMs: 420 },
   responseRtMs: { meanMs: 720, sdMs: 210, minMs: 180, maxMs: 3200 },
   timeoutRate: 0.08,
   errorRate: 0.12,
@@ -150,6 +152,10 @@ export function resolveAutoResponderProfile(args: {
     jsPsychSimulationMode,
     seed: source.seed ?? `${args.selection.participant.participantId}:${args.selection.participant.sessionId}:${args.selection.taskId}:${args.selection.configPath ?? ""}:auto`,
     continueDelayMs: resolveRange(source.continueDelayMs, DEFAULT_PROFILE.continueDelayMs),
+    surveySubmitDelayMs: resolveRange(
+      source.surveySubmitDelayMs,
+      DEFAULT_PROFILE.surveySubmitDelayMs ?? DEFAULT_PROFILE.continueDelayMs,
+    ),
     responseRtMs: resolveResponseRt(source.responseRtMs, DEFAULT_PROFILE.responseRtMs),
     timeoutRate: clampUnit(toFiniteNumber(source.timeoutRate, DEFAULT_PROFILE.timeoutRate), DEFAULT_PROFILE.timeoutRate),
     errorRate: clampUnit(toFiniteNumber(source.errorRate, DEFAULT_PROFILE.errorRate), DEFAULT_PROFILE.errorRate),
@@ -219,6 +225,11 @@ export function sampleAutoContinueDelayMs(): number | null {
   return sampleUniformMs(activeProfile.continueDelayMs, random);
 }
 
+export function sampleAutoSurveySubmitDelayMs(): number | null {
+  if (!activeProfile) return null;
+  return sampleUniformMs(activeProfile.surveySubmitDelayMs ?? activeProfile.continueDelayMs, random);
+}
+
 export function sampleAutoResponse(args: {
   validResponses: string[];
   expectedResponse?: string | null;
@@ -258,9 +269,46 @@ export function sampleAutoResponse(args: {
   return { response, rtMs };
 }
 
+export function sampleAutoResponseRtSecondsWald(args: {
+  drift?: number;
+  threshold?: number;
+  t0Seconds?: number;
+  noiseScale?: number;
+}): number | null {
+  if (!activeProfile) return null;
+  const drift = Math.max(1e-6, Number(args.drift ?? 3));
+  const threshold = Math.max(1e-6, Number(args.threshold ?? 2));
+  const t0Seconds = Math.max(0, Number(args.t0Seconds ?? 0.1));
+  const noiseScale = Number(args.noiseScale ?? 1);
+  if (!Number.isFinite(noiseScale) || Math.abs(noiseScale - 1) > 1e-12) {
+    throw new Error(`Wald auto-responder requires noiseScale=1 for conjugate model alignment; received ${String(args.noiseScale)}`);
+  }
+
+  // Shifted Wald / Wiener first-passage with s=1:
+  // mean = a / v, shape = a^2
+  const muSeconds = threshold / drift;
+  const lambda = threshold * threshold;
+
+  const z = sampleNormal(random);
+  const y = z * z;
+  const x = muSeconds + (muSeconds * muSeconds * y) / (2 * lambda) - (muSeconds / (2 * lambda)) * Math.sqrt(4 * muSeconds * lambda * y + muSeconds * muSeconds * y * y);
+  const u = random();
+  const sample = u <= muSeconds / (muSeconds + x) ? x : (muSeconds * muSeconds) / x;
+  return Math.max(0, t0Seconds + sample);
+}
+
 export function sampleAutoInteractionDelayMs(): number | null {
   if (!activeProfile) return null;
   return sampleUniformMs(activeProfile.interActionDelayMs, random);
+}
+
+export function sampleAutoInteger(min: number, max: number): number | null {
+  if (!activeProfile) return null;
+  const lo = Math.ceil(Math.min(min, max));
+  const hi = Math.floor(Math.max(min, max));
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  if (hi <= lo) return lo;
+  return lo + Math.floor(random() * (hi - lo + 1));
 }
 
 export function sampleAutoHoldDurationMs(): number | null {

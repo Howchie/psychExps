@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { runJsPsychTimeline, configureAutoResponder, resolveAutoResponderProfile } from "./autoresponder";
+import {
+  runJsPsychTimeline,
+  configureAutoResponder,
+  resolveAutoResponderProfile,
+  sampleAutoInteger,
+  sampleAutoSurveySubmitDelayMs,
+} from "./autoresponder";
 
 describe("runJsPsychTimeline blocking", () => {
   const originalWindow = globalThis.window;
@@ -120,5 +126,53 @@ describe("runJsPsychTimeline blocking", () => {
 
     expect(profile.enabled).toBe(true);
     expect(profile.jsPsychSimulationMode).toBe("data-only");
+  });
+
+  it("resolves and samples survey submit delay from autoresponder profile", () => {
+    (globalThis as any).window = {
+      location: { search: "", assign: () => {}, replace: () => {} },
+    };
+    const profile = resolveAutoResponderProfile({
+      coreConfig: {
+        selection: { taskId: "bricks" },
+        autoresponder: {
+          enabled: true,
+          surveySubmitDelayMs: { minMs: 25, maxMs: 35 },
+        },
+      },
+      taskConfig: {},
+      selection: {
+        platform: "local",
+        taskId: "bricks",
+        configPath: "bricks/evanderHons",
+        participant: { participantId: "p1", studyId: "s1", sessionId: "ss1", sonaId: null },
+        source: { task: "default" },
+      },
+    });
+
+    configureAutoResponder(profile);
+    const sample = sampleAutoSurveySubmitDelayMs();
+    expect(sample).not.toBeNull();
+    expect(sample as number).toBeGreaterThanOrEqual(25);
+    expect(sample as number).toBeLessThanOrEqual(35);
+  });
+
+  it("samples bounded integers for survey randomization", () => {
+    configureAutoResponder({
+      enabled: true,
+      seed: "test",
+      jsPsychSimulationMode: "visual",
+      continueDelayMs: { minMs: 0, maxMs: 0 },
+      surveySubmitDelayMs: { minMs: 0, maxMs: 0 },
+      responseRtMs: { meanMs: 10, sdMs: 1, minMs: 1, maxMs: 20 },
+      timeoutRate: 0,
+      errorRate: 0,
+      interActionDelayMs: { minMs: 0, maxMs: 0 },
+      holdDurationMs: { minMs: 0, maxMs: 0 },
+      maxTrialDurationMs: 1000,
+    } as any);
+
+    const values = Array.from({ length: 20 }, () => sampleAutoInteger(0, 4));
+    expect(values.every((value) => value !== null && value >= 0 && value <= 4)).toBe(true);
   });
 });

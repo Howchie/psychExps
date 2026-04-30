@@ -538,7 +538,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   private readonly minWindowSize: number;
   private readonly maxWindowSize: number;
   private readonly t0Mode: "fixed" | "min_rt_multiplier" | "mix";
-  private readonly t0FixedMs: number;
+  private readonly t0FixedS: number;
   private readonly t0Multiplier: number;
   private readonly lower: number;
   private readonly upper: number;
@@ -546,7 +546,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
   private readonly rtWindow: number[] = [];
   private readonly rtAll: number[] = [];
-  private minObservedRtMs: number | null = null;
+  private minObservedRtS: number | null = null;
   private mu0: number;
   private precision0: number;
   private kappa0: number;
@@ -568,7 +568,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
     this.maxWindowSize = Math.max(this.minWindowSize, Math.floor(toPositive(config.maxWindowSize, 50)));
     const t0ModeRaw = String(raw.t0Mode ?? raw.t0_mode ?? raw.t0mod ?? "mix");
     this.t0Mode = t0ModeRaw === "min_rt_multiplier" || t0ModeRaw === "mix" ? t0ModeRaw : "fixed";
-    this.t0FixedMs = Math.max(0, toFinite(raw.t0, 0));
+    this.t0FixedS = Math.max(0, toFinite(raw.t0, 0));
     this.t0Multiplier = Math.min(0.999, Math.max(0, toFinite(raw.t0Multiplier ?? raw.t0_multiplier ?? raw.t0mult, 0.5)));
     this.lower = clampProbability(config.credibleInterval?.lower, 0.05);
     this.upper = clampProbability(config.credibleInterval?.upper, 0.95);
@@ -578,19 +578,21 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
     this.mu0 = toFinite(config.priors?.mu0, 2);
     this.precision0 = toPositive(config.priors?.precision0, 1);
-    this.kappa0 = toPositive(config.priors?.kappa0, 6);
-    this.beta0 = toPositive(config.priors?.beta0, 1);
+    this.kappa0 = toPositive(config.priors?.kappa0, 3);
+    this.beta0 = toPositive(config.priors?.beta0, 0.4);
   }
 
   observe(observation: OnlineTransformObservation): OnlineParameterTransformEstimate | null {
     if (!this.includeOutcomes.has(observation.outcome)) return null;
     if (!(observation.rtMs && observation.rtMs > 0)) return null;
+    const rtS = observation.rtMs / 1000;
+    if (!(rtS > 0)) return null;
 
-    this.minObservedRtMs = this.minObservedRtMs === null
-      ? observation.rtMs
-      : Math.min(this.minObservedRtMs, observation.rtMs);
-    this.rtWindow.push(observation.rtMs);
-    this.rtAll.push(observation.rtMs);
+    this.minObservedRtS = this.minObservedRtS === null
+      ? rtS
+      : Math.min(this.minObservedRtS, rtS);
+    this.rtWindow.push(rtS);
+    this.rtAll.push(rtS);
     while (this.rtWindow.length > this.maxWindowSize) {
       this.rtWindow.shift();
     }
@@ -613,7 +615,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
     if (this.priorUpdateMode === "shift_means") {
       this.mu0 = fit.posterior.tlocationP;
-      const nextBeta0 = ((2 * fit.posterior.nakashapeP) - 1) / (2 * fit.a * fit.a);
+      const nextBeta0 = ((2 * this.kappa0) - 1) / (2 * fit.a * fit.a);
       if (Number.isFinite(nextBeta0) && nextBeta0 > 0) this.beta0 = nextBeta0;
     }
 
@@ -634,9 +636,9 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
       aux: {
         windowSize: this.rtWindow.length,
         t0Mode: this.t0Mode,
-        t0FixedMs: this.t0FixedMs,
+        t0FixedS: this.t0FixedS,
         t0Multiplier: this.t0Multiplier,
-        minObservedRtMs: this.minObservedRtMs,
+        minObservedRtS: this.minObservedRtS,
         prior: {
           mu0: this.mu0,
           precision0: this.precision0,
@@ -651,7 +653,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   reset(): void {
     this.rtWindow.length = 0;
     this.rtAll.length = 0;
-    this.minObservedRtMs = null;
+    this.minObservedRtS = null;
     this.updateCount = 0;
     this.latestEstimate = null;
   }
@@ -659,11 +661,11 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   exportState(): Record<string, unknown> {
     return {
       t0Mode: this.t0Mode,
-      t0FixedMs: this.t0FixedMs,
+      t0FixedS: this.t0FixedS,
       t0Multiplier: this.t0Multiplier,
-      minObservedRtMs: this.minObservedRtMs,
+      minObservedRtS: this.minObservedRtS,
       windowSize: this.rtWindow.length,
-      windowRtMs: this.rtWindow.slice(),
+      windowRtS: this.rtWindow.slice(),
       priors: {
         mu0: this.mu0,
         precision0: this.precision0,
@@ -684,9 +686,9 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   }
 
   private resolveT0(): number {
-    if (this.t0Mode === "fixed") return this.t0FixedMs;
+    if (this.t0Mode === "fixed") return this.t0FixedS;
     if (this.t0Mode === "mix") {
-      if (this.rtAll.length < 2) return this.t0FixedMs;
+      if (this.rtAll.length < 2) return this.t0FixedS;
       const minRt = Math.min(...this.rtAll);
       const mom = waldMomentT0Estimate(this.rtAll);
       const fb = robustT0Fallback(this.rtAll, this.t0Multiplier);
@@ -717,8 +719,8 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
       if (!Number.isFinite(t0) || t0 <= 0.05) t0 = minRt * 0.1;
       return t0;
     }
-    if (!(this.minObservedRtMs && this.minObservedRtMs > 0)) return this.t0FixedMs;
-    return this.t0Multiplier * this.minObservedRtMs;
+    if (!(this.minObservedRtS && this.minObservedRtS > 0)) return this.t0FixedS;
+    return this.t0Multiplier * this.minObservedRtS;
   }
 }
 

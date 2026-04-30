@@ -195,6 +195,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   const legacyDrtRaw = resolveScopedModuleConfig(resolvedCfg, "drt") ?? {};
   const resolvedDrtConfig =
     injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
+  const autoProfile = getAutoResponderProfile();
+  const shouldSimulateDataOnly = isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === 'data-only';
   const drtController = injectedDrtRuntime?.controller ?? null;
   if (resolvedDrtConfig.enabled && !drtController) {
     throw new Error('Bricks DRT is enabled but no module-scoped DRT runtime was injected.');
@@ -259,7 +261,6 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   let pendingReplenish: { brickId: string; dueAtMs: number } | null = null;
   const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
   let lastHudSignature = '';
-  const autoProfile = getAutoResponderProfile();
   const autoEnabled = isAutoResponderEnabled();
   const maxTimeSecRaw = resolvedCfg.trial?.maxTimeSec;
   const configuredMaxDuration =
@@ -612,6 +613,14 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     events: [],
   };
 
+  const finalizePracticeDrt = (durationMs: number): void => {
+    if (!drtController || finalizedDrtData !== null) return;
+    if (shouldSimulateDataOnly && injectedDrtRuntime?.stopOnCleanup !== false) {
+      drtController.simulateDataOnlyWindow(durationMs);
+    }
+    finalizedDrtData = drtController.stop();
+  };
+
   const cleanup = (keyHandler: (e: KeyboardEvent) => void) => {
     ended = true;
     window.removeEventListener('keydown', keyHandler);
@@ -627,7 +636,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         if (injectedDrtRuntime?.stopOnCleanup === false) {
           finalizedDrtData = drtController.exportData();
         } else {
-          finalizedDrtData = drtController.stop();
+          finalizePracticeDrt(gameState.elapsed);
         }
       } else {
         finalizedDrtData = emptyDrtData;
@@ -706,7 +715,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     };
     const stopDrtForPendingEnd = () => {
       if (finalizedDrtData !== null || !drtController) return;
-      finalizedDrtData = drtController.stop();
+      finalizePracticeDrt(gameState.elapsed);
       drtPresentation?.hideAll();
       activeStimulusId = null;
     };
@@ -870,13 +879,17 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       if (stopButton) {
         stopButton.style.display = 'block';
       }
-      drtController?.start(0);
+      if (!shouldSimulateDataOnly) {
+        drtController?.start(0);
+      }
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
       startLoop();
     };
 
     if (trialStarted) {
-      drtController?.start(0);
+      if (!shouldSimulateDataOnly) {
+        drtController?.start(0);
+      }
       nextAutoActionAt = sampleAutoInteractionDelayMs() ?? 900;
       startLoop();
     }

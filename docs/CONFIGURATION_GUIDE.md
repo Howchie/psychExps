@@ -119,6 +119,7 @@ Global defaults belong in core config (`configs/core/default.json`), and task co
     "enabled": false,
     "jsPsychSimulationMode": "visual",
     "continueDelayMs": { "minMs": 800, "maxMs": 2600 },
+    "surveySubmitDelayMs": { "minMs": 120, "maxMs": 420 },
     "responseRtMs": { "meanMs": 720, "sdMs": 210, "minMs": 180, "maxMs": 3200 },
     "timeoutRate": 0.08,
     "errorRate": 0.12,
@@ -140,6 +141,7 @@ In JATOS deployments, if the browser URL no longer contains query params after P
 Behavior:
 - jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode (`visual` by default).
 - Continue screens auto-advance with sampled delays.
+- Survey screens auto-fill required answers and submit with `surveySubmitDelayMs` timing (single-choice and slider answers are randomized).
 - Native tasks (`bricks`, `tracking`, `change_detection`) auto-start and apply task-specific synthetic timing guards.
 - When `task.modules.drt.enabled` is true:
   - `auto_mode=visual`: DRT uses live runtime with synthetic key responses.

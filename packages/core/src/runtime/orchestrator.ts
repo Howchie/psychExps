@@ -484,19 +484,23 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           trialIndex: ctx.trialIndex,
         });
         // Auto-handle trial-scoped modules
-        moduleRunner.startScopedModules({
-          scope: "trial",
-          blockIndex: ctx.blockIndex,
-          trialIndex: ctx.trialIndex,
-          moduleConfigs: trialScopedModules,
-          context: {
-            block: ctx.block,
+          moduleRunner.startScopedModules({
+            scope: "trial",
             blockIndex: ctx.blockIndex,
-            trial: ctx.trial,
             trialIndex: ctx.trialIndex,
-            resolver: context.resolver,
-            locals: (ctx.block as any).variables,
-            displayElement: resolvedTrialModuleContext?.displayElement ?? container,
+            moduleConfigs: trialScopedModules,
+            context: {
+              block: ctx.block,
+              blockIndex: ctx.blockIndex,
+              trial: ctx.trial,
+              trialIndex: ctx.trialIndex,
+              participantId: context.selection.participant.participantId,
+              sessionId: context.selection.participant.sessionId,
+              configPath: context.selection.configPath ?? undefined,
+              taskId: context.selection.taskId,
+              resolver: context.resolver,
+              locals: (ctx.block as any).variables,
+              displayElement: resolvedTrialModuleContext?.displayElement ?? container,
             ...(resolvedTrialModuleContext?.borderTargetElement
               ? { borderTargetElement: resolvedTrialModuleContext.borderTargetElement }
               : {}),
@@ -551,6 +555,10 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             context: {
               block: ctx.block,
               blockIndex: ctx.blockIndex,
+              participantId: context.selection.participant.participantId,
+              sessionId: context.selection.participant.sessionId,
+              configPath: context.selection.configPath ?? undefined,
+              taskId: context.selection.taskId,
               resolver: context.resolver,
               locals: (ctx.block as any).variables,
               displayElement: resolvedBlockModuleContext?.displayElement ?? container,

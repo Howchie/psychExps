@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { configureAutoResponder, isAutoResponderEnabled } from '@experiments/core';
+import { configureAutoResponder, DrtController, isAutoResponderEnabled } from '@experiments/core';
 import { runConveyorTrial } from './runConveyorTrial.js';
 import { runHoldDurationPractice } from './runHoldDurationPractice.js';
 import { GameState } from './game_state.js';
@@ -60,6 +60,53 @@ const SPOTLIGHT_CONFIG = {
       enable: true,
       switchMode: 'on_clear',
       sequence: [0],
+    },
+  },
+};
+
+const DRT_ENABLED_CONFIG = {
+  ...BASE_CONFIG,
+  bricks: {
+    ...BASE_CONFIG.bricks,
+    forcedSet: [],
+    maxBricksPerTrial: 999,
+    spawn: {
+      ratePerSec: { type: 'fixed', value: 0 },
+      interSpawnDist: null,
+    },
+  },
+  trial: {
+    ...BASE_CONFIG.trial,
+    mode: 'fixed_time',
+    maxTimeSec: 1,
+    endDelayMs: 0,
+    forcedOrder: {
+      enable: false,
+    },
+  },
+  task: {
+    modules: {
+      drt: {
+        enabled: true,
+        scope: 'trial',
+        key: ' ',
+        responseWindowMs: 250,
+        displayDurationMs: 120,
+        responseTerminatesStimulus: true,
+        isiSampler: { type: 'uniform', min: 80, max: 120 },
+        transformPersistence: 'session',
+        parameterTransforms: [
+          {
+            type: 'wald_conjugate',
+            t0Mode: 'min_rt_multiplier',
+            t0Multiplier: 0.5,
+            priorUpdate: {
+              enabled: true,
+              mode: 'shift_means',
+            },
+          },
+        ],
+      },
     },
   },
 };
@@ -149,6 +196,65 @@ describe('Bricks auto-responder: data-only mode', () => {
     const stats = (result.game as any)?.stats ?? {};
     const completed = (stats.cleared ?? 0) + (stats.dropped ?? 0);
     expect(completed).toBeGreaterThanOrEqual(2);
+  });
+
+  it('runConveyorTrial data-only still exports DRT response rows when DRT is enabled', async () => {
+    const controller = new DrtController({
+      enabled: true,
+      key: 'space',
+      responseWindowMs: 250,
+      displayDurationMs: 120,
+      responseTerminatesStimulus: true,
+      nextIsiMs: () => 100,
+      parameterTransforms: [
+        {
+          type: 'wald_conjugate',
+          t0Mode: 'min_rt_multiplier',
+          t0Multiplier: 0.5,
+          priorUpdate: {
+            enabled: true,
+            mode: 'shift_means',
+          },
+        } as any,
+      ],
+    } as any, {}, {});
+
+    try {
+      const result = await runConveyorTrial({
+        ...commonArgs,
+        displayElement,
+        config: DRT_ENABLED_CONFIG,
+        drtRuntime: {
+          config: {
+            enabled: true,
+            scope: 'trial',
+            key: 'space',
+            responseWindowMs: 250,
+            displayDurationMs: 120,
+            responseTerminatesStimulus: true,
+            isiSampler: { type: 'uniform', min: 80, max: 120 },
+            transformPersistence: 'session',
+            parameterTransforms: [
+              {
+                type: 'wald_conjugate',
+                t0Mode: 'min_rt_multiplier',
+                t0Multiplier: 0.5,
+                priorUpdate: {
+                  enabled: true,
+                  mode: 'shift_means',
+                },
+              } as any,
+            ],
+          } as any,
+          controller,
+          stopOnCleanup: true,
+        },
+      });
+
+      expect(controller.exportResponseRows().length).toBeGreaterThan(0);
+    } finally {
+      controller.stop();
+    }
   });
 
   it('runHoldDurationPractice completes in data-only mode and returns valid data', async () => {

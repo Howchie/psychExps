@@ -2,7 +2,11 @@ import { asArray, asObject, asString, toNonNegativeNumber, toPositiveNumber, toU
 import { normalizeKey } from "../infrastructure/keys";
 import { SeededRandom } from "../infrastructure/random";
 import { createSampler } from "../infrastructure/sampling";
-import { getAutoResponderProfile, isAutoResponderEnabled, sampleAutoResponse } from "../runtime/autoresponder";
+import {
+  getAutoResponderProfile,
+  isAutoResponderEnabled,
+  sampleAutoResponseRtSecondsWald,
+} from "../runtime/autoresponder";
 import {
   OnlineParameterTransformRunner,
   type OnlineParameterTransformConfig,
@@ -942,16 +946,21 @@ export class DrtController {
     };
     const scheduleVirtualAutoResponse = (stimulus: DrtStimulusState) => {
       if (!isAutoResponderEnabled()) return;
-      const sampled = sampleAutoResponse({
-        validResponses: [this.config.key],
-        expectedResponse: this.config.key,
-        trialDurationMs: this.config.responseWindowMs,
+      const sampledWaldRtSeconds = sampleAutoResponseRtSecondsWald({
+        drift: 3,
+        threshold: 2,
+        t0Seconds: 0.1,
+        noiseScale: 1,
       });
-      if (!sampled?.response || sampled.rtMs == null) return;
-      const delayMs = Math.max(0, Math.min(this.config.responseWindowMs, Math.round(sampled.rtMs)));
+      if (sampledWaldRtSeconds == null) return;
+      if (sampledWaldRtSeconds > (this.config.responseWindowMs / 1000)) return;
+      const delayMs = Math.max(
+        0,
+        Math.min(this.config.responseWindowMs, Math.round(sampledWaldRtSeconds * 1000)),
+      );
       pendingAutoResponse = {
         stimId: stimulus.id,
-        key: sampled.response,
+        key: this.config.key,
         dueAtMs: stimulus.start + delayMs,
       };
     };
@@ -1127,19 +1136,24 @@ export class DrtController {
 
   private maybeScheduleAutoResponse(stimulus: DrtStimulusState): void {
     if (!isAutoResponderEnabled()) return;
-    const sampled = sampleAutoResponse({
-      validResponses: [this.config.key],
-      expectedResponse: this.config.key,
-      trialDurationMs: this.config.responseWindowMs,
+    const sampledWaldRtSeconds = sampleAutoResponseRtSecondsWald({
+      drift: 3,
+      threshold: 2,
+      t0Seconds: 0.1,
+      noiseScale: 1,
     });
-    if (!sampled?.response || sampled.rtMs == null) return;
-    const delayMs = Math.max(0, Math.min(this.config.responseWindowMs, Math.round(sampled.rtMs)));
+    if (sampledWaldRtSeconds == null) return;
+    if (sampledWaldRtSeconds > (this.config.responseWindowMs / 1000)) return;
+    const delayMs = Math.max(
+      0,
+      Math.min(this.config.responseWindowMs, Math.round(sampledWaldRtSeconds * 1000)),
+    );
     this.autoResponseTimer = setTimeout(() => {
       this.autoResponseTimer = null;
       if (!this.started || !this.enabled) return;
       const activeStimulusId = this.activePresentation?.stim.id ?? null;
       if (activeStimulusId !== stimulus.id) return;
-      this.handleKey(sampled.response as string);
+      this.handleKey(this.config.key);
     }, delayMs);
   }
 
@@ -1158,6 +1172,7 @@ export interface DrtModuleResult {
 
 export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
   readonly id = "drt";
+  private static sessionTransformRunners = new Map<string, OnlineParameterTransformRunner>();
 
   constructor(private options: Omit<DrtControllerOptions, "transformRunner"> = {}) {}
 
@@ -1169,11 +1184,13 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
   start(config: ScopedDrtConfig, address: TaskModuleAddress, context: TaskModuleContext): TaskModuleHandle<DrtModuleResult> {
     const autoProfile = getAutoResponderProfile();
     const shouldSimulateDataOnly = isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === "data-only";
+    const sessionTransformRunner = this.resolveSessionTransformRunner(config, context);
     const controller = new DrtController(
       config,
       {},
       {
         ...this.options,
+        ...(sessionTransformRunner ? { transformRunner: sessionTransformRunner } : {}),
         displayElement: context.displayElement,
         borderTargetElement: context.borderTargetElement,
         borderTargetRect: context.borderTargetRect,
@@ -1203,6 +1220,29 @@ export class DrtModule implements TaskModule<ScopedDrtConfig, DrtModuleResult> {
       },
       controller,
     };
+  }
+
+  private resolveSessionTransformRunner(
+    config: ScopedDrtConfig,
+    context: TaskModuleContext,
+  ): OnlineParameterTransformRunner | null {
+    if (config.transformPersistence !== "session") return null;
+    if (!Array.isArray(config.parameterTransforms) || config.parameterTransforms.length === 0) return null;
+    const participantId = context.participantId;
+    const sessionId = context.sessionId;
+    if (!participantId || !sessionId) return null;
+    const key = [
+      participantId,
+      sessionId,
+      context.configPath ?? "",
+      context.taskId ?? "",
+      JSON.stringify(config.parameterTransforms),
+    ].join("::");
+    const existing = DrtModule.sessionTransformRunners.get(key);
+    if (existing) return existing;
+    const created = new OnlineParameterTransformRunner(config.parameterTransforms);
+    DrtModule.sessionTransformRunners.set(key, created);
+    return created;
   }
 }
 

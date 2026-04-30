@@ -189,6 +189,16 @@
       }
     ]
   },
+  "autoresponder": {
+    "continueDelayMs": {
+      "minMs": 180,
+      "maxMs": 520
+    },
+    "surveySubmitDelayMs": {
+      "minMs": 40,
+      "maxMs": 140
+    }
+  },
   "manipulations": [
     {
       "id": "difficulty_practice",
@@ -530,7 +540,7 @@
     {
       "label": "Block1",
       "phase": "main",
-      "trials": 4,
+      "trials": 20,
       "manipulations": [
         "difficulty_low",
         "condition_plan"
@@ -542,7 +552,7 @@
     {
       "label": "High Difficulty",
       "phase": "main",
-      "trials": 4,
+      "trials": 20,
       "manipulations": [
         "difficulty_high",
         "condition_plan"
@@ -550,9 +560,13 @@
     }
   ],
   "instructions": {
+    "showTaskTitleCard": false,
+    "showBlockLabel": false,
+    "preBlockBeforeBlockIntro": true,
+    "skipBeforeBlockScreensOnRepeat": true,
     "introPages": [
       {
-        "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit. Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward.</div>"
+        "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Welcome to the box task!<p>You will play a game where you will try to open as many boxes as you can within a time limit. Each trial will display four conveyor belts with moving boxes. Opening a box will give you a random reward in the form of coins.<p>Sometimes you will see a present - these are worth more coins.<p><img src='assets/evander-bricks/brick_types.png' alt='Present vs Crate example' style='max-width: 480px; width: 100%; height: auto;'/><p>The width of a box or present indicates the required processing time.<p>Each line ends at a furnace. If any box or present reaches the furnace, it is destroyed and you will not get that reward.</div>"
       },
       "To open a box, you must click and hold the left mouse button while your cursor is within the highlighted window around it. You need to try to hold the mouse button for {bricks.completionParams.target_hold_ms} ms ({bricks.completionParams.target_hold_ms / 1000} s), then release it. The closer to exactly {bricks.completionParams.target_hold_ms} ms you hold the button for, the more of the box will disappear.\n\nIf you hold the button too long or short, less of the box will be removed.",
       "We will start with a practice of the click-and-hold task."
@@ -576,8 +590,50 @@
     },
     "showBlockIntro": false,
     "showBlockLabel": false,
-    "endPages": "That concludes the experiment.\nThank you very much for participating."
- },
+    "endPages": "DO NOT CLOSE THIS WINDOW!\nThat concludes the experiment. \nThank you very much for participating.\n\nPlease read the debrief form on the next screen, then click Continue.\nThe experiment will redirect to SONA and automatically apply your credits.\n\nDo not close the window until you see a message from SONA that your credits have been awarded!",
+    "insertions": [
+      {
+        "id": "start_fullscreen",
+        "at": "task_intro_before",
+        "pages": [
+          {
+            "title": "Ready to begin",
+            "text": "Click the button below to start the study in fullscreen mode.",
+            "actions": [
+              { "id": "start_fullscreen", "label": "Start in fullscreen", "action": "continue" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "consent_form",
+        "at": "task_intro_before",
+        "pages": [
+          {
+            "title": "",
+            "html": "<iframe src=\"assets/evander-bricks/consent.html\" title=\"Consent form\" style=\"width:min(980px,96vw);height:90vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
+            "actions": [
+              { "id": "consent_yes", "label": "Yes", "action": "continue" },
+              { "id": "consent_no", "label": "No (exit study)", "action": "exit" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "debrief_form",
+        "at": "task_end_after",
+        "pages": [
+          {
+            "title": "Debrief",
+            "html": "<iframe src=\"assets/evander-bricks/debrief.html\" title=\"Debrief form\" style=\"width:min(980px,96vw);height:80vh;border:1px solid #d1d5db;border-radius:8px;background:#fff;\"></iframe>",
+            "actions": [
+              { "id": "debrief_continue", "label": "Continue", "action": "continue" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
  "ui": {
     "pageBackground": "linear-gradient(180deg, #DBDBDB 0%, #ADADAD 100%)",
     "cardWidth": "600px",
@@ -627,8 +683,7 @@
         "parameterTransforms": [
           {
             "type": "wald_conjugate",
-            "t0Mode": "min_rt_multiplier",
-            "t0Multiplier": 0.5,
+            "t0Mode": "mix",
             "priorUpdate": {
               "enabled": true,
               "mode": "shift_means"
@@ -849,5 +904,12 @@
       "imageRendering": "auto",
       "pixelSnapBricks": false
     }
-  }   
+  },
+    "completion": {
+        "redirect": {
+          "enabled": true,
+          "completeUrlTemplate": "https://uwapsychology.sona-systems.com/webstudy_credit.aspx?experiment_id=1829&credit_token=1a3105ec2a8542868300b761e77cc8d1&survey_code={participantId}",
+          "incompleteUrlTemplate": ""
+    }
+  }
 }

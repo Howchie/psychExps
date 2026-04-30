@@ -15,6 +15,10 @@ export interface TaskModuleContext<TBlock = unknown, TTrial = unknown> {
   blockIndex?: number;
   trial?: TTrial;
   trialIndex?: number;
+  participantId?: string;
+  sessionId?: string;
+  configPath?: string;
+  taskId?: string;
   displayElement?: HTMLElement;
   borderTargetElement?: HTMLElement;
   borderTargetRect?: () => DOMRect | null;

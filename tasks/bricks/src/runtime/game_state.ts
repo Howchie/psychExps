@@ -40,7 +40,6 @@ interface BrickRecord {
   textureCategoryId: string | null;
   textureCategoryLabel: string | null;
   value: number;
-  isTarget: boolean;
   workDeadlineMs: number | null;
   targetHoldMs: number | null;
   progressPerPerfect: number | null;
@@ -482,7 +481,6 @@ export class GameState {
           forcedSetIndex: index,
           label: entry?.label ?? null,
           value: Number.isFinite(Number(sampledValue)) ? Number(sampledValue) : null,
-          isTarget: Boolean(entry?.isTarget ?? entry?.is_target),
           workDeadlineMs: Number.isFinite(Number(sampledWorkDeadlineMs))
             ? Number(sampledWorkDeadlineMs)
             : null,
@@ -1124,7 +1122,6 @@ export class GameState {
       textureCategoryId: selectedCategories.texture?.id ?? null,
       textureCategoryLabel: selectedCategories.texture?.label ?? null,
       value: Math.max(0, Number(resolvedTraits.value ?? 0)),
-      isTarget: Boolean(metadata?.isTarget),
       workDeadlineMs: optionalNumber(resolvedTraits.workDeadlineMs),
       targetHoldMs: optionalNumber(resolvedTraits.targetHoldMs),
       progressPerPerfect: optionalNumber(resolvedTraits.progressPerPerfect),
@@ -1155,7 +1152,6 @@ export class GameState {
       texture_category_id: brick.textureCategoryId,
       texture_category_label: brick.textureCategoryLabel,
       value: brick.value,
-      is_target: brick.isTarget,
       work_deadline_ms: brick.workDeadlineMs,
       target_hold_ms: brick.targetHoldMs,
       progress_per_perfect: brick.progressPerPerfect,

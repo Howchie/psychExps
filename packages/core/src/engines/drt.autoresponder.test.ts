@@ -56,7 +56,7 @@ describe("DrtController autoresponder integration", () => {
     const controller = new DrtController({
       enabled: true,
       key: "space",
-      responseWindowMs: 220,
+      responseWindowMs: 3000,
       displayDurationMs: 120,
       nextIsiMs: () => 1,
     }, {}, { now: () => nowMs });
@@ -129,7 +129,7 @@ describe("DrtController autoresponder integration", () => {
         enabled: true,
         scope: "trial",
         key: "space",
-        responseWindowMs: 250,
+        responseWindowMs: 3000,
         displayDurationMs: 120,
         responseTerminatesStimulus: true,
         isiSampler: { type: "uniform", min: 80, max: 120 },
@@ -143,5 +143,51 @@ describe("DrtController autoresponder integration", () => {
     expect(result.engine.stats.presented).toBeGreaterThan(0);
     expect(result.engine.stats.hits).toBeGreaterThan(0);
     expect(result.engine.events.some((event) => event.type === "drt_response")).toBe(true);
+  });
+
+  it("persists session transform state across block-scoped DRT modules when configured", () => {
+    configureAutoResponder({
+      enabled: true,
+      jsPsychSimulationMode: "data-only",
+      seed: "drt-session-transform-test",
+      continueDelayMs: { minMs: 0, maxMs: 0 },
+      responseRtMs: { meanMs: 70, sdMs: 1, minMs: 50, maxMs: 90 },
+      timeoutRate: 0,
+      errorRate: 0,
+      interActionDelayMs: { minMs: 0, maxMs: 0 },
+      holdDurationMs: { minMs: 0, maxMs: 0 },
+      maxTrialDurationMs: 10_000,
+    } as any);
+
+    const module = new DrtModule();
+    const config = {
+      enabled: true,
+      scope: "block",
+      key: "space",
+      responseWindowMs: 3000,
+      displayDurationMs: 120,
+      responseTerminatesStimulus: true,
+      isiSampler: { type: "uniform", min: 80, max: 120 },
+      transformPersistence: "session",
+      parameterTransforms: [{ type: "wald_conjugate", id: "rt_wald", minWindowSize: 2, maxWindowSize: 25 }],
+      dataOnlySimulationDurationMs: 2500,
+    } as any;
+
+    const first = module.start(
+      config,
+      { scope: "block", blockIndex: 0, trialIndex: null },
+      { participantId: "p1", sessionId: "s1", configPath: "configs/bricks/evanderHons.json", taskId: "bricks" },
+    ).stop();
+    const firstSize = Number(first.responseRows.at(-1)?.transformColumns?.transform_sample_size ?? 0);
+
+    const second = module.start(
+      config,
+      { scope: "block", blockIndex: 1, trialIndex: null },
+      { participantId: "p1", sessionId: "s1", configPath: "configs/bricks/evanderHons.json", taskId: "bricks" },
+    ).stop();
+    const secondSize = Number(second.responseRows.at(-1)?.transformColumns?.transform_sample_size ?? 0);
+
+    expect(firstSize).toBeGreaterThan(0);
+    expect(secondSize).toBeGreaterThan(firstSize);
   });
 });

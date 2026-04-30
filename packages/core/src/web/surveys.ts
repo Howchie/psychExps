@@ -1,4 +1,4 @@
-import { isAutoResponderEnabled, sampleAutoContinueDelayMs } from "../runtime/autoresponder";
+import { isAutoResponderEnabled, sampleAutoInteger, sampleAutoSurveySubmitDelayMs } from "../runtime/autoresponder";
 import { applyButtonStyleOverrides, escapeHtml, sleep, type ButtonStyleOverrides } from "./ui";
 import { getElementBySafeId } from "./domUtils";
 
@@ -161,7 +161,7 @@ function waitForSurveySubmit(
       const autoAnswers = autoFillSurvey(container, survey);
       if (autoAnswers > 0) {
         void (async () => {
-          const delay = sampleAutoContinueDelayMs() ?? 0;
+          const delay = sampleAutoSurveySubmitDelayMs() ?? 0;
           await sleep(delay);
           complete();
         })();
@@ -174,9 +174,10 @@ function autoFillSurvey(container: HTMLElement, survey: SurveyDefinition): numbe
   let count = 0;
   for (const question of survey.questions) {
     if (question.type === "single_choice") {
-      const first = question.options[0];
-      if (!first) continue;
-      const selector = `input[name="${cssEscape(surveyQuestionInputName(question.id))}"][value="${cssEscape(String(first.value))}"]`;
+      if (question.options.length === 0) continue;
+      const index = sampleAutoInteger(0, question.options.length - 1) ?? 0;
+      const selected = question.options[index] ?? question.options[0];
+      const selector = `input[name="${cssEscape(surveyQuestionInputName(question.id))}"][value="${cssEscape(String(selected.value))}"]`;
       const input = container.querySelector(selector);
       if (input instanceof HTMLInputElement) {
         input.checked = true;
@@ -189,9 +190,11 @@ function autoFillSurvey(container: HTMLElement, survey: SurveyDefinition): numbe
       if (!(input instanceof HTMLInputElement)) continue;
       const min = Math.min(question.min, question.max);
       const max = Math.max(question.min, question.max);
-      const midpoint = min + (max - min) / 2;
-      const value = Number.isFinite(question.initial) ? Number(question.initial) : midpoint;
-      input.value = String(Math.round(value));
+      const step = Number.isFinite(question.step) ? Math.max(0.0001, Math.abs(Number(question.step))) : 1;
+      const slotCount = Math.max(1, Math.floor((max - min) / step));
+      const slot = sampleAutoInteger(0, slotCount) ?? Math.floor(slotCount / 2);
+      const value = min + slot * step;
+      input.value = String(Math.max(min, Math.min(max, value)));
       syncSliderValueLabel(container, question.id);
       count += 1;
     }
