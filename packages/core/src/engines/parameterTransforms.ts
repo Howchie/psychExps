@@ -40,7 +40,7 @@ export interface WaldConjugateTransformConfig {
   minWindowSize?: number;
   maxWindowSize?: number;
   t0?: number;
-  t0Mode?: "fixed" | "min_rt_multiplier";
+  t0Mode?: "fixed" | "min_rt_multiplier" | "mix";
   t0Multiplier?: number;
   priors?: {
     mu0?: number;
@@ -242,6 +242,84 @@ function nakagamiPpf(p: number, shape: number, scale: number): number {
   return 0.5 * (low + high);
 }
 
+function waldMomentT0Estimate(rt: number[]): number | null {
+  if (rt.length < 3) return null;
+  const mean = rt.reduce((acc, v) => acc + v, 0) / rt.length;
+  let m2 = 0;
+  let m3 = 0;
+  for (const value of rt) {
+    const d = value - mean;
+    m2 += d * d;
+    m3 += d * d * d;
+  }
+  m2 /= rt.length;
+  m3 /= rt.length;
+  if (!Number.isFinite(m2) || !Number.isFinite(m3) || Math.abs(m3) < 1e-12) return null;
+  const t0 = mean - (3 * m2 * m2) / m3;
+  return Number.isFinite(t0) ? t0 : null;
+}
+
+function robustT0Fallback(rt: number[], prop: number): number {
+  const sorted = rt.slice().sort((a, b) => a - b);
+  const minObs = sorted[0] ?? 0;
+  const p = Math.max(0.01, Math.min(0.99, prop));
+  const gap = sorted.length > 1 ? (sorted[1] - sorted[0]) : 0;
+  let t0 = (minObs - gap) * p;
+  if (!Number.isFinite(t0) || t0 <= 0) t0 = minObs * 0.1;
+  return t0;
+}
+
+function legendrePolyAndPrev(n: number, x: number): { pn: number; pnm1: number } {
+  let p0 = 1;
+  let p1 = x;
+  if (n === 0) return { pn: p0, pnm1: 0 };
+  if (n === 1) return { pn: p1, pnm1: p0 };
+  for (let k = 2; k <= n; k += 1) {
+    const pk = ((2 * k - 1) * x * p1 - (k - 1) * p0) / k;
+    p0 = p1;
+    p1 = pk;
+  }
+  return { pn: p1, pnm1: p0 };
+}
+
+function gaussLegendreNodesWeights(n: number, a: number, b: number): Array<{ node: number; weight: number }> {
+  const out: Array<{ node: number; weight: number }> = [];
+  const m = Math.floor((n + 1) / 2);
+  for (let i = 1; i <= m; i += 1) {
+    let z = Math.cos(Math.PI * (i - 0.25) / (n + 0.5));
+    for (let iter = 0; iter < 50; iter += 1) {
+      const { pn, pnm1 } = legendrePolyAndPrev(n, z);
+      const pp = (n * (z * pn - pnm1)) / (z * z - 1);
+      const zNew = z - pn / pp;
+      if (Math.abs(zNew - z) < 1e-14) {
+        z = zNew;
+        break;
+      }
+      z = zNew;
+    }
+    const { pn, pnm1 } = legendrePolyAndPrev(n, z);
+    const pp = (n * (z * pn - pnm1)) / (z * z - 1);
+    const wStd = 2 / ((1 - z * z) * pp * pp);
+    const x1 = ((b - a) * (-z) + (a + b)) / 2;
+    const x2 = ((b - a) * z + (a + b)) / 2;
+    const w = ((b - a) / 2) * wStd;
+    out.push({ node: x1, weight: w });
+    if (out.length < n) out.push({ node: x2, weight: w });
+  }
+  out.sort((l, r) => l.node - r.node);
+  return out.slice(0, n);
+}
+
+function t0NodeLogScore(xShifted: number[], term1: number, term2: number, term3: number): number {
+  if (term1 <= 0 || term2 <= 0 || term3 <= 0) return Number.NEGATIVE_INFINITY;
+  let sumLog = 0;
+  for (const x of xShifted) {
+    if (!(x > 0) || !Number.isFinite(x)) return Number.NEGATIVE_INFINITY;
+    sumLog += Math.log(x);
+  }
+  return (-1.5 * sumLog) - (term3 * Math.log(term1)) - (0.5 * Math.log(term2));
+}
+
 function saddlepointCore(x: number, mean: number, variance: number, skewness: number): {
   z: number;
   nHat: number;
@@ -327,6 +405,7 @@ interface WaldFitResult {
   n: number;
   posterior: {
     tlocationP: number;
+    nakashapeP: number;
   };
 }
 
@@ -381,27 +460,19 @@ function fitWaldAnalytic(rtWindow: number[], options: WaldFitOptions): WaldFitRe
 
   const nakashapeP = term3;
   const nakascaleP = term3 / term1;
-
   const tlocationP = (prior.mu0 * prior.precision0 + n) / term2;
-  const tscaleP = Math.sqrt(term1 / (term3 * term2));
-  const tdfP = 2 * term3;
 
-  const m1Naka = nakaMoment(1, nakashapeP, nakascaleP);
-  const m2Naka = nakaMoment(2, nakashapeP, nakascaleP);
-  const m3Naka = nakaMoment(3, nakashapeP, nakascaleP);
+  const mL05 = nakaMoment(1, nakashapeP, nakascaleP);
+  const mL10 = nakaMoment(2, nakashapeP, nakascaleP);
+  const mL15 = nakaMoment(3, nakashapeP, nakascaleP);
+  const m1Z = tlocationP * mL05;
+  const m2Z = tlocationP * tlocationP * mL10 + 1 / term2;
+  const m3Z = tlocationP * tlocationP * tlocationP * mL15 + ((3 * tlocationP) / term2) * mL05;
 
-  const m1T = tlocationP;
-  const m2T = tscaleP * tscaleP * tdfP / (tdfP - 2) + tlocationP * tlocationP;
-  const m3T = (tlocationP * (tlocationP * tlocationP * (tdfP - 2) + 3 * tdfP * tscaleP * tscaleP)) / (tdfP - 2);
-
-  const productMoments = mellinProductMoments(
-    [m1Naka, m2Naka, m3Naka],
-    [m1T, m2T, m3T],
-  );
-
-  const meanV = productMoments.mean;
-  const varV = Math.max(productMoments.variance, 1e-12);
-  const skewV = Number.isFinite(productMoments.skewness) ? productMoments.skewness : 0;
+  const meanV = m1Z;
+  const varV = Math.max(m2Z - m1Z * m1Z, 1e-12);
+  const centralM3 = m3Z - (3 * m1Z * m2Z) + (2 * m1Z * m1Z * m1Z);
+  const skewV = Number.isFinite(centralM3) ? (centralM3 / Math.pow(varV, 1.5)) : 0;
 
   const sdV = Math.sqrt(varV);
   const xMin = Math.max(0.001, meanV - 5 * sdV);
@@ -454,6 +525,7 @@ function fitWaldAnalytic(rtWindow: number[], options: WaldFitOptions): WaldFitRe
     n,
     posterior: {
       tlocationP,
+      nakashapeP,
     },
   };
 }
@@ -465,7 +537,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   private readonly includeOutcomes: Set<TransformObservationOutcome>;
   private readonly minWindowSize: number;
   private readonly maxWindowSize: number;
-  private readonly t0Mode: "fixed" | "min_rt_multiplier";
+  private readonly t0Mode: "fixed" | "min_rt_multiplier" | "mix";
   private readonly t0FixedMs: number;
   private readonly t0Multiplier: number;
   private readonly lower: number;
@@ -473,6 +545,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
   private readonly priorUpdateMode: "none" | "shift_means";
 
   private readonly rtWindow: number[] = [];
+  private readonly rtAll: number[] = [];
   private minObservedRtMs: number | null = null;
   private mu0: number;
   private precision0: number;
@@ -493,8 +566,8 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
     );
     this.minWindowSize = Math.max(1, Math.floor(toPositive(config.minWindowSize, 10)));
     this.maxWindowSize = Math.max(this.minWindowSize, Math.floor(toPositive(config.maxWindowSize, 50)));
-    const t0ModeRaw = String(raw.t0Mode ?? raw.t0_mode ?? raw.t0mod ?? "fixed");
-    this.t0Mode = t0ModeRaw === "min_rt_multiplier" ? "min_rt_multiplier" : "fixed";
+    const t0ModeRaw = String(raw.t0Mode ?? raw.t0_mode ?? raw.t0mod ?? "mix");
+    this.t0Mode = t0ModeRaw === "min_rt_multiplier" || t0ModeRaw === "mix" ? t0ModeRaw : "fixed";
     this.t0FixedMs = Math.max(0, toFinite(raw.t0, 0));
     this.t0Multiplier = Math.min(0.999, Math.max(0, toFinite(raw.t0Multiplier ?? raw.t0_multiplier ?? raw.t0mult, 0.5)));
     this.lower = clampProbability(config.credibleInterval?.lower, 0.05);
@@ -517,6 +590,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
       ? observation.rtMs
       : Math.min(this.minObservedRtMs, observation.rtMs);
     this.rtWindow.push(observation.rtMs);
+    this.rtAll.push(observation.rtMs);
     while (this.rtWindow.length > this.maxWindowSize) {
       this.rtWindow.shift();
     }
@@ -539,7 +613,8 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
     if (this.priorUpdateMode === "shift_means") {
       this.mu0 = fit.posterior.tlocationP;
-      this.kappa0 = Math.max(1e-6, fit.a * fit.a + 1);
+      const nextBeta0 = ((2 * fit.posterior.nakashapeP) - 1) / (2 * fit.a * fit.a);
+      if (Number.isFinite(nextBeta0) && nextBeta0 > 0) this.beta0 = nextBeta0;
     }
 
     this.updateCount += 1;
@@ -575,6 +650,7 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
   reset(): void {
     this.rtWindow.length = 0;
+    this.rtAll.length = 0;
     this.minObservedRtMs = null;
     this.updateCount = 0;
     this.latestEstimate = null;
@@ -609,6 +685,38 @@ export class WaldConjugateOnlineTransform implements OnlineParameterTransform {
 
   private resolveT0(): number {
     if (this.t0Mode === "fixed") return this.t0FixedMs;
+    if (this.t0Mode === "mix") {
+      if (this.rtAll.length < 2) return this.t0FixedMs;
+      const minRt = Math.min(...this.rtAll);
+      const mom = waldMomentT0Estimate(this.rtAll);
+      const fb = robustT0Fallback(this.rtAll, this.t0Multiplier);
+      let gl = Number.NaN;
+      const lo = 0.1;
+      const hi = 0.9;
+      const glNodes = gaussLegendreNodesWeights(64, lo * minRt, hi * minRt);
+      let bestScore = Number.NEGATIVE_INFINITY;
+      for (const { node } of glNodes) {
+        const t0 = Math.min(node, minRt * (1 - 1e-8));
+        const shifted = this.rtAll.map((x) => x - t0);
+        if (shifted.some((x) => !(x > 0))) continue;
+        const n = shifted.length;
+        const s1 = shifted.reduce((acc, v) => acc + v, 0);
+        const sInv = shifted.reduce((acc, v) => acc + 1 / v, 0);
+        const term1 = this.beta0 + ((this.mu0 * this.mu0 * this.precision0 + sInv) / 2)
+          - (((this.mu0 * this.precision0 + n) ** 2) / (2 * (this.precision0 + s1)));
+        const term2 = this.precision0 + s1;
+        const term3 = this.kappa0 + n / 2;
+        const score = t0NodeLogScore(shifted, term1, term2, term3);
+        if (Number.isFinite(score) && score > bestScore) {
+          bestScore = score;
+          gl = t0;
+        }
+      }
+      const candidates = [mom ?? Number.NaN, fb, gl].filter((x) => Number.isFinite(x) && x > 0 && x < minRt) as number[];
+      let t0 = candidates.length > 0 ? (candidates.reduce((a, b) => a + b, 0) / candidates.length) : (minRt * 0.1);
+      if (!Number.isFinite(t0) || t0 <= 0.05) t0 = minRt * 0.1;
+      return t0;
+    }
     if (!(this.minObservedRtMs && this.minObservedRtMs > 0)) return this.t0FixedMs;
     return this.t0Multiplier * this.minObservedRtMs;
   }

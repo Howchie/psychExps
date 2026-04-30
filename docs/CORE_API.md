@@ -571,8 +571,10 @@ Core now exports reusable tracking primitives (`tracking.ts`):
   - Moving-window analytic shifted-Wald fit from RT observations.
   - Configurable priors (`mu0`, `precision0`, `kappa0`, `beta0`), window sizes, and credible interval bounds.
   - Non-decision-time (`t0`) supports:
-    - `t0Mode: "fixed"` (default): uses `t0` as constant milliseconds.
+    - `t0Mode: "mix"` (default): averages three robust estimators (method-of-moments, conservative min-RT fallback, and Gauss-Legendre MAP node selection over feasible `t0` values).
+    - `t0Mode: "fixed"`: uses `t0` as constant milliseconds.
     - `t0Mode: "min_rt_multiplier"`: uses `t0 = t0Multiplier * minObservedRtMs`, where `minObservedRtMs` is tracked across all finite observed RTs for that transform instance (not just the moving fit window).
+  - Drift posterior now uses the Gamma-Normal conjugate node moments directly (TMSA), replacing the earlier student-`t`-based approximation.
   - With `transformPersistence: "session"`, that min-RT tracking persists across DRT scope boundaries in a run; with `"scope"`, it resets each scope.
   - Optional trial-varying prior mean shift mode (`priorUpdate.mode: "shift_means"`) matching the provided R/Python pattern.
   - Transform configs are object entries in `parameterTransforms[]` (for example `{ "type": "wald_conjugate" }`), not string shorthands.

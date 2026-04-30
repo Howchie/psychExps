@@ -199,4 +199,13 @@ describe("createVariableResolver arithmetic", () => {
     const token = `$${key}`;
     expect(resolver.resolveToken(token)).toBe(1);
   });
+
+  it("supports explicit namespaces in arithmetic", () => {
+    const resolver = createVariableResolver({
+      namespaces: {
+        config: { value: 500 }
+      }
+    });
+    expect(resolver.resolveInValue("${config.value * 2}")).toBe("1000");
+  });
 });

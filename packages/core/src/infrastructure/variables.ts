@@ -382,6 +382,20 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
       return current;
     };
 
+    const resolveVarOrPath = (name: string): unknown => {
+      const direct = resolveVarInternal(name, context, stack);
+      if (typeof direct !== "undefined") return direct;
+      const dot = name.indexOf(".");
+      if (dot > 0) {
+        const base = name.slice(0, dot);
+        const path = name.slice(dot + 1);
+        const baseValue = resolveVarInternal(base, context, stack);
+        const nested = deepGet(baseValue, path);
+        if (typeof nested !== "undefined") return nested;
+      }
+      return undefined;
+    };
+
     const sampleMatch = text.match(SAMPLE_TOKEN_RE);
     if (sampleMatch) {
       const name = sampleMatch[1];
@@ -397,16 +411,8 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     const varMatch = text.match(VAR_TOKEN_RE);
     if (varMatch) {
       const name = varMatch[1];
-      const direct = resolveVarInternal(name, context, stack);
-      if (typeof direct !== "undefined") return resolveNestedStringResult(direct);
-      const dot = name.indexOf(".");
-      if (dot > 0) {
-        const base = name.slice(0, dot);
-        const path = name.slice(dot + 1);
-        const baseValue = resolveVarInternal(base, context, stack);
-        const nested = deepGet(baseValue, path);
-        if (typeof nested !== "undefined") return resolveNestedStringResult(nested);
-      }
+      const resolved = resolveVarOrPath(name);
+      if (typeof resolved !== "undefined") return resolveNestedStringResult(resolved);
       return token;
     }
 
@@ -432,7 +438,7 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     const simpleMatch = text.match(/^\$([A-Za-z0-9_.-]+)$/);
     if (simpleMatch) {
       const name = simpleMatch[1];
-      const resolved = resolveVarInternal(name, context, stack);
+      const resolved = resolveVarOrPath(name);
       if (typeof resolved !== "undefined") return resolveNestedStringResult(resolved);
     }
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { WaldConjugateOnlineTransform } from "./parameterTransforms";
 
 function obs(rtMs: number) {
@@ -17,6 +19,7 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
       type: "wald_conjugate",
       minWindowSize: 2,
       maxWindowSize: 4,
+      t0Mode: "fixed",
       t0: 120,
     });
     expect(transform.observe(obs(500))).toBeNull();
@@ -58,5 +61,53 @@ describe("WaldConjugateOnlineTransform t0 handling", () => {
     expect(transform.observe(obs(400))).toBeNull();
     const estimate = transform.observe(obs(700));
     expect(estimate?.values.t0).toBeCloseTo(200, 6);
+  });
+
+  it("matches R hybrid implementation (tmsa + mixed t0) on reference fixture", () => {
+    const csvPath = resolve(process.cwd(), "src/engines/__fixtures__/wald_hybrid_reference.csv");
+    const lines = readFileSync(csvPath, "utf8").trim().split("\n");
+    const header = lines[0].split(",");
+    const rows = lines.slice(1).map((line) => {
+      const parts = line.split(",");
+      const row: Record<string, number> = {};
+      for (let i = 0; i < header.length; i += 1) {
+        row[header[i]] = parts[i] === "" ? Number.NaN : Number(parts[i]);
+      }
+      return row;
+    });
+
+    const transform = new WaldConjugateOnlineTransform({
+      type: "wald_conjugate",
+      minWindowSize: 11,
+      maxWindowSize: 50,
+      t0Mode: "mix",
+      t0Multiplier: 0.5,
+      priors: {
+        mu0: 2,
+        precision0: 1,
+        kappa0: 3,
+        beta0: 0.4,
+      },
+      credibleInterval: {
+        lower: 0.05,
+        upper: 0.95,
+      },
+    });
+
+    for (const row of rows) {
+      const estimate = transform.observe(obs(row.rt));
+      if (!Number.isFinite(row.drift_r)) {
+        expect(estimate).toBeNull();
+        continue;
+      }
+      expect(estimate).not.toBeNull();
+      expect(estimate!.values.drift_rate).toBeCloseTo(row.drift_r, 3);
+      expect(estimate!.intervals!.drift_rate.lower).toBeCloseTo(row.drift_lower_r, 3);
+      expect(estimate!.intervals!.drift_rate.upper).toBeCloseTo(row.drift_upper_r, 3);
+      expect(estimate!.values.threshold).toBeCloseTo(row.threshold_r, 5);
+      expect(estimate!.intervals!.threshold.lower).toBeCloseTo(row.threshold_lower_r, 5);
+      expect(estimate!.intervals!.threshold.upper).toBeCloseTo(row.threshold_upper_r, 5);
+      expect(estimate!.values.t0).toBeCloseTo(row.t0_r, 4);
+    }
   });
 });

@@ -94,8 +94,16 @@ export class LifecycleManager {
       ...(topVariables ?? {}),
     };
 
+    const namespaces: Record<string, Record<string, unknown>> = {};
+    for (const [key, value] of Object.entries(taskConfig)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        namespaces[key] = value as Record<string, unknown>;
+      }
+    }
+
     const commonResolverArgs = {
       variables,
+      namespaces,
       seedParts: [
         context.selection.participant.participantId,
         context.selection.participant.sessionId,

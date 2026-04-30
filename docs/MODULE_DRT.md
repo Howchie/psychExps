@@ -69,6 +69,9 @@ Configures a flashing border around the stimulus area (less intrusive than a ded
 The DRT module can run real-time parameter estimation on response latencies.
 
 - **`wald_conjugate`**: Estimates Drift Rate and Threshold parameters from a moving window of DRT RTs using a Bayesian Wald-conjugate model.
+  - Default `t0Mode` is `mix` (method-of-moments + robust fallback + Gauss-Legendre MAP node blend).
+  - Also supports `t0Mode: "fixed"` and `t0Mode: "min_rt_multiplier"`.
+  - Drift estimates use Gamma-Normal conjugate node moments (TMSA) for the posterior summary.
 
 ```json
 "parameterTransforms": [

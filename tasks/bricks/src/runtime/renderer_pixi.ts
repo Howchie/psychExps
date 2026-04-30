@@ -1133,7 +1133,7 @@ export class ConveyorRenderer {
     const alpha = Number(this.config?.display?.beltTexture?.alpha ?? 1);
     const scaleX = Number(this.config?.display?.beltTexture?.scaleX ?? this.config?.display?.beltTexture?.scale ?? 1);
     const scaleY = Number(this.config?.display?.beltTexture?.scaleY ?? this.config?.display?.beltTexture?.scale ?? 1);
-    const pixelSnap = this.config?.display?.beltTexture?.pixelSnap !== false;
+    const pixelSnap = this.config?.display?.beltTexture?.pixelSnap ?? this.pixelSnapBricks;
     const tint = this.config?.display?.beltTexture?.tint ?? null;
 
     const resolution = Math.max(1, Number(this.app?.renderer?.resolution) || 1);
@@ -1293,7 +1293,7 @@ export class ConveyorRenderer {
   _resolveSpotlightSnapMode() {
     const spotlightCfg = this.config?.display?.spotlight || {};
     const snapModeRaw = spotlightCfg.snapMode ?? spotlightCfg.geometrySnapMode ?? spotlightCfg.renderSnapMode;
-    const text = String(snapModeRaw ?? 'screen').trim().toLowerCase();
+    const text = String(snapModeRaw ?? 'none').trim().toLowerCase();
     if (text === 'none' || text === 'off' || text === 'false') {
       return 'none';
     }
@@ -1996,7 +1996,7 @@ export class ConveyorRenderer {
     const dirRaw = this.config?.display?.beltTexture?.scrollDirection;
     const snapModeRaw = this.config?.display?.beltTexture?.scrollSnapMode;
     const scrollSnapMode = (() => {
-      const text = String(snapModeRaw ?? 'none').trim().toLowerCase();
+      const text = String(snapModeRaw ?? 'screen').trim().toLowerCase();
       if (text === 'texture' || text === 'legacy') {
         return 'texture';
       }
@@ -2829,12 +2829,16 @@ export class ConveyorRenderer {
       const vis = this.beltVisuals[conveyorIdx];
       let x = 0;
       if (vis) {
-        // We MUST snap the belt offset and the relative position separately 
-        // to ensure they stay phase-locked and jump pixels at the exact same moment.
-        const snappedBeltOffsetX = this._roundSymmetric(vis.offsetX, step);
         const relativeX = Number(sprite.initialSimX ?? 0) - Number(sprite.initialRendererOffsetX ?? 0);
-        const snappedRelativeX = this._roundSymmetric(relativeX, step);
-        x = snappedBeltOffsetX + snappedRelativeX;
+        if (this.pixelSnapBricks) {
+          // Snap belt offset and relative position separately so they jump pixels at the same moment.
+          const snappedBeltOffsetX = this._roundSymmetric(vis.offsetX, step);
+          const snappedRelativeX = this._roundSymmetric(relativeX, step);
+          x = snappedBeltOffsetX + snappedRelativeX;
+        } else {
+          // Use exact float offset so sub-pixel motion is smooth at any speed.
+          x = vis.offsetX + relativeX;
+        }
       } else {
         x = this._roundSymmetric(brick.x, step);
       }

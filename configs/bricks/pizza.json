@@ -198,7 +198,7 @@
       "maxDevicePixelRatio": 1.5,
       "antialias": true,
       "imageRendering": "auto",
-      "pixelSnapBricks": true
+      "pixelSnapBricks": false
     }
   },
   "conveyors": {
