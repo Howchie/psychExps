@@ -28,7 +28,7 @@ describe('Web Shell Loading (Mocked)', () => {
     const mockAdapter = { manifest: { taskId: 'test-task' }, launch: vi.fn() };
     const adapterMap = new Map([['test-task', mockAdapter]]);
     (buildTaskMap as any).mockReturnValue(adapterMap);
-    (resolveSelection as any).mockReturnValue({ taskId: 'test-task', variantId: 'default' });
+    (resolveSelection as any).mockReturnValue({ taskId: 'test-task' });
 
     // This is a conceptual test for the streamlining logic
     const selection = resolveSelection({} as any);

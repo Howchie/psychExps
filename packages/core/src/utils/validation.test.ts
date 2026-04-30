@@ -28,7 +28,7 @@ describe('validation utilities', () => {
 
   describe('validateCoreSelectionDefaults', () => {
     it('should pass for valid selection', () => {
-      expect(() => validateCoreSelectionDefaults({ selection: { taskId: 'sft', variantId: 'default' } })).not.toThrow();
+      expect(() => validateCoreSelectionDefaults({ selection: { taskId: 'sft' } })).not.toThrow();
     });
 
     it('should throw if selection is missing', () => {
@@ -36,7 +36,7 @@ describe('validation utilities', () => {
     });
 
     it('should throw if taskId is empty', () => {
-      expect(() => validateCoreSelectionDefaults({ selection: { taskId: '', variantId: 'default' } })).toThrow('core.selection.taskId must be non-empty');
+      expect(() => validateCoreSelectionDefaults({ selection: { taskId: '' } })).toThrow('core.selection.taskId must be non-empty');
     });
   });
 });

@@ -336,10 +336,47 @@ async function main() {
   });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
+  let sawJatosRedirectSignal = false;
+
+  await page.addInitScript(() => {
+    const installJatosDiagnostics = () => {
+      const w = window;
+      const j = w?.jatos;
+      if (!j || (j).__autoresponderWrapped) return;
+      const wrap = (name) => {
+        const original = j[name];
+        if (typeof original !== "function") return;
+        j[name] = async (...args) => {
+          try {
+            console.log(`[AutoResponder:JATOS] ${name} called`);
+            const result = await original.apply(j, args);
+            console.log(`[AutoResponder:JATOS] ${name} succeeded`);
+            return result;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[AutoResponder:JATOS] ${name} failed: ${message}`);
+            throw error;
+          }
+        };
+      };
+      wrap("submitResultData");
+      wrap("appendResultData");
+      wrap("endStudy");
+      wrap("endStudyAndRedirect");
+      j.__autoresponderWrapped = true;
+    };
+
+    installJatosDiagnostics();
+    const timer = window.setInterval(installJatosDiagnostics, 250);
+    window.addEventListener("beforeunload", () => window.clearInterval(timer));
+  });
 
   page.on("console", (msg) => {
     const line = `[console:${msg.type()}] ${msg.text()}`;
     console.log(line);
+    if (msg.text().includes("[AutoResponder] JATOS Redirecting to:")) {
+      sawJatosRedirectSignal = true;
+    }
   });
   page.on("pageerror", (err) => {
     console.error(`[pageerror] ${String(err)}`);
@@ -348,11 +385,31 @@ async function main() {
     const failure = req.failure();
     console.error(`[requestfailed] ${req.method()} ${req.url()} ${failure?.errorText || ""}`);
   });
-  page.on("response", (res) => {
+  page.on("response", async (res) => {
     const status = res.status();
+    const req = res.request();
     if (status >= 400) {
-      const req = res.request();
-      console.error(`[response:${status}] ${req.method()} ${res.url()}`);
+      const url = res.url();
+      const method = req.method();
+      const reqHeaders = await req.allHeaders().catch(() => ({}));
+      const reqBody = req.postData() || "";
+      const resText = await res.text().catch(() => "");
+      console.error(`[response:${status}] ${method} ${url}`);
+
+      // Publish fuller diagnostics for JATOS endpoints to debug 400s/500s.
+      if (/\/publix\//i.test(url) || /jatos/i.test(url)) {
+        if (Object.keys(reqHeaders).length > 0) {
+          console.error(`[response:${status}] request headers: ${JSON.stringify(reqHeaders)}`);
+        }
+        if (reqBody) {
+          const truncatedBody = reqBody.length > 4000 ? `${reqBody.slice(0, 4000)}...<truncated>` : reqBody;
+          console.error(`[response:${status}] request body: ${truncatedBody}`);
+        }
+        if (resText) {
+          const truncatedResText = resText.length > 4000 ? `${resText.slice(0, 4000)}...<truncated>` : resText;
+          console.error(`[response:${status}] response body: ${truncatedResText}`);
+        }
+      }
     }
   });
 
@@ -401,6 +458,9 @@ async function main() {
       const advanceControlsVisible = await hasVisibleAdvanceControl(page);
       if (doneSignal && !advanceControlsVisible) {
         await completeRun("completed", elapsed, "done_signal_without_advance_controls");
+      }
+      if (sawJatosRedirectSignal) {
+        await completeRun("completed", elapsed, "observed_jatos_redirect_signal");
       }
 
       await clickLaunchIfNeeded(page, args.startSelector);

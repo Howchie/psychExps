@@ -10,7 +10,6 @@ import {
   resolveSelectionWithJatosRetry,
   resolveRuntimePath,
   buildTaskMap,
-  getVariantOrThrow,
   installFullscreenOnFirstInteraction,
   installGlobalScrollBlocker,
   resolvePageBackground,
@@ -70,14 +69,11 @@ async function bootstrap(): Promise<void> {
     throw new Error(`Unknown task '${selection.taskId}'. Available: ${adapters.map((a) => a.manifest.taskId).join(", ")}`);
   }
 
-  const variant = getVariantOrThrow(adapter, selection.variantId);
-
   let resolvedVariantConfig = {} as Record<string, unknown>;
   if (selection.configPath) {
     const candidates = buildConfigReferenceCandidates({
       requestedConfig: selection.configPath,
       taskId: selection.taskId,
-      variants: adapter.manifest.variants,
     });
 
     let loaded = false;
@@ -105,12 +101,19 @@ async function bootstrap(): Promise<void> {
         `Tried: ${candidates.join(", ")}.${suffix}`,
       );
     }
-  } else if (variant.configPath) {
-    const fromMap = taskConfigsByPath[variant.configPath];
-    if (fromMap) {
-      resolvedVariantConfig = fromMap;
-    } else {
-      resolvedVariantConfig = await configManager.load(resolveRuntimePath(`/configs/${variant.configPath}.json`));
+  } else {
+    const defaultKey = `${selection.taskId}/default`;
+    const fallbackKey = Object.keys(taskConfigsByPath)
+      .filter((k) => k.startsWith(`${selection.taskId}/`))
+      .sort()[0];
+    const autoKey = taskConfigsByPath[defaultKey] ? defaultKey : fallbackKey;
+    if (autoKey) {
+      const fromMap = taskConfigsByPath[autoKey];
+      if (fromMap) {
+        resolvedVariantConfig = fromMap;
+      } else {
+        resolvedVariantConfig = await configManager.load(resolveRuntimePath(`/configs/${autoKey}.json`));
+      }
     }
   }
 

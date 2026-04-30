@@ -51,9 +51,6 @@ export const matbTrackingAdapter = createTaskAdapter({
   manifest: {
     taskId: "matb-tracking",
     label: "MATB Tracking",
-    variants: [
-      { id: "default", label: "MATB Tracking Default", configPath: "matb-tracking/default" },
-    ],
   },
   run: (context) => runMatbTrackingTask(context),
   terminate: async () => {},
@@ -151,7 +148,7 @@ interface RawSample {
 
 interface TrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockIndex: number;
   blockLabel: string;
   trialIndex: number;
@@ -185,7 +182,7 @@ interface TrialRuntimeResult {
 async function runMatbTrackingTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseConfig(context.taskConfig, context.selection);
   const participantId = context.selection.participant.participantId;
-  const variantId = context.selection.variantId;
+  const configPath = context.selection.configPath ?? "";
   const eventLogger = context.eventLogger;
 
   const root = context.container;
@@ -242,7 +239,7 @@ async function runMatbTrackingTask(context: TaskAdapterContext): Promise<unknown
         after: async ({ block, blockIndex, trialIndex }, result) => {
           trialRecords.push({
             participantId,
-            variantId,
+            configPath,
             blockIndex,
             blockLabel: block.label,
             trialIndex,

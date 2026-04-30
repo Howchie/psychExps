@@ -99,7 +99,7 @@ export class LifecycleManager {
       seedParts: [
         context.selection.participant.participantId,
         context.selection.participant.sessionId,
-        context.selection.variantId,
+        context.selection.configPath ?? "",
         "high_level_resolution",
       ],
     };

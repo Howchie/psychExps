@@ -5,7 +5,6 @@ import type { CoreConfig } from "../api/types";
 const CORE_CONFIG: CoreConfig = {
   selection: {
     taskId: "sft",
-    variantId: "default",
   },
   participant: {
     participantParamCandidates: ["PROLIFIC_PID", "SONA_ID", "participant", "survey_code"],
@@ -32,7 +31,6 @@ describe("resolveSelection", () => {
         componentJsonInput: {
           selection: {
             taskId: "nback",
-            variantId: "annikaHons",
           },
         },
         urlQueryParameters: {
@@ -48,14 +46,29 @@ describe("resolveSelection", () => {
     const selection = resolveSelection(CORE_CONFIG);
     expect(selection.platform).toBe("jatos");
     expect(selection.taskId).toBe("nback");
-    expect(selection.variantId).toBe("annikaHons");
     expect(selection.source.task).toBe("jatos");
-    expect(selection.source.variant).toBe("jatos");
     expect(selection.auto).toBe(true);
     expect(selection.participant.participantId).toBe("S12345");
     expect(selection.participant.studyId).toBe("STUDY_A");
     expect(selection.participant.sessionId).toBe("SESSION_A");
     expect(selection.completionCode).toBe("COMPLETE_ABC");
+  });
+
+  it("reads JATOS config path from component JSON input aliases", () => {
+    (globalThis as any).window = {
+      location: { search: "" },
+      jatos: {
+        componentJsonInput: {
+          taskId: "nback",
+          configID: "nback/annikaHons",
+        },
+      },
+    };
+
+    const selection = resolveSelection(CORE_CONFIG);
+    expect(selection.platform).toBe("jatos");
+    expect(selection.taskId).toBe("nback");
+    expect(selection.configPath).toBe("nback/annikaHons");
   });
 
   it("keeps real URL params as higher priority than JATOS query parameters when both exist", () => {
@@ -65,7 +78,6 @@ describe("resolveSelection", () => {
         componentJsonInput: {
           selection: {
             taskId: "nback",
-            variantId: "annikaHons",
           },
         },
         urlQueryParameters: {
@@ -80,4 +92,3 @@ describe("resolveSelection", () => {
     expect(selection.auto).toBe(false);
   });
 });
-

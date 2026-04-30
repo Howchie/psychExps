@@ -119,20 +119,21 @@ export async function endJatosStudy(): Promise<void> {
 
 export async function endJatosStudyAndRedirect(url: string): Promise<void> {
   const api = getJatosApi();
-  if (isAutoResponderEnabled()) {
-    console.log(`[AutoResponder] JATOS Redirecting to: ${url}`);
-  }
   if (!api) return;
   try {
+    // In auto mode, avoid redirect-dependent completion flows and finalize directly.
+    if (isAutoResponderEnabled()) {
+      await api.endStudy();
+      // Log AFTER endStudy completes so the autoresponder only closes the browser
+      // once JATOS has recorded the study as finished (not before the HTTP call lands).
+      console.log(`[AutoResponder] JATOS Redirecting to: ${url}`);
+      return;
+    }
     if (typeof api.endStudyAndRedirect === "function") {
-      if (!isAutoResponderEnabled()) {
-        await api.endStudyAndRedirect(url);
-      }
+      await api.endStudyAndRedirect(url);
     } else {
       await api.endStudy();
-      if (!isAutoResponderEnabled()) {
-        window.location.assign(url);
-      }
+      window.location.assign(url);
     }
   } catch (error) {
     console.error("JATOS endStudyAndRedirect failed", error);

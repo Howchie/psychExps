@@ -11,7 +11,7 @@ export interface StartDrtModuleScopeArgs {
   trialIndex: number | null;
   participantId: string;
   sessionId: string;
-  variantId: string;
+  configPath: string;
   taskSeedKey: string;
   seedSuffix?: string;
   onControllerCreated?: (controller: DrtController) => void;
@@ -27,7 +27,7 @@ export function startDrtModuleScope(args: StartDrtModuleScopeArgs): void {
       ? [
           args.participantId,
           args.sessionId,
-          args.variantId,
+          args.configPath,
           args.taskSeedKey,
           JSON.stringify(args.drtConfig.parameterTransforms),
         ].join("::")
@@ -48,7 +48,7 @@ export function startDrtModuleScope(args: StartDrtModuleScopeArgs): void {
       seed: hashSeed(
         args.participantId,
         args.sessionId,
-        args.variantId,
+        args.configPath,
         args.taskSeedKey,
         args.seedSuffix ?? `B${args.blockIndex}${args.trialIndex !== null ? `T${args.trialIndex}` : ""}`,
       ),

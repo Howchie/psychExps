@@ -3,7 +3,7 @@ import type { SelectionContext } from "../api/types";
 export function downloadJson(data: unknown, filePrefix: string, selection: SelectionContext): void {
   const text = JSON.stringify(data, null, 2);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `${filePrefix}_${selection.taskId}_${selection.variantId}_${selection.participant.participantId}_${stamp}.json`;
+  const fileName = `${filePrefix}_${selection.taskId}_${selection.configPath ?? ""}_${selection.participant.participantId}_${stamp}.json`;
   const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -17,7 +17,7 @@ export function downloadJson(data: unknown, filePrefix: string, selection: Selec
 
 export function downloadCsv(csv: string, filePrefix: string, selection: SelectionContext, suffix = "data"): void {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `${filePrefix}_${selection.taskId}_${selection.variantId}_${selection.participant.participantId}_${suffix}_${stamp}.csv`;
+  const fileName = `${filePrefix}_${selection.taskId}_${selection.configPath ?? ""}_${selection.participant.participantId}_${suffix}_${stamp}.csv`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

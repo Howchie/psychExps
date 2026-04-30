@@ -42,7 +42,7 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
   const { container, taskConfig, selection } = context;
 
   const rng = new SeededRandom(
-    hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId, "change_detection"),
+    hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.configPath ?? "", "change_detection"),
   );
 
   const eventLogger = context.eventLogger;
@@ -159,7 +159,7 @@ async function runChangeDetectionTask(context: TaskAdapterContext): Promise<unkn
         sessionResult.blocks.flatMap((b: any) =>
           b.trialResults.map((r: any) => ({
             participantId: selection.participant.participantId,
-            variantId: selection.variantId,
+            configPath: selection.configPath ?? "",
             ...r,
             changedIndices: r.diff.changedIndices.join("|"),
           })),
@@ -305,7 +305,6 @@ export const changeDetectionAdapter = createTaskAdapter({
   manifest: {
     taskId: "change_detection",
     label: "Change Detection",
-    variants: [{ id: "default", label: "Default Change Detection", configPath: "change_detection/default" }],
   },
   run: runChangeDetectionTask,
   terminate: async () => {

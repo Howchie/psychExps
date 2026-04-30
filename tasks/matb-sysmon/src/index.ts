@@ -40,9 +40,6 @@ export const matbSysmonAdapter = createTaskAdapter({
   manifest: {
     taskId: "matb-sysmon",
     label: "MATB System Monitoring",
-    variants: [
-      { id: "default", label: "MATB Sysmon Default", configPath: "matb-sysmon/default" },
-    ],
   },
   run: (context) => runMatbSysmonTask(context),
   terminate: async () => {},
@@ -88,7 +85,7 @@ interface ParsedConfig {
 
 interface SysmonTrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockIndex: number;
   blockLabel: string;
   trialIndex: number;
@@ -106,7 +103,7 @@ interface SysmonTrialRecord {
 async function runMatbSysmonTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseConfig(context.taskConfig, context.selection);
   const participantId = context.selection.participant.participantId;
-  const variantId = context.selection.variantId;
+  const configPath = context.selection.configPath ?? "";
   const eventLogger = context.eventLogger;
 
   const root = context.container;
@@ -153,7 +150,7 @@ async function runMatbSysmonTask(context: TaskAdapterContext): Promise<unknown> 
         after: async ({ block, blockIndex, trialIndex }, result) => {
           trialRecords.push({
             participantId,
-            variantId,
+            configPath,
             blockIndex,
             blockLabel: block.label,
             trialIndex,

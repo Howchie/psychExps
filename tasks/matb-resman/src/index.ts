@@ -41,9 +41,6 @@ export const matbResmanAdapter = createTaskAdapter({
   manifest: {
     taskId: "matb-resman",
     label: "MATB Resource Management",
-    variants: [
-      { id: "default", label: "MATB Resman Default", configPath: "matb-resman/default" },
-    ],
   },
   run: (context) => runMatbResmanTask(context),
   terminate: async () => {},
@@ -89,7 +86,7 @@ interface ParsedConfig {
 
 interface ResmanTrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockIndex: number;
   blockLabel: string;
   trialIndex: number;
@@ -109,7 +106,7 @@ interface ResmanTrialRecord {
 async function runMatbResmanTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseConfig(context.taskConfig, context.selection);
   const participantId = context.selection.participant.participantId;
-  const variantId = context.selection.variantId;
+  const configPath = context.selection.configPath ?? "";
   const eventLogger = context.eventLogger;
 
   const root = context.container;
@@ -159,7 +156,7 @@ async function runMatbResmanTask(context: TaskAdapterContext): Promise<unknown> 
 
           trialRecords.push({
             participantId,
-            variantId,
+            configPath,
             blockIndex,
             blockLabel: block.label,
             trialIndex,

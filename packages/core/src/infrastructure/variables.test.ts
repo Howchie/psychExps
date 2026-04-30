@@ -145,3 +145,58 @@ describe("createVariableResolver interpolation", () => {
     expect(resolver.resolveInValue("$between.cellIntro")).toBe("For this block:\nA colour.");
   });
 });
+
+describe("createVariableResolver arithmetic", () => {
+  it("supports basic division in templates", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        target_ms: 1000,
+      },
+    });
+    expect(resolver.resolveInValue("${var.target_ms / 1000} seconds")).toBe("1 seconds");
+  });
+
+  it("supports multiplication and addition", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        base: 10,
+      },
+    });
+    expect(resolver.resolveInValue("${var.base * 2 + 5}")).toBe("25");
+  });
+
+  it("handles spaces correctly", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        a: 10,
+        b: 20,
+      },
+    });
+    expect(resolver.resolveInValue("${ var.a  +  var.b }")).toBe("30");
+  });
+
+  it("supports nested object paths in arithmetic", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        bricks: {
+          completionParams: {
+            target_hold_ms: 2500,
+          },
+        },
+      },
+    });
+    expect(resolver.resolveInValue("${bricks.completionParams.target_hold_ms / 1000}")).toBe("2.5");
+  });
+
+  it("supports arithmetic via resolveToken for {key} style placeholders", () => {
+    const resolver = createVariableResolver({
+      variables: {
+        val: 1000,
+      },
+    });
+    // This simulates what resolveTemplatedString does
+    const key = "val / 1000";
+    const token = `$${key}`;
+    expect(resolver.resolveToken(token)).toBe(1);
+  });
+});

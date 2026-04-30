@@ -37,7 +37,7 @@ describe('TaskOrchestrator', () => {
       container,
       selection: {
         participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'v1'
+        configPath: 'test/v1'
       },
       coreConfig: {},
       taskConfig: {

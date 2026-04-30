@@ -123,7 +123,7 @@ describe('NbackTaskAdapter', () => {
       resolvedStimulus: 'A',
       runtime: {
         participantId: 'p1',
-        variantId: 'v1',
+        configPath: 'nback/v1',
         variableResolver: createVariableResolver({}),
       } as any,
       preloaded: { image: null },
@@ -166,7 +166,7 @@ describe('NbackTaskAdapter', () => {
       {
         participant: { participantId: 'participant', sessionId: 'session' },
         taskId: 'nback',
-        variantId: 'annikaHons',
+        configPath: 'nback/annikaHons',
       } as any,
       resolver,
       {
@@ -629,7 +629,7 @@ describe('NbackTaskAdapter', () => {
       resolvedStimulus: 'B',
       runtime: {
         participantId: 'p1',
-        variantId: 'v1',
+        configPath: 'nback/v1',
         variableResolver: createVariableResolver({}),
       } as any,
       preloaded: { image: null },

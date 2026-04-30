@@ -183,7 +183,7 @@ describe('data', () => {
 
       const selection = {
         taskId: 'task1',
-        variantId: 'var1',
+        configPath: 'task1/var1',
         participant: { participantId: 'part1', role: 'user' },
         isDemo: false
       } as unknown as SelectionContext;
@@ -192,7 +192,7 @@ describe('data', () => {
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
       expect(createElementSpy).toHaveBeenCalledWith('a');
-      expect(mockAnchor.download).toBe('prefix_task1_var1_part1_2023-10-15T12-00-00-000Z.json');
+      expect(mockAnchor.download).toBe('prefix_task1_task1/var1_part1_2023-10-15T12-00-00-000Z.json');
       expect(mockAnchor.href).toBe('blob:test-url');
       expect(appendChildSpy).toHaveBeenCalledWith(mockAnchor);
       expect(mockAnchor.click).toHaveBeenCalled();
@@ -213,7 +213,7 @@ describe('data', () => {
 
       const selection = {
         taskId: 'task2',
-        variantId: 'var2',
+        configPath: 'task2/var2',
         participant: { participantId: 'part2', role: 'user' },
         isDemo: false
       } as unknown as SelectionContext;
@@ -222,7 +222,7 @@ describe('data', () => {
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
       expect(createElementSpy).toHaveBeenCalledWith('a');
-      expect(mockAnchor.download).toBe('prefix2_task2_var2_part2_data_2023-10-15T12-00-00-000Z.csv');
+      expect(mockAnchor.download).toBe('prefix2_task2_task2/var2_part2_data_2023-10-15T12-00-00-000Z.csv');
       expect(mockAnchor.href).toBe('blob:test-url');
       expect(appendChildSpy).toHaveBeenCalledWith(mockAnchor);
       expect(mockAnchor.click).toHaveBeenCalled();

@@ -3,7 +3,6 @@ import type { CoreConfig } from "@experiments/core";
 export const coreDefaultConfig: CoreConfig = {
   selection: {
     taskId: "sft",
-    variantId: "default",
   },
   participant: {
     participantParamCandidates: ["PROLIFIC_PID", "SONA_ID", "participant", "survey_code"],

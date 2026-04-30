@@ -66,17 +66,6 @@ export const matbAdapter = createTaskAdapter({
   manifest: {
     taskId: "matb",
     label: "MATB Multi-Attribute Task Battery",
-    variants: [
-      { id: "default",            label: "MATB Default",                  configPath: "matb/default" },
-      { id: "practice",           label: "MATB Practice",                 configPath: "matb/practice" },
-      { id: "low-load",           label: "MATB Low Load",                 configPath: "matb/low-load" },
-      { id: "high-load",          label: "MATB High Load",                configPath: "matb/high-load" },
-      { id: "basic",              label: "MATB Basic",                    configPath: "matb/basic" },
-      { id: "parasuraman-high",   label: "Parasuraman High Reliability",  configPath: "matb/parasuraman-high" },
-      { id: "parasuraman-low",    label: "Parasuraman Low Reliability",   configPath: "matb/parasuraman-low" },
-      { id: "parasuraman-drt",    label: "Parasuraman + DRT (2-block)",   configPath: "matb/parasuraman-drt" },
-      { id: "parasuraman-drt-dynamic", label: "Parasuraman + DRT Dynamic", configPath: "matb/parasuraman-drt-dynamic" },
-    ],
   },
   run: (context) => runMatbCompositeTask(context),
   terminate: async () => {},
@@ -811,7 +800,7 @@ async function runMatbCompositeTask(context: TaskAdapterContext): Promise<unknow
 
   const payload = {
     taskId:      "matb",
-    variantId:   selection.variantId,
+    configPath:  selection.configPath ?? "",
     participant: selection.participant,
     blocks:      blockResults,
     survey:      surveyResult,

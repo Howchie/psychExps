@@ -249,24 +249,29 @@ Run this before deploying to catch any config-related or code type errors.
 2. Zip the contents of `apps/web/dist/`.
 3. In JATOS, create a **Study** and add a **Component**.
 4. Upload the zip as the component's HTML bundle.
-5. Set task/variant in the **Component JSON Input**:
+5. Set task/config in the **Component JSON Input**:
    ```json
    {
      "task": "nback",
-     "variant": "pm_module_demo"
+     "config": "nback/pm_module_demo"
    }
    ```
 6. For runtime overrides, add an `"overrides"` key to the Component JSON Input:
    ```json
    {
      "task": "nback",
-     "variant": "default",
+     "config": "nback/default",
      "overrides": {
        "mapping": { "targetKey": "k" }
      }
    }
    ```
 7. Participant IDs are read from JATOS URL query parameters (`PROLIFIC_PID`, `SONA_ID`, etc.) and from `jatos.urlQueryParameters` (preserved even after Prolific/Publix redirects).
+
+Notes:
+- `config` is the preferred JATOS field for selecting a config path.
+- `configID` and `configId` are accepted aliases.
+- `variant` / `variantId` remain supported as backward-compatible aliases, but new deployments should prefer `config`.
 
 Data is submitted to JATOS result data automatically when the experiment ends. Local-save downloads also occur if `data.localSave: true`.
 

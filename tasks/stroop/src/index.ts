@@ -129,7 +129,7 @@ interface PlannedBlock {
 
 interface TrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   mode: StroopMode;
   blockId: string;
   blockLabel: string;
@@ -151,11 +151,6 @@ interface TrialRecord {
 const stroopManifest = {
   taskId: "stroop",
   label: "Stroop",
-  variants: [
-    { id: "default", label: "Classic Congruence", configPath: "stroop/default" },
-    { id: "arbitrary_words", label: "Arbitrary Word Pool", configPath: "stroop/arbitrary_words" },
-    { id: "emotional_valence", label: "Emotional Stroop", configPath: "stroop/emotional_valence" },
-  ],
 };
 
 const stroopEnvironment = new TaskEnvironmentGuard();
@@ -172,7 +167,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = await parseStroopConfig(context.taskConfig);
   const selection = context.selection;
   const participantId = selection.participant.participantId;
-  const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.variantId, "stroop"));
+  const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.configPath ?? "", "stroop"));
   const records: TrialRecord[] = [];
   const root = context.container;
   const eventLogger = context.eventLogger;
@@ -227,7 +222,7 @@ async function runStroopTask(context: TaskAdapterContext): Promise<unknown> {
         blockIndex,
         trial,
         participantId,
-        variantId: selection.variantId,
+        configPath: selection.configPath ?? "",
         records,
         eventLogger,
       });
@@ -282,11 +277,11 @@ function appendStroopTrialTimeline(args: {
   blockIndex: number;
   trial: PlannedTrial;
   participantId: string;
-  variantId: string;
+  configPath: string;
   records: TrialRecord[];
   eventLogger: EventLogger;
 }): void {
-  const { timeline, parsed, block, blockIndex, trial, participantId, variantId, records, eventLogger } = args;
+  const { timeline, parsed, block, blockIndex, trial, participantId, configPath, records, eventLogger } = args;
   const layout = computeCanvasFrameLayout({
     aperturePx: parsed.display.aperturePx,
     paddingYPx: parsed.display.paddingYPx,
@@ -356,7 +351,7 @@ function appendStroopTrialTimeline(args: {
 
       const record: TrialRecord = {
         participantId,
-        variantId,
+        configPath,
         mode: parsed.mode,
         blockId: block.id,
         blockLabel: block.label,

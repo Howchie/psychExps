@@ -4,7 +4,7 @@ export interface EventEnvelope<TData = unknown> {
   eventType: string;
   ts: string;
   taskId: string;
-  variantId: string;
+  configPath: string;
   participantId: string;
   studyId: string;
   sessionId: string;
@@ -27,7 +27,7 @@ export function createEventLogger(selection: SelectionContext): EventLogger {
   const events: EventEnvelope[] = [];
   const base = {
     taskId: selection.taskId,
-    variantId: selection.variantId,
+    configPath: selection.configPath ?? "",
     participantId: selection.participant.participantId,
     studyId: selection.participant.studyId,
     sessionId: selection.participant.sessionId,

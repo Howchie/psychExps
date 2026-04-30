@@ -1,5 +1,5 @@
 import { downloadCsv, downloadJson, inferCsvFromPayload } from "../infrastructure/data";
-import { endJatosStudy, endJatosStudyAndRedirect, submitToJatos } from "../infrastructure/jatos";
+import { appendToJatos, endJatosStudy, endJatosStudyAndRedirect, submitToJatos } from "../infrastructure/jatos";
 import { resolveTemplate } from "../infrastructure/redirect";
 import type { CoreConfig, SelectionContext } from "../api/types";
 
@@ -23,6 +23,44 @@ export interface FinalizeTaskRunArgs {
 export interface FinalizeTaskRunResult {
   submittedToJatos: boolean;
   redirected: boolean;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function buildReducedJatosPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const records = Array.isArray(payload.records) ? payload.records : [];
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  const moduleResults = asObject(payload.moduleResults);
+  return {
+    ...payload,
+    records: undefined,
+    events: undefined,
+    moduleResults: undefined,
+    recordCount: records.length,
+    eventCount: events.length,
+    moduleResultKeys: moduleResults ? Object.keys(moduleResults) : [],
+    payloadReducedForJatos: true,
+  };
+}
+
+async function submitToJatosWithFallback(payload: unknown): Promise<boolean> {
+  const payloadObject = asObject(payload);
+  if (!payloadObject) return submitToJatos({ payload });
+
+  if (await submitToJatos(payloadObject)) return true;
+
+  const reducedPayload = buildReducedJatosPayload(payloadObject);
+  if (await submitToJatos(reducedPayload)) return true;
+
+  const appendEnvelope = {
+    kind: "finalize_fallback",
+    ts: new Date().toISOString(),
+    data: reducedPayload,
+  };
+  return appendToJatos(`${JSON.stringify(appendEnvelope)}\n`);
 }
 
 function resolveDataSettings(coreConfig: CoreConfig): {
@@ -64,7 +102,7 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
 
   const submittedToJatos = args.jatosHandledBySink
     ? true
-    : await submitToJatos(args.payload as Record<string, unknown>);
+    : await submitToJatosWithFallback(args.payload);
 
   const redirectCfg = args.coreConfig.completion?.redirect;
   const template =

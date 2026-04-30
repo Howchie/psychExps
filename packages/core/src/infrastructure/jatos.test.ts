@@ -7,7 +7,9 @@ import {
   submitToJatos,
   appendToJatos,
   endJatosStudy,
+  endJatosStudyAndRedirect,
 } from './jatos';
+import { configureAutoResponder } from '../runtime/autoresponder';
 
 describe('jatos infrastructure', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -23,6 +25,7 @@ describe('jatos infrastructure', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    configureAutoResponder({ enabled: false } as any);
   });
 
   describe('getJatosApi', () => {
@@ -224,6 +227,40 @@ describe('jatos infrastructure', () => {
 
       await endJatosStudy();
       expect(consoleErrorSpy).toHaveBeenCalledWith('JATOS endStudy failed', error);
+    });
+  });
+
+  describe('endJatosStudyAndRedirect', () => {
+    it('uses endStudy in auto-responder mode to avoid redirect-dependent completion', async () => {
+      const endStudyAndRedirectMock = vi.fn().mockResolvedValue(undefined);
+      const endStudyMock = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('window', {
+        jatos: { endStudyAndRedirect: endStudyAndRedirectMock, endStudy: endStudyMock },
+        location: {
+          assign: vi.fn(),
+          replace: vi.fn(),
+        },
+      });
+      configureAutoResponder({ enabled: true, seed: 'test' } as any);
+
+      await endJatosStudyAndRedirect('https://example.com/final');
+
+      expect(endStudyMock).toHaveBeenCalledTimes(1);
+      expect(endStudyAndRedirectMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to endStudy and browser navigation when the redirect API is unavailable', async () => {
+      const endMock = vi.fn().mockResolvedValue(undefined);
+      const assignMock = vi.fn();
+      vi.stubGlobal('window', {
+        jatos: { endStudy: endMock },
+        location: { assign: assignMock },
+      });
+
+      await endJatosStudyAndRedirect('https://example.com/final');
+
+      expect(endMock).toHaveBeenCalled();
+      expect(assignMock).toHaveBeenCalledWith('https://example.com/final');
     });
   });
 });

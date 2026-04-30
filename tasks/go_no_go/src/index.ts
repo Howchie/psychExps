@@ -190,7 +190,7 @@ interface PlannedBlock {
 
 interface TrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockId: string;
   blockLabel: string;
   blockIndex: number;
@@ -265,13 +265,12 @@ export const goNoGoAdapter = createTaskAdapter({
   manifest: {
     taskId: "go_no_go",
     label: "Go/No-Go",
-    variants: [],
   },
   run: async (context: TaskAdapterContext) => {
     const config = parseGoNoGoConfig(context.taskConfig);
     const selection = context.selection;
     const participantId = selection.participant.participantId;
-    const rng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.variantId, "go_no_go"));
+    const rng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.configPath ?? "", "go_no_go"));
     const records: TrialRecord[] = [];
     const root = context.container;
     const eventLogger = createEventLogger(selection);
@@ -327,7 +326,7 @@ export const goNoGoAdapter = createTaskAdapter({
           blockIndex,
           trial,
           participantId,
-          variantId: selection.variantId,
+          configPath: selection.configPath ?? "",
           records,
           eventLogger,
         });
@@ -380,11 +379,11 @@ function appendGoNoGoTrialTimeline(args: {
   blockIndex: number;
   trial: GeneratedGoNoGoTrial;
   participantId: string;
-  variantId: string;
+  configPath: string;
   records: TrialRecord[];
   eventLogger: ReturnType<typeof createEventLogger>;
 }): void {
-  const { timeline, config, block, blockIndex, trial, participantId, variantId, records, eventLogger } = args;
+  const { timeline, config, block, blockIndex, trial, participantId, configPath, records, eventLogger } = args;
   const layout = computeCanvasFrameLayout({
     aperturePx: config.display.aperturePx,
     paddingYPx: config.display.paddingYPx,
@@ -441,7 +440,7 @@ function appendGoNoGoTrialTimeline(args: {
 
       const record: TrialRecord = {
         participantId,
-        variantId,
+        configPath,
         blockId: block.id,
         blockLabel: block.label,
         blockIndex,

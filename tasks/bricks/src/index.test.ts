@@ -34,7 +34,7 @@ describe('BricksTaskAdapter', () => {
       container: document.createElement('div'),
       selection: {
         participant: { participantId: 'p1', sessionId: 's1' },
-        variantId: 'annikaHons'
+        configPath: 'bricks/annikaHons'
       },
       taskConfig: taskConfig,
       rawTaskConfig: taskConfig,

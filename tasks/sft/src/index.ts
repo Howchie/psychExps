@@ -71,10 +71,6 @@ import CallFunctionPlugin from "@jspsych/plugin-call-function";
 const sftManifest = {
   taskId: "sft",
   label: "SFT (DotsExp)",
-  variants: [
-    { id: "default", label: "Default", configPath: "sft/default" },
-    { id: "staircase_example", label: "Staircase Example", configPath: "sft/staircase_example" },
-  ],
 };
 
 const sftEnvironment = new TaskEnvironmentGuard();
@@ -255,7 +251,7 @@ interface StaircaseRecord {
 
 async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
-  const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.variantId, "sft"));
+  const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.configPath ?? "", "sft"));
   const root = context.container;
   const plan = buildBlockPlan(parsed, rng);
 
@@ -803,7 +799,7 @@ function parseSftConfig(config: JSONObject, selection: TaskAdapterContext["selec
     [
       selection.participant.participantId,
       selection.participant.sessionId,
-      selection.variantId,
+      selection.configPath ?? "",
       "sft_design_manipulation_pools",
     ],
   );

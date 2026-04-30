@@ -12,7 +12,6 @@ export interface ParticipantIds {
 export interface SelectionContext {
   platform: Platform;
   taskId: string;
-  variantId: string;
   configPath?: string | null;
   overrides?: JSONObject | null;
   auto?: boolean | null;
@@ -20,13 +19,11 @@ export interface SelectionContext {
   completionCode?: string | null;
   source: {
     task: "jatos" | "url" | "default";
-    variant: "jatos" | "url" | "default";
   };
 }
 
 export interface CoreSelectionDefaults {
   taskId: string;
-  variantId: string;
 }
 
 export interface CoreParticipantConfig {
@@ -120,16 +117,9 @@ export interface CoreConfig {
   eeg?: CoreEegConfig;
 }
 
-export interface TaskVariantManifest {
-  id: string;
-  label: string;
-  configPath?: string;
-}
-
 export interface TaskManifest {
   taskId: string;
   label: string;
-  variants: TaskVariantManifest[];
 }
 
 export interface TaskRegistry {

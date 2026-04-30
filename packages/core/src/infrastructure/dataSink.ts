@@ -11,7 +11,7 @@ export interface TaskDataEnvelope<TData = unknown> {
   sequence: number;
   runId: string;
   taskId: string;
-  variantId: string;
+  configPath: string;
   participantId: string;
   studyId: string;
   sessionId: string;
@@ -60,7 +60,7 @@ export interface TaskDataSink<TBlock = unknown, TTrial = unknown, TTrialResult =
 function createRunId(selection: SelectionContext): string {
   return [
     selection.taskId,
-    selection.variantId,
+    selection.configPath ?? "",
     selection.participant.participantId,
     selection.participant.sessionId,
   ].join(":");
@@ -71,7 +71,7 @@ function createEnvelopeBase(context: TaskDataSinkContext) {
   return {
     runId: createRunId(selection),
     taskId: selection.taskId,
-    variantId: selection.variantId,
+    configPath: selection.configPath ?? "",
     participantId: selection.participant.participantId,
     studyId: selection.participant.studyId,
     sessionId: selection.participant.sessionId,
@@ -225,7 +225,7 @@ export class JatosCheckpointSink<TBlock = unknown, TTrial = unknown, TTrialResul
           ts: new Date().toISOString(),
           runId: createRunId(context.selection),
           taskId: context.selection.taskId,
-          variantId: context.selection.variantId,
+          configPath: context.selection.configPath ?? "",
           participantId: context.selection.participant.participantId,
           sessionId: context.selection.participant.sessionId,
           trialCount: this.trialCounter,
@@ -296,7 +296,7 @@ export class EegBridgeSink<TBlock = unknown, TTrial = unknown, TTrialResult = un
       kind: event.kind,
       ts: new Date().toISOString(),
       taskId: context.selection.taskId,
-      variantId: context.selection.variantId,
+      configPath: context.selection.configPath ?? "",
       participantId: context.selection.participant.participantId,
       studyId: context.selection.participant.studyId,
       sessionId: context.selection.participant.sessionId,
@@ -315,7 +315,7 @@ export class EegBridgeSink<TBlock = unknown, TTrial = unknown, TTrialResult = un
       kind: "session_start",
       data: {
         taskId: context.selection.taskId,
-        variantId: context.selection.variantId,
+        configPath: context.selection.configPath ?? "",
       },
     });
   }

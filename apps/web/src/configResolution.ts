@@ -1,8 +1,3 @@
-type VariantLike = {
-  id: string;
-  configPath?: string;
-};
-
 function normalizePathLike(value: string): string {
   return value.trim().replace(/^\/+/, "");
 }
@@ -47,7 +42,6 @@ function dedupe(values: string[]): string[] {
 export function buildConfigReferenceCandidates(args: {
   requestedConfig: string;
   taskId: string;
-  variants: VariantLike[];
 }): string[] {
   const requested = args.requestedConfig.trim();
   if (!requested) return [];
@@ -56,15 +50,5 @@ export function buildConfigReferenceCandidates(args: {
   if (isPathLike) {
     return dedupe([requested]);
   }
-
-  const byVariant = args.variants
-    .filter((entry) => entry.id === keyed)
-    .map((entry) => entry.configPath)
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-
-  return dedupe([
-    ...byVariant,
-    `${args.taskId}/${keyed}`,
-    requested,
-  ]);
+  return dedupe([`${args.taskId}/${keyed}`, requested]);
 }

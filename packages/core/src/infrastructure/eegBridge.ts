@@ -23,7 +23,7 @@ export interface EegBridgeEventEnvelope {
   kind: string;
   ts: string;
   taskId?: string;
-  variantId?: string;
+  configPath?: string;
   participantId?: string;
   studyId?: string;
   sessionId?: string;

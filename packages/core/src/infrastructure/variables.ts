@@ -192,6 +192,62 @@ function deepGet(source: unknown, path: string): unknown {
   return cursor;
 }
 
+function evaluateArithmetic(expr: string, resolve: (token: string) => unknown): number | undefined {
+  const parts = expr.split(/(\s*[+\-*/]\s*)/);
+  if (parts.length <= 1) return undefined;
+
+  const operands: number[] = [];
+  const operators: string[] = [];
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i].trim();
+    if (i % 2 === 0) {
+      if (!part) return undefined;
+      let val: unknown;
+      if (/^-?\d+(\.\d+)?$/.test(part)) {
+        val = Number(part);
+      } else {
+        const token = part.startsWith("$") ? part : `$${part}`;
+        val = resolve(token);
+      }
+      const num = Number(val);
+      if (!Number.isFinite(num)) return undefined;
+      operands.push(num);
+    } else {
+      if (!part) return undefined;
+      operators.push(part);
+    }
+  }
+
+  if (operands.length !== operators.length + 1) return undefined;
+
+  const ops = [...operators];
+  const nums = [...operands];
+
+  for (let i = 0; i < ops.length; ) {
+    const op = ops[i];
+    if (op === "*" || op === "/") {
+      const left = nums[i];
+      const right = nums[i + 1];
+      const result = op === "*" ? left * right : left / right;
+      nums.splice(i, 2, result);
+      ops.splice(i, 1);
+    } else {
+      i += 1;
+    }
+  }
+
+  let result = nums[0];
+  for (let i = 0; i < ops.length; i += 1) {
+    const op = ops[i];
+    const next = nums[i + 1];
+    if (op === "+") result += next;
+    else if (op === "-") result -= next;
+  }
+
+  return result;
+}
+
 export function createVariableResolver(args: CreateVariableResolverArgs = {}): VariableResolver {
   const variableDefsRaw = args.variables ?? {};
   const variables = isObject(variableDefsRaw) ? variableDefsRaw : {};
@@ -371,6 +427,18 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
           if (typeof nested !== "undefined") return resolveNestedStringResult(nested);
         }
       }
+    }
+
+    const simpleMatch = text.match(/^\$([A-Za-z0-9_.-]+)$/);
+    if (simpleMatch) {
+      const name = simpleMatch[1];
+      const resolved = resolveVarInternal(name, context, stack);
+      if (typeof resolved !== "undefined") return resolveNestedStringResult(resolved);
+    }
+
+    if (/[+*/-]/.test(text)) {
+      const result = evaluateArithmetic(text, (t) => resolveTokenInternal(t, context, stack));
+      if (typeof result !== "undefined") return result;
     }
 
     if (text.includes("${")) {

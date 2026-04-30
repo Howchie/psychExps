@@ -106,9 +106,6 @@ interface ParsedFlankerConfig {
 const flankerManifest = {
   taskId: "flanker",
   label: "Flanker",
-  variants: [
-    { id: "default", label: "Classic Flanker", configPath: "flanker/default" },
-  ],
 };
 
 const flankerEnvironment = new TaskEnvironmentGuard();
@@ -125,7 +122,7 @@ async function runFlankerTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = await parseFlankerConfig(context.taskConfig);
   const selection = context.selection;
   const participantId = selection.participant.participantId;
-  const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.variantId, "flanker"));
+  const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.configPath ?? "", "flanker"));
   const records: TrialRecord[] = [];
   const root = context.container;
   const eventLogger = createEventLogger(selection);
@@ -183,7 +180,7 @@ async function runFlankerTask(context: TaskAdapterContext): Promise<unknown> {
         blockIndex,
         trial,
         participantId,
-        variantId: selection.variantId,
+        configPath: selection.configPath ?? "",
         records,
         eventLogger,
       });
@@ -417,7 +414,7 @@ interface PlannedBlock {
 
 interface TrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockId: string;
   blockLabel: string;
   blockIndex: number;
@@ -639,11 +636,11 @@ function appendFlankerTrialTimeline(args: {
   blockIndex: number;
   trial: PlannedTrial;
   participantId: string;
-  variantId: string;
+  configPath: string;
   records: TrialRecord[];
   eventLogger: ReturnType<typeof createEventLogger>;
 }): void {
-  const { timeline, parsed, block, blockIndex, trial, participantId, variantId, records, eventLogger } = args;
+  const { timeline, parsed, block, blockIndex, trial, participantId, configPath, records, eventLogger } = args;
   const layout = computeCanvasFrameLayout({
     aperturePx: parsed.display.aperturePx,
     paddingYPx: parsed.display.paddingYPx,
@@ -703,7 +700,7 @@ function appendFlankerTrialTimeline(args: {
 
       const record: TrialRecord = {
         participantId,
-        variantId,
+        configPath,
         blockId: block.id,
         blockLabel: block.label,
         blockIndex,

@@ -41,9 +41,6 @@ export const matbCommsAdapter = createTaskAdapter({
   manifest: {
     taskId: "matb-comms",
     label: "MATB Communications",
-    variants: [
-      { id: "default", label: "MATB Comms Default", configPath: "matb-comms/default" },
-    ],
   },
   run: (context) => runMatbCommsTask(context),
   terminate: async () => {},
@@ -90,7 +87,7 @@ interface ParsedConfig {
 
 interface CommsTrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockIndex: number;
   blockLabel: string;
   trialIndex: number;
@@ -109,7 +106,7 @@ interface CommsTrialRecord {
 async function runMatbCommsTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseConfig(context.taskConfig, context.selection);
   const participantId = context.selection.participant.participantId;
-  const variantId = context.selection.variantId;
+  const configPath = context.selection.configPath ?? "";
   const eventLogger = context.eventLogger;
 
   const root = context.container;
@@ -156,7 +153,7 @@ async function runMatbCommsTask(context: TaskAdapterContext): Promise<unknown> {
         after: async ({ block, blockIndex, trialIndex }, result) => {
           trialRecords.push({
             participantId,
-            variantId,
+            configPath,
             blockIndex,
             blockLabel: block.label,
             trialIndex,

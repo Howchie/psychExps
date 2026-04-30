@@ -2,14 +2,10 @@ import { describe, expect, it } from "vitest";
 import { buildConfigReferenceCandidates, toBundledConfigKey, toConfigFetchPath } from "./configResolution";
 
 describe("configResolution", () => {
-  it("resolves bare config names to variant path and task-scoped path first", () => {
+  it("resolves bare config names to task-scoped then raw fallback", () => {
     const candidates = buildConfigReferenceCandidates({
       requestedConfig: "annikaHons",
       taskId: "nback",
-      variants: [
-        { id: "default", configPath: "nback/default" },
-        { id: "annikaHons", configPath: "nback/annikaHons" },
-      ],
     });
     expect(candidates).toEqual(["nback/annikaHons", "annikaHons"]);
   });
@@ -18,7 +14,6 @@ describe("configResolution", () => {
     const candidates = buildConfigReferenceCandidates({
       requestedConfig: "pilotA",
       taskId: "stroop",
-      variants: [{ id: "default", configPath: "stroop/default" }],
     });
     expect(candidates).toEqual(["stroop/pilotA", "pilotA"]);
   });
@@ -27,7 +22,6 @@ describe("configResolution", () => {
     const candidates = buildConfigReferenceCandidates({
       requestedConfig: "bricks/spotlight",
       taskId: "bricks",
-      variants: [],
     });
     expect(candidates).toEqual(["bricks/spotlight"]);
   });

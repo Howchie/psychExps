@@ -9,7 +9,6 @@ function makeSelection(): SelectionContext {
   return {
     platform: "local",
     taskId: "test",
-    variantId: "default",
     participant: {
       participantId: "p1",
       studyId: "study-1",
@@ -17,7 +16,6 @@ function makeSelection(): SelectionContext {
     },
     source: {
       task: "default",
-      variant: "default",
     },
   };
 }
@@ -29,7 +27,6 @@ function makeRunContext(taskConfig: Record<string, unknown> = {}): Omit<TaskAdap
     coreConfig: {
       selection: {
         taskId: "test",
-        variantId: "default",
       },
     },
     taskConfig,
@@ -43,7 +40,7 @@ describe("LifecycleManager", () => {
     const terminate = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize,
       run,
       terminate,
@@ -62,7 +59,7 @@ describe("LifecycleManager", () => {
     const terminate = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       run: vi.fn().mockRejectedValue(new Error("execution failed")),
       terminate,
     });
@@ -77,7 +74,7 @@ describe("LifecycleManager", () => {
     const initialize = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize,
       run: vi.fn().mockResolvedValue("ok"),
     });
@@ -106,7 +103,7 @@ describe("LifecycleManager", () => {
     const initialize = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize,
       run: vi.fn().mockResolvedValue("ok"),
     });
@@ -135,7 +132,7 @@ describe("LifecycleManager", () => {
     const initialize = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize,
       run: vi.fn().mockResolvedValue("ok"),
     });
@@ -167,7 +164,7 @@ describe("LifecycleManager", () => {
     const initialize = vi.fn().mockResolvedValue(undefined);
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize,
       run: vi.fn().mockResolvedValue("ok"),
     });
@@ -199,9 +196,9 @@ describe("LifecycleManager", () => {
     const seen: string[] = [];
 
     const adapter = createTaskAdapter({
-      manifest: { taskId: "test", label: "Test", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "test", label: "Test" },
       initialize: (ctx) => {
-        seen.push(`init:${ctx.selection.variantId}`);
+        seen.push(`init:${ctx.selection.configPath ?? ""}`);
       },
       run: async (ctx) => {
         seen.push(`run:${ctx.selection.participant.participantId}`);
@@ -215,14 +212,14 @@ describe("LifecycleManager", () => {
     const result = await new LifecycleManager(adapter).run(makeRunContext());
 
     expect(result).toBe("done");
-    expect(seen).toEqual(["init:default", "run:p1", "term:test"]);
+    expect(seen).toEqual(["init:", "run:p1", "term:test"]);
   });
 });
 
 describe("createTaskAdapter", () => {
   it("throws if execute is called before initialize", async () => {
     const adapter = createTaskAdapter({
-      manifest: { taskId: "uninitialized", label: "Uninitialized", variants: [{ id: "default", label: "Default" }] },
+      manifest: { taskId: "uninitialized", label: "Uninitialized" },
       run: vi.fn().mockResolvedValue("ok"),
     });
 

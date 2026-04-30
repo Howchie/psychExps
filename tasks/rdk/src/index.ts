@@ -34,9 +34,6 @@ export const rdkAdapter = createTaskAdapter({
   manifest: {
     taskId: "rdk",
     label: "Random Dot Kinetogram",
-    variants: [
-      { id: "default", label: "RDK Default", configPath: "rdk/default" },
-    ],
   },
   run: (context) => runRdkTask(context),
   terminate: async () => {},
@@ -171,7 +168,7 @@ function parseRdkConfig(taskConfig: Record<string, unknown>, selection: Selectio
     [
       selection.participant.participantId,
       selection.participant.sessionId,
-      selection.variantId,
+      selection.configPath ?? "",
       "rdk_plan_manipulation_pools",
     ],
   );
@@ -244,7 +241,7 @@ async function runRdkTask(context: TaskAdapterContext): Promise<unknown> {
     hashSeed(
       selection.participant.participantId,
       selection.participant.sessionId,
-      selection.variantId,
+      selection.configPath ?? "",
       "rdk",
     ),
   );

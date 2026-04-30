@@ -148,7 +148,7 @@ export function resolveAutoResponderProfile(args: {
   return {
     enabled,
     jsPsychSimulationMode,
-    seed: source.seed ?? `${args.selection.participant.participantId}:${args.selection.participant.sessionId}:${args.selection.taskId}:${args.selection.variantId}:auto`,
+    seed: source.seed ?? `${args.selection.participant.participantId}:${args.selection.participant.sessionId}:${args.selection.taskId}:${args.selection.configPath ?? ""}:auto`,
     continueDelayMs: resolveRange(source.continueDelayMs, DEFAULT_PROFILE.continueDelayMs),
     responseRtMs: resolveResponseRt(source.responseRtMs, DEFAULT_PROFILE.responseRtMs),
     timeoutRate: clampUnit(toFiniteNumber(source.timeoutRate, DEFAULT_PROFILE.timeoutRate), DEFAULT_PROFILE.timeoutRate),

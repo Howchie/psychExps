@@ -77,14 +77,14 @@ describe("runJsPsychTimeline blocking", () => {
     };
 
     const profile = resolveAutoResponderProfile({
-      coreConfig: { selection: { taskId: "nback", variantId: "annikaHons" } },
+      coreConfig: { selection: { taskId: "nback" } },
       taskConfig: {},
       selection: {
         platform: "jatos",
         taskId: "nback",
-        variantId: "annikaHons",
+        configPath: "nback/annikaHons",
         participant: { participantId: "p1", studyId: "s1", sessionId: "ss1", sonaId: null },
-        source: { task: "jatos", variant: "jatos" },
+        source: { task: "jatos" },
       },
     });
 
@@ -105,16 +105,16 @@ describe("runJsPsychTimeline blocking", () => {
 
     const profile = resolveAutoResponderProfile({
       coreConfig: {
-        selection: { taskId: "nback", variantId: "annikaHons" },
+        selection: { taskId: "nback" },
         autoresponder: { jsPsychSimulationMode: "visual" },
       },
       taskConfig: {},
       selection: {
         platform: "jatos",
         taskId: "nback",
-        variantId: "annikaHons",
+        configPath: "nback/annikaHons",
         participant: { participantId: "p1", studyId: "s1", sessionId: "ss1", sonaId: null },
-        source: { task: "jatos", variant: "jatos" },
+        source: { task: "jatos" },
       },
     });
 

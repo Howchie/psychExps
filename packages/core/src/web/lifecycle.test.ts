@@ -4,7 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { finalizeTaskRun } from "./lifecycle";
 import { downloadCsv, downloadJson, inferCsvFromPayload } from "../infrastructure/data";
-import { endJatosStudy, submitToJatos } from "../infrastructure/jatos";
+import { appendToJatos, endJatosStudy, submitToJatos } from "../infrastructure/jatos";
 
 vi.mock("../infrastructure/data", () => ({
   downloadCsv: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock("../infrastructure/data", () => ({
 
 vi.mock("../infrastructure/jatos", () => ({
   submitToJatos: vi.fn(async () => false),
+  appendToJatos: vi.fn(async () => false),
   endJatosStudy: vi.fn(async () => undefined),
 }));
 
@@ -24,7 +25,6 @@ vi.mock("../infrastructure/redirect", () => ({
 const baseSelection = {
   platform: "local" as const,
   taskId: "sft",
-  variantId: "default",
   participant: {
     participantId: "p1",
     studyId: "s1",
@@ -32,12 +32,11 @@ const baseSelection = {
   },
   source: {
     task: "default" as const,
-    variant: "default" as const,
   },
 };
 
 const baseCoreConfig = {
-  selection: { taskId: "sft", variantId: "default" },
+  selection: { taskId: "sft" },
   data: {
     localSave: true,
     filePrefix: "experiments",
@@ -139,6 +138,44 @@ describe("finalizeTaskRun local save format", () => {
     });
 
     expect(submitToJatos).not.toHaveBeenCalled();
+    expect(endJatosStudy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses reduced submit fallback when full JATOS payload submit fails", async () => {
+    vi.mocked(submitToJatos)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    await finalizeTaskRun({
+      coreConfig: baseCoreConfig,
+      selection: baseSelection,
+      payload: {
+        records: [{ a: 1 }],
+        events: [{ type: "trial_end" }],
+        moduleResults: { drt: { hits: 2 } },
+      },
+    });
+
+    expect(submitToJatos).toHaveBeenCalledTimes(2);
+    expect(appendToJatos).not.toHaveBeenCalled();
+    expect(endJatosStudy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses append fallback when both full and reduced JATOS submits fail", async () => {
+    vi.mocked(submitToJatos).mockResolvedValue(false);
+    vi.mocked(appendToJatos).mockResolvedValueOnce(true);
+
+    await finalizeTaskRun({
+      coreConfig: baseCoreConfig,
+      selection: baseSelection,
+      payload: {
+        records: [{ a: 1 }],
+        events: [{ type: "trial_end" }],
+      },
+    });
+
+    expect(submitToJatos).toHaveBeenCalledTimes(2);
+    expect(appendToJatos).toHaveBeenCalledTimes(1);
     expect(endJatosStudy).toHaveBeenCalledTimes(1);
   });
 });

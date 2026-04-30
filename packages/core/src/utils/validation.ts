@@ -34,11 +34,7 @@ export function validateCoreSelectionDefaults(config: JSONObject): void {
   }
 
   const taskId = selection.taskId;
-  const variantId = selection.variantId;
   if (typeof taskId !== "string" || !taskId.trim()) {
     throw new Error("core.selection.taskId must be non-empty.");
-  }
-  if (typeof variantId !== "string" || !variantId.trim()) {
-    throw new Error("core.selection.variantId must be non-empty.");
   }
 }

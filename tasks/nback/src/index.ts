@@ -173,7 +173,7 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
         if (!timelineCapture.responseWindowRow) {
           throw new Error(`Missing n-back response data for block ${block.blockIndex}, trial ${trial.trialIndex}.`);
         }
-        return mapRawToNbackRecord(timelineCapture.responseWindowRow, runtime.participantId, runtime.variantId);
+        return mapRawToNbackRecord(timelineCapture.responseWindowRow, runtime.participantId, runtime.configPath);
       },
       onBlockEnd: (ctx) => {
         const blockCorrect = ctx.trialResults.reduce((acc, row) => acc + (row?.responseCorrect ?? 0), 0);
@@ -193,15 +193,6 @@ export const nbackAdapter = createTaskAdapter({
   manifest: {
     taskId: "nback",
     label: "NBack",
-    variants: [
-      { id: "default", label: "NBack Default", configPath: "nback/default" },
-      { id: "drt_block_demo", label: "NBack DRT Block Demo", configPath: "nback/drt_block_demo" },
-      { id: "pm_module_demo", label: "NBack PM Injector Demo", configPath: "nback/pm_module_demo" },
-      { id: "pm_module_export_demo", label: "NBack PM Injector Export Demo", configPath: "nback/pm_module_export_demo" },
-      { id: "annikaHons", label: "NBack AnnikaHons", configPath: "nback/annikaHons" },
-      { id: "nirvanaExp1", label: "NBack Nirvana Exp1", configPath: "nback/nirvanaExp1" },
-      { id: "modern", label: "NBack Modern", configPath: "nback/nirvanaExp1" },
-    ],
   },
   initialize: async (context) => {
     nbackContext = context;
@@ -388,7 +379,7 @@ interface ParticipantScopedNbackDrawPlan {
 
 interface TrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockLabel: string;
   blockIndex: number;
   blockType: string;
@@ -422,7 +413,7 @@ interface NbackRuntimeState {
   moduleConfigs: Record<string, any>;
   eventLogger: EventLogger;
   participantId: string;
-  variantId: string;
+  configPath: string;
 }
 
 interface RootPresentationState {
@@ -458,7 +449,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     hashSeed(
       context.selection.participant.participantId,
       context.selection.participant.sessionId,
-      context.selection.variantId,
+      context.selection.configPath ?? "",
     ),
   );
 
@@ -474,7 +465,7 @@ async function prepareNbackRuntime(context: TaskAdapterContext): Promise<NbackRu
     moduleConfigs,
     eventLogger,
     participantId: context.selection.participant.participantId,
-    variantId: context.selection.variantId,
+    configPath: context.selection.configPath ?? "",
   };
 }
 
@@ -509,7 +500,7 @@ function appendJsPsychNbackTrial(args: {
 
   const baseData = {
     participantId: runtime.participantId,
-    variantId: runtime.variantId,
+    configPath: runtime.configPath,
     blockLabel: block.label,
     blockIndex: block.blockIndex,
     blockType: block.blockType,
@@ -706,10 +697,10 @@ function resolveAllowedKeysForNback(semantics: ResponseSemantics, block: Planned
   return Array.from(keys);
 }
 
-function mapRawToNbackRecord(row: Record<string, unknown>, participantId: string, variantId: string): TrialRecord {
+function mapRawToNbackRecord(row: Record<string, unknown>, participantId: string, configPath: string): TrialRecord {
   return {
     participantId: asString(row.participantId) || participantId,
-    variantId: asString(row.variantId) || variantId,
+    configPath: asString(row.configPath) || configPath,
     blockLabel: asString(row.blockLabel) || "",
     blockIndex: Number(row.blockIndex ?? -1),
     blockType: asString(row.blockType) || "",
@@ -864,7 +855,7 @@ function parseNbackConfig(
       ? [
           selection.participant.participantId,
           selection.participant.sessionId,
-          selection.variantId,
+          selection.configPath ?? "",
           "nback_plan_manipulation_pools",
         ]
       : ["nback_plan_manipulation_pools"],

@@ -64,7 +64,7 @@ function extractStringLike(value: unknown): string | null {
   const obj = asObject(value);
   if (!obj) return null;
   return (
-    pickFirstString(obj, ["id", "name", "key", "value", "taskId", "task", "variantId", "variant", "experiment"])
+    pickFirstString(obj, ["id", "name", "key", "value", "taskId", "task", "experiment"])
     ?? null
   );
 }
@@ -76,6 +76,17 @@ function pickFirstSelectionValue(source: JSONObject | null, keys: string[]): str
     if (value) return value;
   }
   return null;
+}
+
+function extractConfigPath(value: unknown): string | null {
+  const direct = asNonEmptyString(value);
+  if (direct) return direct;
+  const obj = asObject(value);
+  if (!obj) return null;
+  return (
+    pickFirstString(obj, ["configPath", "config", "configID", "configId", "config_id", "path", "file"])
+    ?? null
+  );
 }
 
 export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
@@ -93,10 +104,8 @@ export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
   const jatosVariantObject = asObject(jatosInput?.variant);
 
   const urlTask = asNonEmptyString(params.get("task"));
-  const urlVariant = asNonEmptyString(params.get("variant"));
 
   const taskKeys = ["taskId", "task", "task_id", "experiment", "experimentId", "experiment_id", "paradigm"];
-  const variantKeys = ["variantId", "variant", "variant_id", "condition", "arm", "version"];
 
   const jatosTask = pickFirstSelectionValue(jatosInput, taskKeys)
     ?? pickFirstSelectionValue(jatosSelection, taskKeys)
@@ -106,19 +115,18 @@ export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
     ?? pickFirstSelectionValue(jatosConfig, taskKeys)
     ?? pickFirstSelectionValue(jatosTaskObject, taskKeys);
 
-  const jatosVariant = pickFirstSelectionValue(jatosInput, variantKeys)
-    ?? pickFirstSelectionValue(jatosSelection, variantKeys)
-    ?? pickFirstSelectionValue(jatosExperiment, variantKeys)
-    ?? pickFirstSelectionValue(jatosParams, variantKeys)
-    ?? pickFirstSelectionValue(jatosVariables, variantKeys)
-    ?? pickFirstSelectionValue(jatosConfig, variantKeys)
-    ?? pickFirstSelectionValue(jatosVariantObject, variantKeys);
+  const jatosConfigPath = pickFirstSelectionValue(jatosInput, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? extractConfigPath(jatosInput?.config)
+    ?? pickFirstSelectionValue(jatosSelection, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? pickFirstSelectionValue(jatosExperiment, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? pickFirstSelectionValue(jatosParams, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? pickFirstSelectionValue(jatosVariables, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? pickFirstSelectionValue(jatosTaskObject, ["configPath", "config", "configID", "configId", "config_id"])
+    ?? pickFirstSelectionValue(jatosVariantObject, ["configPath", "config", "configID", "configId", "config_id"]);
 
   const taskId = jatosTask ?? urlTask ?? coreConfig.selection.taskId;
-  const variantId = jatosVariant ?? urlVariant ?? coreConfig.selection.variantId;
 
   const taskSource: SelectionContext["source"]["task"] = jatosTask ? "jatos" : urlTask ? "url" : "default";
-  const variantSource: SelectionContext["source"]["variant"] = jatosVariant ? "jatos" : urlVariant ? "url" : "default";
 
   const participant = resolveParticipantIds(params, coreConfig.participant);
 
@@ -128,15 +136,13 @@ export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
   return {
     platform: detectPlatform(params),
     taskId,
-    variantId,
-    configPath: asNonEmptyString(params.get("config")),
+    configPath: jatosConfigPath ?? asNonEmptyString(params.get("config")),
     overrides: jatosOverrides ?? urlOverrides,
     auto: parseBooleanParam(params.get("auto")),
     participant,
     completionCode: asNonEmptyString(params.get("cc")),
     source: {
       task: taskSource,
-      variant: variantSource,
     },
   };
 }

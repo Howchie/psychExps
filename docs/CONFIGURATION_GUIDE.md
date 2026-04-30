@@ -65,6 +65,16 @@ In a JATOS study, place your overrides in the **Component JSON Input**.
 }
 ```
 
+To select a config path from JATOS, use `config` in the same Component JSON Input:
+```json
+{
+  "task": "nback",
+  "config": "nback/pm_module_demo"
+}
+```
+
+Accepted aliases: `configID` and `configId`. `variant` / `variantId` remain supported for backward compatibility.
+
 If both JATOS and URL overrides are present, JATOS overrides win.
 
 ---

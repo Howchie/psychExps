@@ -11,7 +11,7 @@ export function resolveTemplate(template: string | undefined, selection: Selecti
     SESSION_ID: selection.participant.sessionId,
     survey_code: selection.completionCode ?? "",
     taskId: selection.taskId,
-    variantId: selection.variantId,
+    configPath: selection.configPath ?? "",
   };
 
   return template.replace(/\{([^}]+)\}/g, (_, token: string) => replacements[token] ?? "");

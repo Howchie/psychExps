@@ -43,11 +43,6 @@ export const trackingAdapter = createTaskAdapter({
   manifest: {
     taskId: "tracking",
     label: "Tracking",
-    variants: [
-      { id: "default", label: "Tracking Default", configPath: "tracking/default" },
-      { id: "drt_demo", label: "Tracking DRT Demo", configPath: "tracking/drt_demo" },
-      { id: "mot_demo", label: "Tracking MOT Demo", configPath: "tracking/mot_demo" },
-    ],
   },
   run: (context) => runTrackingTask(context),
   terminate: async () => {},
@@ -151,7 +146,7 @@ interface TrackingTrialBinRecord {
 
 interface TrackingTrialRecord {
   participantId: string;
-  variantId: string;
+  configPath: string;
   blockIndex: number;
   blockLabel: string;
   manipulationId: string | null;
@@ -221,9 +216,9 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
   const runner = context.moduleRunner;
   const parsed = parseTrackingConfig(context.taskConfig, context.selection);
   const participantId = context.selection.participant.participantId;
-  const variantId = context.selection.variantId;
+  const configPath = context.selection.configPath ?? "";
   const eventLogger = context.eventLogger;
-  const seed = hashSeed(participantId, context.selection.participant.sessionId, variantId, "tracking");
+  const seed = hashSeed(participantId, context.selection.participant.sessionId, configPath, "tracking");
   const rng = createMulberry32(seed);
 
   const root = context.container;
@@ -322,7 +317,7 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
             if (result.kind === "pursuit") {
               trialRecords.push({
                 participantId,
-                variantId,
+                configPath,
                 blockIndex,
                 blockLabel: block.label,
                 manipulationId: block.manipulationId,
@@ -356,7 +351,7 @@ async function runTrackingTask(context: TaskAdapterContext): Promise<unknown> {
             } else {
               trialRecords.push({
                 participantId,
-                variantId,
+                configPath,
                 blockIndex,
                 blockLabel: block.label,
                 manipulationId: block.manipulationId,
@@ -1055,7 +1050,7 @@ function parseTrackingConfig(taskConfig: Record<string, unknown>, selection: Sel
     [
       selection.participant.participantId,
       selection.participant.sessionId,
-      selection.variantId,
+      selection.configPath ?? "",
       "tracking_plan_manipulation_pools",
     ],
   );

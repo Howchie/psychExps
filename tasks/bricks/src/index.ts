@@ -91,7 +91,7 @@ function isExplicitHoldDurationPracticeTrial(args: {
 async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
   const { taskConfig, selection, resolver, container, moduleRunner } = context;
 
-  const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.variantId));
+  const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.configPath ?? ""));
   const blockPlan = buildBlockPlan(taskConfig as Record<string, unknown>, rng, selection);
   const instructionsRaw = asObject((taskConfig as Record<string, unknown>).instructions) ?? {};
   const instructionSlots = resolveInstructionScreenSlots(instructionsRaw);
@@ -376,7 +376,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockPlan,
         {
           participantId: selection.participant.participantId,
-          variantId: selection.variantId,
+          configPath: selection.configPath ?? "",
         },
       ),
       getExtraCsvs: ({ sessionResult }) => {
@@ -386,7 +386,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           blockPlan,
           {
             participantId: selection.participant.participantId,
-            variantId: selection.variantId,
+            configPath: selection.configPath ?? "",
           },
         );
         const drtRows = buildBricksDrtRows(
@@ -394,7 +394,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           blockPlan,
           {
             participantId: selection.participant.participantId,
-            variantId: selection.variantId,
+            configPath: selection.configPath ?? "",
           },
         );
         const extras: Array<{ contents: string; suffix?: string }> = [];
@@ -416,7 +416,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockPlan,
         {
           participantId: selection.participant.participantId,
-          variantId: selection.variantId,
+          configPath: selection.configPath ?? "",
         },
       ),
     }),
@@ -427,18 +427,6 @@ export const bricksAdapter = createTaskAdapter({
   manifest: {
     taskId: 'bricks',
     label: 'Bricks (DiscoveryProject)',
-    variants: [
-      { id: 'baseline', label: 'Moray Baseline', configPath: 'bricks/baseline' },
-      { id: 'moray1991', label: 'Moray 1991 VPT+VDD', configPath: 'bricks/moray1991' },
-      { id: 'spotlight', label: 'Spotlight + DRT', configPath: 'bricks/spotlight' },
-      { id: 'evanderHons', label: 'Evander Honours', configPath: 'bricks/evanderHons' },
-      { id: 'evanderHonsNoSpotlight', label: 'Evander Honours No Spotlight', configPath: 'bricks/evanderHonsNoSpotlight' },
-      { id: 'evanderHonsHover', label: 'Evander Honours Hover', configPath: 'bricks/evanderHonsHover' },
-      { id: 'evanderHonsHoldContinuous', label: 'Evander Honours Hold Continuous', configPath: 'bricks/evanderHonsHoldContinuous' },
-      { id: 'pizza', label: 'Pizza', configPath: 'bricks/pizza' },
-      { id: 'continuousSpawn', label: 'Continuous Spawn Demo', configPath: 'bricks/continuousSpawn' },
-      { id: 'drt_block_demo', label: 'DRT Block Scope Demo', configPath: 'bricks/drt_block_demo' },
-    ],
   },
   run: runBricksTask,
 });
@@ -465,7 +453,7 @@ function buildBlockPlan(
     [
       selection.participant.participantId,
       selection.participant.sessionId,
-      selection.variantId,
+      selection.configPath ?? "",
       "bricks_manipulation_pools",
     ],
   );
@@ -765,12 +753,12 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
 function buildTrialCsvContext(
   row: ConveyorTrialData,
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; variantId: string },
+  ids: { participantId: string; configPath: string },
 ): Record<string, string | number | boolean | null> {
   const blockMeta = blockPlan[row.block_index];
   return {
     participant_id: ids.participantId,
-    variant_id: ids.variantId,
+    config_path: ids.configPath,
     bricks_trial_id: `B${row.block_index}_T${row.trial_index}`,
     block_index: row.block_index,
     block_label: row.block_label,
@@ -786,7 +774,7 @@ function buildTrialCsvContext(
 function buildBricksEventRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; variantId: string },
+  ids: { participantId: string; configPath: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
   for (const row of rows) {
@@ -825,7 +813,7 @@ function buildBricksEventRows(
 function buildBricksBrickOutcomeRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; variantId: string },
+  ids: { participantId: string; configPath: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
 
@@ -911,7 +899,7 @@ function buildBricksBrickOutcomeRows(
 function buildBricksDrtRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; variantId: string },
+  ids: { participantId: string; configPath: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
 

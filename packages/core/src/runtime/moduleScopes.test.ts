@@ -18,7 +18,7 @@ describe("moduleScopes helpers", () => {
       trialIndex: null,
       participantId: "p1",
       sessionId: "s1",
-      variantId: "v1",
+      configPath: "test/v1",
       taskSeedKey: "test_drt",
       context: {},
     });
