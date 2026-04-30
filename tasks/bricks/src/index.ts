@@ -54,6 +54,9 @@ interface BlockPlanItem {
   label: string;
   trials: number;
   manipulationId: string | null;
+  manipulationIds: string[];
+  staticManipulationIds: string[];
+  planManipulationIds: string[];
   phase: string | null;
   isPractice: boolean;
   trialConfigs: Array<Record<string, unknown>>;
@@ -376,7 +379,6 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockPlan,
         {
           participantId: selection.participant.participantId,
-          configPath: selection.configPath ?? "",
         },
       ),
       getExtraCsvs: ({ sessionResult }) => {
@@ -386,7 +388,6 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           blockPlan,
           {
             participantId: selection.participant.participantId,
-            configPath: selection.configPath ?? "",
           },
         );
         const drtRows = buildBricksDrtRows(
@@ -394,18 +395,24 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           blockPlan,
           {
             participantId: selection.participant.participantId,
-            configPath: selection.configPath ?? "",
+          },
+        );
+        const surveyRows = buildBricksSurveyRows(
+          trialRows,
+          blockPlan,
+          {
+            participantId: selection.participant.participantId,
           },
         );
         const extras: Array<{ contents: string; suffix?: string }> = [];
-        if (trialRows.length > 0) {
-          extras.push({ contents: recordsToCsv(trialRows), suffix: "bricks_trial_summary" });
-        }
         if (brickOutcomeRows.length > 0) {
           extras.push({ contents: recordsToCsv(brickOutcomeRows), suffix: "bricks_brick_outcomes" });
         }
         if (drtRows.length > 0) {
           extras.push({ contents: recordsToCsv(drtRows), suffix: "bricks_drt_rows" });
+        }
+        if (surveyRows.length > 0) {
+          extras.push({ contents: recordsToCsv(surveyRows), suffix: "bricks_surveys" });
         }
         return extras;
       },
@@ -416,7 +423,6 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         blockPlan,
         {
           participantId: selection.participant.participantId,
-          configPath: selection.configPath ?? "",
         },
       ),
     }),
@@ -469,6 +475,11 @@ function buildBlockPlan(
       if (!found) throw new Error(`Bricks config invalid: block ${index + 1} references unknown manipulation '${id}'.`);
       return found;
     });
+    const planManipulationIds = selectedManipulations
+      .filter((manipulation) => Boolean(resolveManipulationTrialPlan(manipulation)))
+      .map((manipulation) => asString(manipulation.id) ?? "")
+      .filter((id) => id.length > 0);
+    const staticManipulationIds = manipulationIds.filter((id) => !planManipulationIds.includes(id));
     const manipulationId = manipulationIds.length > 0 ? manipulationIds.join("+") : null;
     const label = typeof block.label === 'string' && block.label.trim() ? block.label.trim() : `Block ${index + 1}`;
     const phase = typeof block.phase === 'string' && block.phase.trim().length > 0 ? block.phase.trim() : null;
@@ -545,6 +556,9 @@ function buildBlockPlan(
       label,
       trials,
       manipulationId,
+      manipulationIds: [...manipulationIds],
+      staticManipulationIds: [...staticManipulationIds],
+      planManipulationIds: [...planManipulationIds],
       phase,
       isPractice,
       beforeBlockScreens,
@@ -575,6 +589,7 @@ function buildBricksStimulusRows(
         block_label: block.label,
         trial_index: trialIndex,
         manipulation_id: block.manipulationId,
+        manipulation_static_id: block.staticManipulationIds.length === 1 ? block.staticManipulationIds[0] : null,
         plan_variant_id: planVariantId,
         plan_variant_label: typeof trialNode?.planVariantLabel === "string" ? trialNode.planVariantLabel : null,
         trial_code: planVariantId ?? "default",
@@ -669,6 +684,12 @@ function toPrimitiveCell(value: unknown): string | number | boolean | null {
   return JSON.stringify(value);
 }
 
+function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function flattenUnknown(
   value: unknown,
   prefix: string,
@@ -695,6 +716,27 @@ function flattenUnknown(
     const child = prefix ? `${prefix}_${String(key)}` : String(key);
     flattenUnknown(nested, child, out);
   }
+}
+
+function pruneEmptyUnknown(value: unknown): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim().length === 0) return undefined;
+  if (Array.isArray(value)) {
+    const cleaned = value
+      .map((entry) => pruneEmptyUnknown(entry))
+      .filter((entry) => entry !== undefined);
+    return cleaned;
+  }
+  if (typeof value !== "object") return value;
+  const entries = Object.entries(value as Record<string, unknown>);
+  const cleanedEntries: Array<[string, unknown]> = [];
+  for (const [key, nested] of entries) {
+    const cleaned = pruneEmptyUnknown(nested);
+    if (cleaned === undefined) continue;
+    cleanedEntries.push([key, cleaned]);
+  }
+  if (cleanedEntries.length === 0) return undefined;
+  return Object.fromEntries(cleanedEntries);
 }
 
 function buildSpotlightLookup(row: ConveyorTrialData): {
@@ -775,18 +817,22 @@ function buildSpotlightLookup(row: ConveyorTrialData): {
 function buildTrialCsvContext(
   row: ConveyorTrialData,
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; configPath: string },
+  ids: { participantId: string },
 ): Record<string, string | number | boolean | null> {
   const blockMeta = blockPlan[row.block_index];
+  const trialNode = asObject(asObject((row as any).config_snapshot)?.trial);
+  const planVariantId = asString(trialNode?.planVariantId);
+  const planVariantLabel = asString(trialNode?.planVariantLabel);
   return {
     participant_id: ids.participantId,
-    config_path: ids.configPath,
-    bricks_trial_id: `B${row.block_index}_T${row.trial_index}`,
     block_index: row.block_index,
     block_label: row.block_label,
     block_phase: blockMeta?.phase ?? null,
     block_is_practice: blockMeta?.isPractice ?? null,
-    manipulation_id: blockMeta?.manipulationId ?? null,
+    manipulation_static_id:
+      blockMeta?.staticManipulationIds.length === 1 ? blockMeta.staticManipulationIds[0] : null,
+    plan_variant_id: planVariantId ?? null,
+    plan_variant_label: planVariantLabel ?? null,
     trial_index: row.trial_index,
     trial_duration_ms: row.trial_duration_ms,
     trial_end_reason: row.end_reason,
@@ -796,7 +842,7 @@ function buildTrialCsvContext(
 function buildBricksEventRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; configPath: string },
+  ids: { participantId: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
   for (const row of rows) {
@@ -807,26 +853,15 @@ function buildBricksEventRows(
     timeline.forEach((event, eventIndex) => {
       const flat: Record<string, string | number | boolean | null> = {
         ...trialContext,
-        event_index: eventIndex,
-        event_time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
-        event_type: typeof event.type === "string" ? event.type : null,
+        index: eventIndex,
+        time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
+        type: typeof event.type === "string" ? event.type : null,
       };
-      flattenUnknown(event, "event", flat);
+      const cleanedEvent = pruneEmptyUnknown(event);
+      if (cleanedEvent !== undefined) {
+        flattenUnknown(cleanedEvent, "", flat);
+      }
       out.push(flat);
-    });
-
-    const practicePressResults = Array.isArray((row as any).practice_press_results)
-      ? ((row as any).practice_press_results as unknown[])
-      : [];
-    practicePressResults.forEach((result, pressIndex) => {
-      out.push({
-        ...trialContext,
-        event_index: timeline.length + pressIndex,
-        event_time_ms: null,
-        event_type: "practice_press",
-        practice_press_index: pressIndex,
-        practice_press_correct: result === true,
-      });
     });
   }
   return out;
@@ -835,7 +870,7 @@ function buildBricksEventRows(
 function buildBricksBrickOutcomeRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
-  ids: { participantId: string; configPath: string },
+  ids: { participantId: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
 
@@ -848,8 +883,12 @@ function buildBricksBrickOutcomeRows(
     type BrickState = {
       conveyorId: string | null;
       spawnTimeMs: number | null;
+      nominalDropDeadlineTimeMs: number | null;
+      nominalDropDelayMs: number | null;
       clickCount: number;
       holdCount: number;
+      holdDurationTotalMs: number;
+      holdDurationSampleCount: number;
       status: "cleared" | "dropped" | "active_at_trial_end";
       terminalTimeMs: number | null;
       lifetimeMs: number | null;
@@ -863,8 +902,12 @@ function buildBricksBrickOutcomeRows(
       const created: BrickState = {
         conveyorId: null,
         spawnTimeMs: null,
+        nominalDropDeadlineTimeMs: null,
+        nominalDropDelayMs: null,
         clickCount: 0,
         holdCount: 0,
+        holdDurationTotalMs: 0,
+        holdDurationSampleCount: 0,
         status: "active_at_trial_end",
         terminalTimeMs: null,
         lifetimeMs: null,
@@ -885,33 +928,58 @@ function buildBricksBrickOutcomeRows(
       if (type === "brick_spawned") {
         const t = Number(event.time ?? event.time_ms ?? NaN);
         state.spawnTimeMs = Number.isFinite(t) ? t : state.spawnTimeMs;
+        const nominalDeadline = Number(event.nominal_drop_deadline_time_ms ?? NaN);
+        if (Number.isFinite(nominalDeadline)) state.nominalDropDeadlineTimeMs = nominalDeadline;
+        const nominalDelay = Number(event.nominal_drop_delay_ms ?? NaN);
+        if (Number.isFinite(nominalDelay)) state.nominalDropDelayMs = nominalDelay;
+        const mode = typeof event.completion_mode === "string" ? event.completion_mode : null;
+        if (mode) state.completionMode = mode;
       } else if (type === "brick_click") {
         if (event.valid === true) state.clickCount += 1;
       } else if (type === "brick_hold") {
-        if (event.valid === true) state.holdCount += 1;
+        if (event.valid === true) {
+          state.holdCount += 1;
+          const holdMs = Number(event.hold_ms ?? event.holdDurationMs ?? NaN);
+          if (Number.isFinite(holdMs)) {
+            state.holdDurationTotalMs += holdMs;
+            state.holdDurationSampleCount += 1;
+          }
+        }
       } else if (type === "brick_cleared" || type === "brick_dropped") {
         const t = Number(event.time ?? event.time_ms ?? NaN);
         state.status = type === "brick_cleared" ? "cleared" : "dropped";
         state.terminalTimeMs = Number.isFinite(t) ? t : null;
-        state.lifetimeMs = Number.isFinite(Number(event.lifetime)) ? Number(event.lifetime) : null;
+        const loggedLifetimeMs = Number(event.lifetime ?? event.lifetime_ms ?? NaN);
+        state.lifetimeMs = Number.isFinite(loggedLifetimeMs) ? loggedLifetimeMs : null;
         state.completionMode = typeof event.completion_mode === "string" ? event.completion_mode : null;
       }
     }
 
     for (const [brickId, state] of byBrick.entries()) {
-      out.push({
+      const derivedLifetimeMs =
+        Number.isFinite(Number(state.spawnTimeMs)) && Number.isFinite(Number(state.terminalTimeMs))
+          ? Math.max(0, Number(state.terminalTimeMs) - Number(state.spawnTimeMs))
+          : null;
+      const isHoldMode =
+        state.completionMode === "hold_duration" || state.completionMode === "hold_to_clear";
+      const rowOut: Record<string, string | number | boolean | null> = {
         ...trialContext,
         brick_id: brickId,
         conveyor_id: state.conveyorId,
         brick_spawn_time_ms: state.spawnTimeMs,
+        brick_nominal_drop_deadline_time_ms: state.nominalDropDeadlineTimeMs,
+        brick_nominal_drop_delay_ms: state.nominalDropDelayMs,
         brick_terminal_time_ms: state.terminalTimeMs,
-        brick_lifetime_ms: state.lifetimeMs,
-        brick_click_count: state.clickCount,
+        brick_lifetime_ms: derivedLifetimeMs ?? state.lifetimeMs,
         brick_hold_count: state.holdCount,
+        brick_hold_duration_ms_avg:
+          state.holdDurationSampleCount > 0 ? state.holdDurationTotalMs / state.holdDurationSampleCount : null,
         brick_value: state.value,
         brick_completion_mode: state.completionMode,
         brick_final_status: state.status,
-      });
+      };
+      if (!isHoldMode) rowOut.brick_click_count = state.clickCount;
+      out.push(rowOut);
     }
   }
 
@@ -920,12 +988,13 @@ function buildBricksBrickOutcomeRows(
 
 function buildBricksDrtRows(
   rows: ConveyorTrialData[],
-  _blockPlan: BlockPlanItem[],
-  ids: { participantId: string; configPath: string },
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string },
 ): Array<Record<string, string | number | boolean | null>> {
   const out: Array<Record<string, string | number | boolean | null>> = [];
 
   for (const row of rows) {
+    const trialContext = buildTrialCsvContext(row, blockPlan, ids);
     const responseRows = Array.isArray((row as any).drt_response_rows)
       ? ((row as any).drt_response_rows as Array<Record<string, unknown>>)
       : [];
@@ -941,10 +1010,7 @@ function buildBricksDrtRows(
       const estimate = (responseRow.estimate ?? null) as Record<string, unknown> | null;
       const estimateValues = (estimate?.values ?? null) as Record<string, unknown> | null;
       out.push({
-        participant_id: ids.participantId,
-        block_index: row.block_index,
-        block_label: row.block_label,
-        trial_index: row.trial_index,
+        ...trialContext,
         spotlight_brick_id: spotlightAtResponse.spotlightBrickId,
         spotlight_conveyor_id: spotlightAtResponse.spotlightConveyorId,
         spotlight_texture_category_id:
@@ -965,6 +1031,37 @@ function buildBricksDrtRows(
           : null,
       });
     }
+  }
+
+  return out;
+}
+
+function buildBricksSurveyRows(
+  rows: ConveyorTrialData[],
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string },
+): Array<Record<string, string | number | boolean | null>> {
+  const out: Array<Record<string, string | number | boolean | null>> = [];
+
+  for (const row of rows) {
+    const trialContext = buildTrialCsvContext(row, blockPlan, ids);
+    const surveys = Array.isArray((row as any).surveys) ? ((row as any).surveys as SurveyRunResult[]) : [];
+    if (surveys.length === 0) continue;
+
+    surveys.forEach((survey, surveyIndex) => {
+      const surveyRow: Record<string, string | number | boolean | null> = {
+        ...trialContext,
+        survey_index: surveyIndex,
+        survey_id: nonEmptyString(survey.surveyId),
+        survey_title: nonEmptyString(survey.surveyTitle),
+        survey_started_at_iso: nonEmptyString(survey.startedAtIso),
+        survey_completed_at_iso: nonEmptyString(survey.completedAtIso),
+        survey_duration_ms: Number.isFinite(Number(survey.durationMs)) ? Number(survey.durationMs) : null,
+      };
+      flattenUnknown(survey.answers ?? {}, "survey_answers", surveyRow);
+      flattenUnknown(survey.scores ?? {}, "survey_scores", surveyRow);
+      out.push(surveyRow);
+    });
   }
 
   return out;

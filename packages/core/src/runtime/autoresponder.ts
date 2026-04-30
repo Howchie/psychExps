@@ -12,7 +12,14 @@ export interface ResolvedAutoResponderProfile {
   timeoutRate: number;
   errorRate: number;
   interActionDelayMs: { minMs: number; maxMs: number };
-  holdDurationMs: { minMs: number; maxMs: number };
+  holdDurationMs: {
+    minMs: number;
+    maxMs: number;
+    distribution: "uniform" | "normal";
+    meanMs: number;
+    sdMs: number;
+    truncate: boolean;
+  };
   maxTrialDurationMs: number;
 }
 
@@ -26,7 +33,14 @@ const DEFAULT_PROFILE: ResolvedAutoResponderProfile = {
   timeoutRate: 0.08,
   errorRate: 0.12,
   interActionDelayMs: { minMs: 450, maxMs: 1200 },
-  holdDurationMs: { minMs: 220, maxMs: 860 },
+  holdDurationMs: {
+    minMs: 220,
+    maxMs: 860,
+    distribution: "uniform",
+    meanMs: 540,
+    sdMs: 107,
+    truncate: true,
+  },
   maxTrialDurationMs: 90_000,
 };
 
@@ -76,6 +90,31 @@ function resolveResponseRt(value: unknown, fallback: ResolvedAutoResponderProfil
   const meanMs = Math.max(minMs, Math.min(maxMs, Math.round(toFiniteNumber(input.meanMs, fallback.meanMs))));
   const sdMs = Math.max(1, Math.round(toFiniteNumber(input.sdMs, fallback.sdMs)));
   return { meanMs, sdMs, minMs, maxMs };
+}
+
+function resolveHoldDuration(
+  value: unknown,
+  fallback: ResolvedAutoResponderProfile["holdDurationMs"],
+): ResolvedAutoResponderProfile["holdDurationMs"] {
+  const input = asObject(value);
+  if (!input) return fallback;
+  const minMs = Math.round(toFiniteNumber(input.minMs, fallback.minMs));
+  const maxMsRaw = Math.round(toFiniteNumber(input.maxMs, fallback.maxMs));
+  const maxMs = Math.max(minMs, maxMsRaw);
+  const distribution = input.distribution === "normal" ? "normal" : "uniform";
+  const meanDefault = Math.round((minMs + maxMs) / 2);
+  const meanMs = Math.round(toFiniteNumber(input.meanMs, fallback.meanMs ?? meanDefault));
+  const sdDefault = Math.max(1, Math.round(Math.max(1, maxMs - minMs) / 6));
+  const sdMs = Math.max(1, Math.round(toFiniteNumber(input.sdMs, fallback.sdMs ?? sdDefault)));
+  const truncate = input.truncate === false ? false : true;
+  return {
+    minMs,
+    maxMs,
+    distribution,
+    meanMs,
+    sdMs,
+    truncate,
+  };
 }
 
 function sampleNormal(random: () => number): number {
@@ -160,7 +199,7 @@ export function resolveAutoResponderProfile(args: {
     timeoutRate: clampUnit(toFiniteNumber(source.timeoutRate, DEFAULT_PROFILE.timeoutRate), DEFAULT_PROFILE.timeoutRate),
     errorRate: clampUnit(toFiniteNumber(source.errorRate, DEFAULT_PROFILE.errorRate), DEFAULT_PROFILE.errorRate),
     interActionDelayMs: resolveRange(source.interActionDelayMs, DEFAULT_PROFILE.interActionDelayMs),
-    holdDurationMs: resolveRange(source.holdDurationMs, DEFAULT_PROFILE.holdDurationMs),
+    holdDurationMs: resolveHoldDuration(source.holdDurationMs, DEFAULT_PROFILE.holdDurationMs),
     maxTrialDurationMs: Math.max(1_000, Math.round(toFiniteNumber(source.maxTrialDurationMs, DEFAULT_PROFILE.maxTrialDurationMs))),
   };
 }
@@ -313,6 +352,18 @@ export function sampleAutoInteger(min: number, max: number): number | null {
 
 export function sampleAutoHoldDurationMs(): number | null {
   if (!activeProfile) return null;
+  if (activeProfile.holdDurationMs.distribution === "normal") {
+    const candidate = activeProfile.holdDurationMs.truncate
+      ? sampleTruncatedNormal(
+          activeProfile.holdDurationMs.meanMs,
+          activeProfile.holdDurationMs.sdMs,
+          activeProfile.holdDurationMs.minMs,
+          activeProfile.holdDurationMs.maxMs,
+          random,
+        )
+      : (activeProfile.holdDurationMs.meanMs + sampleNormal(random) * activeProfile.holdDurationMs.sdMs);
+    return Math.round(candidate);
+  }
   return sampleUniformMs(activeProfile.holdDurationMs, random);
 }
 

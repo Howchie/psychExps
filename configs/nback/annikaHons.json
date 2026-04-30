@@ -452,7 +452,7 @@
   "completion": {
     "redirect": {
       "enabled": true,
-      "completeUrlTemplate": "https://uwapsychology.sona-systems.com/webstudy_credit.aspx?experiment_id=1829&credit_token=1a3105ec2a8542868300b761e77cc8d1&survey_code={participantId}",
+      "completeUrlTemplate": "https://uwapsychology.sona-systems.com/webstudy_credit.aspx?experiment_id=1941&credit_token=b8ca8b7c1ba043b497ed31356565b3a6&survey_code={participantId}",
       "incompleteUrlTemplate": ""
     }
   }

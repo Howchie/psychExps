@@ -130,6 +130,26 @@ Global defaults belong in core config (`configs/core/default.json`), and task co
 }
 ```
 
+`holdDurationMs` also supports Gaussian sampling:
+
+```json
+{
+  "autoresponder": {
+    "holdDurationMs": {
+      "distribution": "normal",
+      "meanMs": 1000,
+      "sdMs": 220,
+      "truncate": false
+    }
+  }
+}
+```
+
+Notes:
+- `distribution` defaults to `"uniform"` when omitted.
+- For `"normal"`, `truncate` defaults to `true`; set `false` to allow out-of-bounds samples for stress testing.
+- `minMs`/`maxMs` are used for truncation bounds when `truncate=true`.
+
 Resolution order:
 1. `coreConfig.autoresponder`
 2. `taskConfig.autoresponder`

@@ -20,8 +20,8 @@
       "target_hold_ms": 1000,
       "hold_floor_ms": 100,
       "hold_ceiling_ms": 1500,
-      "progress_per_perfect": 0.4,
-      "progress_curve": 2.0,
+      "progress_per_perfect": 0.3,
+      "progress_curve": 2.5,
       "width_scaling": true,
       "width_reference_px": 50,
       "width_scaling_exponent": 1
@@ -197,6 +197,34 @@
     "surveySubmitDelayMs": {
       "minMs": 40,
       "maxMs": 140
+    },
+    "holdDurationMs": {
+        "distribution": "normal",
+        "meanMs": 940,
+        "sdMs": 220,
+        "truncate": false
+      }
+  },
+  "variables": {
+    "between": {
+      "scope": "participant",
+      "sampler": {
+        "type": "list",
+        "values": [
+          {
+            "cell1Label": "Low",
+            "cell1SpeedPxPerSec": 24,
+            "cell2Label": "High",
+            "cell2SpeedPxPerSec": 32
+          },
+          {
+            "cell1Label": "High",
+            "cell1SpeedPxPerSec": 32,
+            "cell2Label": "Low",
+            "cell2SpeedPxPerSec": 24
+          }
+        ]
+      }
     }
   },
   "manipulations": [
@@ -219,7 +247,7 @@
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 22
+            "value": 24
           }
         }
       }
@@ -231,7 +259,31 @@
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 28
+            "value": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "cell_1",
+      "label": "$between.cell1Label difficulty",
+      "overrides": {
+        "conveyors": {
+          "speedPxPerSec": {
+            "type": "fixed",
+            "value": "$between.cell1SpeedPxPerSec"
+          }
+        }
+      }
+    },
+    {
+      "id": "cell_2",
+      "label": "$between.cell2Label difficulty",
+      "overrides": {
+        "conveyors": {
+          "speedPxPerSec": {
+            "type": "fixed",
+            "value": "$between.cell2SpeedPxPerSec"
           }
         }
       }
@@ -247,7 +299,7 @@
         "variants": [
           {
             "id": "control",
-            "label": "Control: no high-value brick",
+            "label": "all_controls",
             "overrides": {
               "bricks": {
                 "forcedSetPlan": {
@@ -278,7 +330,7 @@
           },
           {
             "id": "target_pos2",
-            "label": "High-value in position 2",
+            "label": "target_pos2",
             "overrides": {
               "bricks": {
                 "forcedSetPlan": {
@@ -309,7 +361,7 @@
           },
           {
             "id": "target_pos3",
-            "label": "High-value in position 3",
+            "label": "target_pos3",
             "overrides": {
               "bricks": {
                 "forcedSetPlan": {
@@ -340,7 +392,7 @@
           },
           {
             "id": "target_pos4",
-            "label": "High-value in position 4",
+            "label": "target_pos4",
             "overrides": {
               "bricks": {
                 "forcedSetPlan": {
@@ -475,7 +527,7 @@
       ],
       "afterBlockScreens": [
         {
-          "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Well done!<p>As part of this experiment, you will also be asked to respond to a flashing stimulus called the DRT.<p>Whenever you see the border of the experiment window flash red, like this<p><img src='assets/drt_border.png' alt='DRT example' style='max-width: 480px; width: 100%; height: auto;'/><p>You should press the SPACEBAR as quickly as possible. This will happen repeatedly throughout the conveyor task.<p></div>"
+          "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Well done!<p>As part of this experiment, you will also be asked to respond to a flashing stimulus called the DRT.<p>Whenever you see the border of the experiment window flash red, like this<p><img src='assets/evander-bricks/drt_border.png' alt='DRT example' style='max-width: 480px; width: 100%; height: auto;'/><p>You should press the SPACEBAR as quickly as possible. This will happen repeatedly throughout the conveyor task.<p></div>"
         }
       ]
     },
@@ -542,7 +594,7 @@
       "phase": "main",
       "trials": 20,
       "manipulations": [
-        "difficulty_low",
+        "cell_1",
         "condition_plan"
       ],
       "afterBlockScreens": [
@@ -550,11 +602,29 @@
       ]
     },
     {
-      "label": "High Difficulty",
+      "label": "Block2",
       "phase": "main",
       "trials": 20,
       "manipulations": [
-        "difficulty_high",
+        "cell_2",
+        "condition_plan"
+      ]
+    },
+    {
+      "label": "Block3",
+      "phase": "main",
+      "trials": 20,
+      "manipulations": [
+        "cell_1",
+        "condition_plan"
+      ]
+    },
+    {
+      "label": "Block4",
+      "phase": "main",
+      "trials": 20,
+      "manipulations": [
+        "cell_2",
         "condition_plan"
       ]
     }

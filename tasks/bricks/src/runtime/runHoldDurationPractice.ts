@@ -305,7 +305,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         const centerX = Math.max(0, ((Number(conveyor?.length ?? width) - width) * 0.5));
         gameState._spawnBrick(conveyor, { x: centerX, reason: 'practice_respawn', bypassSpacing: true });
       }
-      if (!pendingReplenishDataOnly && gameState.elapsed >= nextAutoActionAt) {
+      if (!pendingEnd && !pendingReplenishDataOnly && gameState.elapsed >= nextAutoActionAt) {
         const activeBricks = gameState.activeBricks;
         if (activeBricks.length > 0) {
           const focusState = gameState.getFocusState();
@@ -368,6 +368,12 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   }
 
   const processPracticeHold = (brickId: string, holdDurationMs: number, x: number, y: number) => {
+    if (enforceBrickQuota && Number.isFinite(Number(brickQuota)) && practicePressResults.length >= Number(brickQuota)) {
+      return;
+    }
+    if (pendingEnd?.reason === 'brick_quota_met') {
+      return;
+    }
     if (pendingReplenish) {
       return;
     }
@@ -757,6 +763,58 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
 
       gameState.step(dt);
       if (autoEnabled && trialStarted) {
+        if (pendingEnd?.reason === 'brick_quota_met') {
+          renderer.updateBackground(dt);
+          renderer.updateBelts(gameState.conveyors, dt);
+          renderer.updateFurnaces(dt);
+          gameState.consumeClearedVisuals();
+          gameState.consumeDroppedVisuals();
+          renderer.updateEffects(dt);
+          const focusState = gameState.getFocusState();
+          renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
+          const remainingMs = maxDuration !== null ? Math.max(0, maxDuration - gameState.elapsed) : null;
+          const hudStats = gameState.getHUDStats();
+          const hudDisplayStats = {
+            ...hudStats,
+            spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? hudBaseStats.spawned : 0),
+            cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? hudBaseStats.cleared : 0),
+            dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
+            points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
+          };
+          const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
+          const hudShowTimer = hudUiCfg.showTimer !== false;
+          const hudShowDrt = drtEnabled && hudUiCfg.showDRT !== false;
+          const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));
+          const hudSignature = [
+            hudShowTimer ? String(hudStats.timeElapsedMs) : 'timer_hidden',
+            String(hudStats.bricksActive),
+            String(hudDisplayStats.spawned),
+            String(hudDisplayStats.cleared),
+            String(hudDisplayStats.dropped),
+            String(hudDisplayStats.points),
+            String(hudStats.focusBrickId ?? ''),
+            String(hudStats.focusBrickValue ?? ''),
+            String(focusState?.activeBrickId ?? ''),
+            hudShowTimer ? remainingBucket : 'timer_hidden',
+            hudShowDrt ? String(drtStatsSnapshot.presented) : 'drt_hidden',
+            hudShowDrt ? String(drtStatsSnapshot.hits) : 'drt_hidden',
+            hudShowDrt ? String(drtStatsSnapshot.misses) : 'drt_hidden',
+            hudShowDrt ? String(drtStatsSnapshot.falseAlarms) : 'drt_hidden',
+          ].join('|');
+          if (hudSignature !== lastHudSignature) {
+            lastHudSignature = hudSignature;
+            renderer.updateHUD(hudDisplayStats, remainingMs, {
+              label: trial.blockLabel,
+              drtStats: drtEnabled ? drtStatsSnapshot : undefined,
+              focusInfo: focusState,
+            });
+          }
+          if (pendingEnd && gameState.elapsed >= pendingEnd.dueAtMs) {
+            endTrial(pendingEnd.reason, keyHandler);
+          }
+          animationFrameId = requestAnimationFrame(tick);
+          return;
+        }
         if (gameState.elapsed >= nextAutoActionAt) {
           const activeBricks = gameState.activeBricks;
           if (activeBricks.length > 0) {

@@ -215,6 +215,37 @@ export class GameState {
     this.onEvent(event);
   }
 
+  _brickEventPayload(brick: BrickRecord): Record<string, unknown> {
+    return {
+      active_brick_id: brick.id,
+      brick_id: brick.id,
+      conveyor_id: brick.conveyorId,
+      color: brick.color,
+      border_color: brick.borderColor,
+      shape: brick.shape,
+      texture_style: brick.textureStyle,
+      color_category_id: brick.colorCategoryId,
+      color_category_label: brick.colorCategoryLabel,
+      width_category_id: brick.widthCategoryId,
+      width_category_label: brick.widthCategoryLabel,
+      border_color_category_id: brick.borderColorCategoryId,
+      border_color_category_label: brick.borderColorCategoryLabel,
+      shape_category_id: brick.shapeCategoryId,
+      shape_category_label: brick.shapeCategoryLabel,
+      texture_category_id: brick.textureCategoryId,
+      texture_category_label: brick.textureCategoryLabel,
+      value: brick.value,
+      target_hold_ms: brick.targetHoldMs,
+      progress_per_perfect: brick.progressPerPerfect,
+      forced_set_index: brick.forcedSetIndex,
+      label: brick.label,
+      brick_x: brick.x,
+      brick_y: brick.y,
+      brick_width: brick.width,
+      brick_height: brick.height,
+    };
+  }
+
   _initConveyors() {
     const cfg = this.config;
     const n = cfg.conveyors.nConveyors;
@@ -1132,10 +1163,23 @@ export class GameState {
     this.activeBricks.push(brick);
     conveyor.activeIds.push(id);
     this.stats.spawned += 1;
+    const conveyorLengthPx = Math.max(0, Number(conveyor.length) || 0);
+    const visibleWidthAtSpawnPx = Math.max(0, getBrickVisibleWidth(brick, this.config.bricks.completionMode));
+    const distanceToDropPx = Math.max(0, conveyorLengthPx - (brick.x + visibleWidthAtSpawnPx));
+    const nominalDropDelayMs = speed > 0 ? (distanceToDropPx / speed) * 1000 : null;
+    const nominalDropDeadlineTimeMs =
+      nominalDropDelayMs !== null && Number.isFinite(nominalDropDelayMs)
+        ? this.elapsed + nominalDropDelayMs
+        : null;
     this._log('brick_spawned', {
       brick_id: id,
       conveyor_id: conveyor.id,
       speed_px_s: speed,
+      conveyor_length_px: conveyorLengthPx,
+      spawn_x_px: brick.x,
+      visible_width_spawn_px: visibleWidthAtSpawnPx,
+      nominal_drop_delay_ms: nominalDropDelayMs,
+      nominal_drop_deadline_time_ms: nominalDropDeadlineTimeMs,
       reason,
       color: pickedColor,
       border_color: pickedBorderColor,
@@ -1414,20 +1458,30 @@ export class GameState {
   }
 
   handleBrickHold(brickId: string, holdDurationMs: number, timestamp: number, clickPos: PointerPos = {}) {
-    const { x = null, y = null } = clickPos || {};
+    const rawX = Number((clickPos || {}).x);
+    const rawY = Number((clickPos || {}).y);
     const brick = this.bricks.get(brickId);
     const holdMs = Math.max(0, Number(holdDurationMs) || 0);
+    const x = Number.isFinite(rawX) ? rawX : (brick ? Number(brick.x) : 0);
+    const y = Number.isFinite(rawY) ? rawY : (brick ? Number(brick.y) : 0);
     if (!brick) {
       this.stats.clickErrors += 1;
-      this._log('brick_hold', { brick_id: brickId ?? null, x, y, valid: false, hold_ms: holdMs });
+      this._log('brick_hold', {
+        active_brick_id: brickId ?? null,
+        brick_id: brickId ?? null,
+        x,
+        y,
+        valid: false,
+        hold_ms: holdMs,
+        blocked_reason: 'brick_not_found',
+      });
       return;
     }
     const gate = this._canWorkOnBrick(brick);
     if (!gate.ok) {
       this.stats.clickErrors += 1;
       this._log('brick_hold', {
-        brick_id: brick.id,
-        conveyor_id: brick.conveyorId,
+        ...this._brickEventPayload(brick),
         x,
         y,
         valid: false,
@@ -1483,13 +1537,11 @@ export class GameState {
     const remainingWidthBeforePx = Math.max(0, (1 - progressBefore) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
     const remainingWidthAfterPx = Math.max(0, (1 - progressAfter) * Math.max(1, Number(brick.initialWidth ?? brick.width ?? 1)));
     this._log('brick_hold', {
-      brick_id: brick.id,
-      conveyor_id: brick.conveyorId,
+      ...this._brickEventPayload(brick),
       x,
       y,
       valid: true,
       hold_ms: holdMs,
-      target_hold_ms: targetHoldMs,
       hold_floor_ms: holdFloorMs,
       hold_ceiling_ms: holdCeilingMs,
       width_factor: widthFactor,

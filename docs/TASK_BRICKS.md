@@ -203,16 +203,19 @@ Demo variant:
 - `bricks/drt_block_demo` sets `drt.scope = "block"` for quick validation of continuous block-level DRT.
 
 CSV export now uses long-format event records (`bricks_events`) as the primary CSV output.
-- one row per timeline event/click/hold with shared trial identifiers (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial fields)
-- event payload flattened under `event_*` columns
+- one row per timeline event/click/hold with shared trial identifiers (`participant_id`, block/trial fields, manipulation/plan columns)
+- event payload flattened into direct columns (no `event_` prefix)
+- null/undefined event fields are omitted from export so config-unused dimensions do not create empty CSV columns
 
 Additional CSV outputs:
-- `bricks_trial_summary`: one row per trial (compact trial-level summary payload)
 - `bricks_brick_outcomes`: one row per brick per trial, including end state (`brick_final_status`: `cleared`/`dropped`/`active_at_trial_end`)
+  - includes hold metrics (`brick_hold_count`, `brick_hold_duration_ms_avg`)
+  - `brick_click_count` is only emitted for non-hold completion modes
 - `bricks_drt_rows`: one row per DRT response, with spotlight linkage at response time
+- `bricks_surveys`: one row per completed survey response, with trial linkage columns and flattened `survey_answers_*` / `survey_scores_*`
 
 DRT long-format rows remain available via task metadata (`drt_rows`) and include:
-- Bricks trial linkage metadata (`participant_id`, `variant_id`, `bricks_trial_id`, block/trial ids/labels/phase/manipulation`)
+- Bricks trial linkage metadata (`participant_id`, block/trial ids/labels/phase, `manipulation_static_id`, `plan_variant_id`, `plan_variant_label`)
 - spotlight context at response time (`spotlight_brick_id`, `spotlight_conveyor_id`) when available
 - all flattened columns from each `drt_response_rows` entry (including dynamic transform fields in `transformColumns`)
 

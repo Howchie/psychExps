@@ -127,7 +127,14 @@ function enableDataOnlyAutoResponder() {
     timeoutRate: 0,
     errorRate: 0,
     interActionDelayMs: { minMs: 50, maxMs: 150 },
-    holdDurationMs: { minMs: 300, maxMs: 500 },
+    holdDurationMs: {
+      minMs: 300,
+      maxMs: 500,
+      distribution: 'uniform',
+      meanMs: 400,
+      sdMs: 34,
+      truncate: true,
+    },
     maxTrialDurationMs: 10_000,
   });
 }

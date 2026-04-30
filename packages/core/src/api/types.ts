@@ -61,6 +61,10 @@ export interface CoreDataConfig {
 export interface AutoResponderRangeConfig {
   minMs?: number;
   maxMs?: number;
+  distribution?: "uniform" | "normal";
+  meanMs?: number;
+  sdMs?: number;
+  truncate?: boolean;
 }
 
 export interface AutoResponderConfig {
