@@ -96,6 +96,7 @@ Overrides precedence:
 Accepted URL keys:
 - `task`, `variant`, `config`, `overrides`, `cc`
 - participant keys: `PROLIFIC_PID`, `STUDY_ID`, `SESSION_ID`, `SONA_ID`, `participant`, `survey_code`
+- `participantId` is the canonical participant identifier after resolution; `sonaId` is only populated from the raw `SONA_ID` parameter when present
 - auto-responder toggle: `auto`
 - auto-responder jsPsych mode: `auto_mode` (`visual` or `data-only`)
 

@@ -156,7 +156,12 @@ Resolution order:
 3. URL `auto=...` (final override for enabled/disabled)
 4. URL `auto_mode=visual|data-only` (final override for jsPsych simulation mode)
 
-In JATOS deployments, if the browser URL no longer contains query params after Publix redirects, core also reads launch params from `jatos.urlQueryParameters` (via `jatos.onLoad` readiness path). This preserves toggles like `auto=true` and participant IDs such as `SONA_ID`.
+In JATOS deployments, if the browser URL no longer contains query params after Publix redirects, core also reads launch params from `jatos.urlQueryParameters` (via `jatos.onLoad` readiness path). This preserves toggles like `auto=true` and participant IDs such as `SONA_ID` or `participant`.
+
+Participant ID behavior:
+- `participantId` is the canonical ID used throughout the runtime for exports, filenames, seeding, and redirect templates.
+- `sonaId` is a raw optional field that only reflects the literal `SONA_ID` query parameter when present.
+- If your SONA launch passes the ID through `participant=%SONA_ID%`, that value still becomes the canonical `participantId`; it just does not populate `sonaId`.
 
 Behavior:
 - jsPsych tasks (`sft`, `nback`, `stroop`) run in jsPsych simulation mode (`visual` by default).

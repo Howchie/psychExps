@@ -50,7 +50,7 @@ http://localhost:5173/?task=nback&config=nback/default
 | `auto` | Enable auto-responder synthetic participant | `true`, `1` |
 | `auto_mode` | jsPsych simulation mode | `visual`, `data-only` |
 | `exportStimuli` | Export planned stimulus list without running | `true` |
-| `PROLIFIC_PID` | Participant ID (also `SONA_ID`, `participant`) | `abc123` |
+| `PROLIFIC_PID` | Canonical participant ID used by exports, filenames, seeding, and redirects. Common aliases in SONA/JATOS launches are `SONA_ID` and `participant`. | `abc123` |
 | `STUDY_ID` | Study ID (also `study_id`) | `study01` |
 | `SESSION_ID` | Session ID (also `session_id`) | `session1` |
 
@@ -173,11 +173,11 @@ Global defaults applied to every task:
 | :--- | :--- | :--- |
 | `selection.taskId` | `"sft"` | Default task if none specified in URL |
 | `selection.variantId` | `"default"` | Default variant |
-| `participant.participantParamCandidates` | `["PROLIFIC_PID","SONA_ID","participant","survey_code"]` | URL/JATOS keys checked for participant ID |
+| `participant.participantParamCandidates` | `["PROLIFIC_PID","SONA_ID","participant","survey_code"]` | URL/JATOS keys checked for the canonical participant ID (`participantId`) |
 | `participant.studyParamCandidates` | `["STUDY_ID","study_id"]` | Keys for study ID |
 | `participant.sessionParamCandidates` | `["SESSION_ID","session_id"]` | Keys for session ID |
 | `completion.redirect.enabled` | `false` | Enable redirect on completion |
-| `completion.redirect.completeUrlTemplate` | `""` | Redirect URL (supports `{participantId}`, `{PROLIFIC_PID}`, `{survey_code}`, etc.) |
+| `completion.redirect.completeUrlTemplate` | `""` | Redirect URL (supports `{participantId}`, `{PROLIFIC_PID}`, `{survey_code}`, etc.; `{participantId}` is the canonical ID used by the runtime) |
 | `completion.redirect.incompleteUrlTemplate` | `""` | Redirect URL on incomplete exit |
 | `data.localSave` | `true` | Download CSV/JSON to browser on completion |
 | `data.filePrefix` | `"experiments"` | Filename prefix for downloads |
