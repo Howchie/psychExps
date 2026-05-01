@@ -3,7 +3,6 @@ cd /data/work/Experiments/tasks/nback && npx vitest run pm-placement-sim.test.ts
 
 # Code to build and copy (change paths):
 cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/annikaHons/
-cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/evanderHons/
 For JATOS deployment, make a single component, add the repo directory with the above commands, set the html to index.html and the component json to:
 ```
 {
@@ -28,7 +27,10 @@ pm2 start node --name autoresponder-jatos-once --no-autorestart -- \
 pm2 status autoresponder-jatos-once
 pm2 logs autoresponder-jatos-once --lines 10 --nostream
 # Code to run bricks difficulty estimate (from root):
-npm run difficulty -w @experiments/task-bricks --config evanderHons --trials 10000 --seed 123456 --no-by-trial-type --no-by-block-trial-type
+npm run difficulty -w @experiments/task-bricks -- \
+    --config evanderHons --trials 10000 --seed 123456 \
+    --no-by-trial-type --no-by-block-trial-type
+
 
 # Code to extract csv from json
 python scripts/jatos_to_long_csv.py temp/annikaHons_jatos_example.txt temp/annikaHons_jatos_example_long.csv

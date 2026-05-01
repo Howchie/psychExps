@@ -3053,28 +3053,41 @@ export class ConveyorRenderer {
       Math.min(Number(defaultCornerRadius) || 0, Number(brick.width) / 2, Number(brick.height) / 2)
     );
     const supportsMaskProgress = this._shouldUseProgressMask(shape, completionMode);
-    if ((completionMode === 'hold_duration' || completionMode === 'hold_to_clear') && supportsMaskProgress) {
-      const progressGraphic = new PIXI.Graphics();
-      this._drawBrickBody(progressGraphic, {
-        brick,
-        shape,
-        width: brick.width,
-        height: brick.height,
-        cornerRadius,
-        fillColor: color,
-        fillAlpha: 1,
-        borderColor,
-        borderAlpha: 0.45,
-      });
+
+    if (supportsMaskProgress && (completionMode === 'hold_duration' || completionMode === 'hold_to_clear' || completionMode === 'hover_to_clear')) {
+      const isHover = completionMode === 'hover_to_clear';
+      
       const mask = new PIXI.Graphics();
-      progressGraphic.mask = mask;
-      sprite.addChild(progressGraphic);
+      mask.beginFill(0xffffff, 1);
+      this._drawBrickPrimitive(mask, shape, brick.width, brick.height, cornerRadius);
+      mask.endFill();
       sprite.addChild(mask);
-      sprite.progressGraphic = progressGraphic;
       sprite.progressMask = mask;
       sprite.usesProgressMask = true;
       sprite.progressMaxWidth = brick.width;
-    } else if (completionMode === 'hover_to_clear' && supportsMaskProgress) {
+      sprite.progressShapeValue = shape;
+      sprite.progressRadiusValue = cornerRadius;
+
+      // 1. Background layer: Border only.
+      const bgGraphic = new PIXI.Graphics();
+      this._drawBrickBody(bgGraphic, {
+        brick,
+        shape,
+        width: brick.width,
+        height: brick.height,
+        cornerRadius,
+        fillColor: 0,
+        fillAlpha: 0,
+        borderColor,
+        borderAlpha: isHover ? 0.15 : 0.45,
+        borderWidth: isHover ? 1 : 1.25,
+        withTextureOverlay: false,
+      });
+      bgGraphic.mask = mask;
+      sprite.addChild(bgGraphic);
+      sprite.mainGraphic = bgGraphic;
+
+      // 2. Progress layer: Fill and Texture.
       const progressGraphic = new PIXI.Graphics();
       this._drawBrickBody(progressGraphic, {
         brick,
@@ -3083,19 +3096,15 @@ export class ConveyorRenderer {
         height: brick.height,
         cornerRadius,
         fillColor: color,
-        fillAlpha: 0.96,
+        fillAlpha: isHover ? 0.96 : 1,
         borderColor,
         borderAlpha: 0,
         borderWidth: 0,
       });
-      const mask = new PIXI.Graphics();
       progressGraphic.mask = mask;
       sprite.addChild(progressGraphic);
-      sprite.addChild(mask);
       sprite.progressGraphic = progressGraphic;
-      sprite.progressMask = mask;
-      sprite.usesProgressMask = true;
-      sprite.progressMaxWidth = brick.width;
+
     } else if (completionMode === 'hold_duration' || completionMode === 'hold_to_clear') {
       const legacyGraphic = new PIXI.Graphics();
       const remainingWidth = getBrickVisibleWidth(brick, completionMode);
@@ -3168,20 +3177,21 @@ export class ConveyorRenderer {
     if (!sprite.usesProgressMask || !sprite.progressMask || !sprite.progressGraphic) {
       return;
     }
+    const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
     const remainingWidth = getBrickVisibleWidth(brick, completionMode);
     const maxWidth = Math.max(1, Number(sprite.progressMaxWidth ?? brick.width) || 1);
     const width = Math.max(0, Math.min(maxWidth, remainingWidth));
     const h = Math.max(1, Number(brick.height) || 1);
-    const renderedWidth = this.pixelSnapBricks ? Math.round(width) : Math.round(width * 1000) / 1000;
 
-    // Avoid clipping at full width to prevent right-edge shimmer from mask AA.
-    if (renderedWidth >= maxWidth) {
+    const renderedWidth = this.pixelSnapBricks ? Math.round(width) : width;
+
+    // Avoid clipping at full width to prevent right-edge artifacts.
+    // Use a tiny epsilon to ensure mask is off when progress is negligible.
+    if (renderedWidth >= maxWidth - (1 / resolution) * 0.05) {
       if (sprite.progressGraphic.mask) {
         sprite.progressGraphic.mask = null;
-      }
-      if (sprite.progressMaskBypassed !== true) {
-        sprite.progressMask.clear();
-        sprite.progressMaskBypassed = true;
+        if (sprite.mainGraphic) sprite.mainGraphic.mask = null;
+        sprite.progressMask.visible = false;
       }
       sprite.progressMaskWidth = renderedWidth;
       return;
@@ -3189,21 +3199,20 @@ export class ConveyorRenderer {
 
     if (sprite.progressGraphic.mask !== sprite.progressMask) {
       sprite.progressGraphic.mask = sprite.progressMask;
+      if (sprite.mainGraphic) sprite.mainGraphic.mask = sprite.progressMask;
     }
-    sprite.progressMaskBypassed = false;
+    sprite.progressMask.visible = true;
 
-    const previousWidth = Number(sprite.progressMaskWidth ?? -1);
-    if (renderedWidth === previousWidth) {
+    if (renderedWidth === sprite.progressMaskWidth && sprite.progressMask.height === h) {
       return;
     }
+
     sprite.progressMaskWidth = renderedWidth;
-    sprite.progressMask.clear();
-    if (width <= 0) {
-      return;
-    }
-    sprite.progressMask.beginFill(0xffffff, 1);
-    sprite.progressMask.drawRect(0, 0, renderedWidth, h);
-    sprite.progressMask.endFill();
+    
+    // Scaling the Graphics mask achieves silky smooth sub-pixel clipping without jitter.
+    const scaleX = maxWidth > 0 ? renderedWidth / maxWidth : 0;
+    sprite.progressMask.scale.set(scaleX, 1);
+    sprite.progressMask.position.set(0, 0);
   }
 
   _resolveBrickTextureOverlayConfig(brick: any) {
@@ -3645,10 +3654,12 @@ export class ConveyorRenderer {
     }
     if (!this.spotlightGraphics) {
       this.spotlightGraphics = new PIXI.Graphics();
+      this.spotlightGraphics.eventMode = 'none';
       this.spotlightLayer.addChild(this.spotlightGraphics);
     }
     if (!this.spotlightRing) {
       this.spotlightRing = new PIXI.Graphics();
+      this.spotlightRing.eventMode = 'none';
       this.spotlightLayer.addChild(this.spotlightRing);
     }
     const sprite = this.brickSprites.get(focusState.activeBrickId);
@@ -3683,7 +3694,7 @@ export class ConveyorRenderer {
     const signatureStepRaw = Number(spotlightCfg.signatureQuantizePx);
     const signatureStep = Number.isFinite(signatureStepRaw)
       ? Math.max(0.001, signatureStepRaw)
-      : (snapMode === 'none' ? 0.25 : (1 / resolution));
+      : (snapMode === 'none' ? 0.01 : (1 / resolution));
     const signature = [
       this._quantizeSpotlightSignature(holeX, signatureStep),
       this._quantizeSpotlightSignature(holeY, signatureStep),

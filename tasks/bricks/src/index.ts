@@ -56,6 +56,8 @@ interface BlockPlanItem {
   manipulationId: string | null;
   manipulationIds: string[];
   staticManipulationIds: string[];
+  staticManipulationLabels: Array<string | null>;
+  staticManipulationSpeedPxPerSec: number | null;
   planManipulationIds: string[];
   phase: string | null;
   isPractice: boolean;
@@ -70,6 +72,49 @@ interface ActiveBricksDrtScope {
 
 function toBricksDrtScopeId(blockIndex: number, trialIndex: number | null): string {
   return `B${blockIndex}${trialIndex !== null ? `T${trialIndex}` : ""}`;
+}
+
+function resolveStringLabel(value: unknown, resolver?: TaskAdapterContext["resolver"]): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+  if (!resolver) return text;
+
+  const interpolated = resolveTemplatedString({
+    template: text,
+    resolver,
+  }).trim();
+  if (interpolated && interpolated !== text) return interpolated;
+
+  const firstSpace = text.search(/\s/);
+  if (firstSpace > 0) {
+    const token = text.slice(0, firstSpace);
+    const suffix = text.slice(firstSpace).trimStart();
+    if (token.startsWith("$") || token.includes("${")) {
+      const resolvedToken = resolver.resolveToken(token);
+      if (typeof resolvedToken === "string" && resolvedToken.trim()) {
+        return suffix ? `${resolvedToken.trim()} ${suffix}` : resolvedToken.trim();
+      }
+    }
+  }
+
+  return text;
+}
+
+function readNumericValue(value: unknown): number | null {
+  const direct = Number(value);
+  if (Number.isFinite(direct)) return direct;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const objectValue = asObject(value);
+  if (!objectValue) return null;
+  const nested = Number(objectValue.value);
+  return Number.isFinite(nested) ? nested : null;
+}
+
+function readStaticManipulationSpeedPxPerSec(manipulation: Record<string, unknown>): number | null {
+  const overrides = asObject(manipulation.overrides);
+  const conveyors = asObject(overrides?.conveyors);
+  return readNumericValue(conveyors?.speedPxPerSec);
 }
 
 function isExplicitHoldDurationPracticeTrial(args: {
@@ -95,7 +140,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
   const { taskConfig, selection, resolver, container, moduleRunner } = context;
 
   const rng = createMulberry32(hashSeed(selection.participant.participantId, selection.participant.sessionId, selection.configPath ?? ""));
-  const blockPlan = buildBlockPlan(taskConfig as Record<string, unknown>, rng, selection);
+  const blockPlan = buildBlockPlan(taskConfig as Record<string, unknown>, rng, selection, resolver);
   const instructionsRaw = asObject((taskConfig as Record<string, unknown>).instructions) ?? {};
   const instructionSlots = resolveInstructionScreenSlots(instructionsRaw);
   const blockIntroTemplate = asString(instructionsRaw.blockIntroTemplate);
@@ -441,6 +486,7 @@ function buildBlockPlan(
   config: Record<string, unknown>,
   rng: () => number,
   selection: SelectionContext,
+  resolver?: TaskAdapterContext["resolver"],
 ): BlockPlanItem[] {
   const planNode = asObject(config.plan);
   const blocks = Array.isArray(config.blocks)
@@ -558,6 +604,17 @@ function buildBlockPlan(
       manipulationId,
       manipulationIds: [...manipulationIds],
       staticManipulationIds: [...staticManipulationIds],
+      staticManipulationLabels: selectedManipulations
+        .filter((manipulation) => !planManipulationIds.includes(asString(manipulation.id) ?? ""))
+        .map((manipulation) => resolveStringLabel(manipulation.label, resolver)),
+      staticManipulationSpeedPxPerSec: (() => {
+        const staticManipulation = selectedManipulations.find(
+          (manipulation) => !planManipulationIds.includes(asString(manipulation.id) ?? ""),
+        );
+        if (!staticManipulation) return null;
+        const resolvedManipulation = resolver ? resolver.resolveInValue(staticManipulation) : staticManipulation;
+        return readStaticManipulationSpeedPxPerSec(asObject(resolvedManipulation) ?? staticManipulation);
+      })(),
       planManipulationIds: [...planManipulationIds],
       phase,
       isPractice,
@@ -589,7 +646,11 @@ function buildBricksStimulusRows(
         block_label: block.label,
         trial_index: trialIndex,
         manipulation_id: block.manipulationId,
-        manipulation_static_id: block.staticManipulationIds.length === 1 ? block.staticManipulationIds[0] : null,
+        block_static_manipulation_count: block.staticManipulationIds.length,
+        block_static_manipulation_label:
+          block.staticManipulationLabels.length === 1 ? block.staticManipulationLabels[0] ?? null : null,
+        block_static_manipulation_speed_px_per_sec:
+          block.staticManipulationLabels.length === 1 ? block.staticManipulationSpeedPxPerSec ?? null : null,
         plan_variant_id: planVariantId,
         plan_variant_label: typeof trialNode?.planVariantLabel === "string" ? trialNode.planVariantLabel : null,
         trial_code: planVariantId ?? "default",
@@ -823,14 +884,19 @@ function buildTrialCsvContext(
   const trialNode = asObject(asObject((row as any).config_snapshot)?.trial);
   const planVariantId = asString(trialNode?.planVariantId);
   const planVariantLabel = asString(trialNode?.planVariantLabel);
+  const staticManipulationLabel =
+    blockMeta?.staticManipulationLabels.length === 1 ? blockMeta.staticManipulationLabels[0] ?? null : null;
+  const staticManipulationSpeedPxPerSec =
+    blockMeta?.staticManipulationLabels.length === 1 ? blockMeta.staticManipulationSpeedPxPerSec ?? null : null;
   return {
     participant_id: ids.participantId,
     block_index: row.block_index,
     block_label: row.block_label,
     block_phase: blockMeta?.phase ?? null,
     block_is_practice: blockMeta?.isPractice ?? null,
-    manipulation_static_id:
-      blockMeta?.staticManipulationIds.length === 1 ? blockMeta.staticManipulationIds[0] : null,
+    block_static_manipulation_count: blockMeta?.staticManipulationIds.length ?? 0,
+    block_static_manipulation_label: staticManipulationLabel,
+    block_static_manipulation_speed_px_per_sec: staticManipulationSpeedPxPerSec,
     plan_variant_id: planVariantId ?? null,
     plan_variant_label: planVariantLabel ?? null,
     trial_index: row.trial_index,

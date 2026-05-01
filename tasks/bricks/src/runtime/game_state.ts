@@ -1162,6 +1162,19 @@ export class GameState {
     this.bricks.set(id, brick);
     this.activeBricks.push(brick);
     conveyor.activeIds.push(id);
+    if (this.forcedControl.enabled) {
+      const order = this.forcedControl.orderedBrickIds;
+      if (Array.isArray(order) && !order.includes(id)) {
+        order.push(id);
+      }
+      const currentActive = this.forcedControl.activeBrickId
+        ? this.bricks.get(this.forcedControl.activeBrickId)
+        : null;
+      if (!currentActive || currentActive.status !== BRICK_STATUS.ACTIVE) {
+        const fallbackIndex = Array.isArray(order) ? Math.max(0, order.indexOf(id)) : 0;
+        this._setForcedActiveBrick(fallbackIndex, 'spawned_no_active_focus');
+      }
+    }
     this.stats.spawned += 1;
     const conveyorLengthPx = Math.max(0, Number(conveyor.length) || 0);
     const visibleWidthAtSpawnPx = Math.max(0, getBrickVisibleWidth(brick, this.config.bricks.completionMode));
@@ -1319,6 +1332,11 @@ export class GameState {
     if (!this.forcedControl.enabled) {
       return true;
     }
+    // Practice trials should not be blocked by focus locks as they often involve
+    // manual brick management/respawning that doesn't advance the forced order.
+    if (this.config?.trial?.isPractice) {
+      return true;
+    }
     return brickId === this.forcedControl.activeBrickId;
   }
 
@@ -1326,7 +1344,9 @@ export class GameState {
     if (!brick || brick.status !== BRICK_STATUS.ACTIVE) {
       return { ok: false, reason: 'inactive' };
     }
-    if (!this._isCurrentForcedBrick(brick.id)) {
+    // Practice mode should be lenient with focus locks to prevent getting stuck
+    // due to ID mismatches during respawns/resets.
+    if (!this.config?.trial?.isPractice && !this._isCurrentForcedBrick(brick.id)) {
       return { ok: false, reason: 'forced_order_locked' };
     }
     if (brick.workDeadlineMs !== null && Number.isFinite(brick.workDeadlineMs) && this.elapsed > brick.workDeadlineMs) {

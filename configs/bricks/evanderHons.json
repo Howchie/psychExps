@@ -3,8 +3,8 @@
     "nConveyors": 4,
     "lengthPx": {
       "type": "uniform",
-      "min": 560,
-      "max": 740
+      "min": 580,
+      "max": 720
     },
     "speedPxPerSec": {
       "type": "fixed",
@@ -18,10 +18,10 @@
     },
     "completionParams": {
       "target_hold_ms": 1000,
-      "hold_floor_ms": 100,
+      "hold_floor_ms": 200,
       "hold_ceiling_ms": 1500,
-      "progress_per_perfect": 0.3,
-      "progress_curve": 2.5,
+      "progress_per_perfect": 0.25,
+      "progress_curve": 2,
       "width_scaling": true,
       "width_reference_px": 50,
       "width_scaling_exponent": 1
@@ -119,7 +119,7 @@
     }
   },
   "difficultyModel": {
-    "holdQualityMean": 0.8,
+    "holdQualityMean": 0.75,
     "avgClickIntervalMs": 125
   },
   "trial": {
@@ -200,8 +200,8 @@
     },
     "holdDurationMs": {
         "distribution": "normal",
-        "meanMs": 940,
-        "sdMs": 220,
+        "meanMs": 920,
+        "sdMs": 250,
         "truncate": false
       }
   },
@@ -213,15 +213,15 @@
         "values": [
           {
             "cell1Label": "Low",
-            "cell1SpeedPxPerSec": 24,
+            "cell1SpeedPxPerSec": 16,
             "cell2Label": "High",
-            "cell2SpeedPxPerSec": 32
+            "cell2SpeedPxPerSec": 20
           },
           {
             "cell1Label": "High",
-            "cell1SpeedPxPerSec": 32,
+            "cell1SpeedPxPerSec": 20,
             "cell2Label": "Low",
-            "cell2SpeedPxPerSec": 24
+            "cell2SpeedPxPerSec": 16
           }
         ]
       }
@@ -235,31 +235,19 @@
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 12
+            "value": 10
           }
         }
       }
     },
     {
-      "id": "difficulty_low",
-      "label": "Low speed",
+      "id": "difficulty_practice2",
+      "label": "Low difficulty for practice",
       "overrides": {
         "conveyors": {
           "speedPxPerSec": {
             "type": "fixed",
-            "value": 24
-          }
-        }
-      }
-    },
-    {
-      "id": "difficulty_high",
-      "label": "High speed",
-      "overrides": {
-        "conveyors": {
-          "speedPxPerSec": {
-            "type": "fixed",
-            "value": 32
+            "value": 14
           }
         }
       }
@@ -582,11 +570,11 @@
       "phase": "practice",
       "trials": 3,
       "manipulations": [
-        "difficulty_low",
+        "difficulty_practice2",
         "condition_plan"
       ],
       "afterBlockScreens": [
-        "Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes."
+        "Great job! From here on you will always complete both the detection task and the conveyor task.\n\nThe conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes.\n\nPlease try your best to open as many boxes as you can within the time limit!"
       ]
     },
     {
@@ -597,8 +585,8 @@
         "cell_1",
         "condition_plan"
       ],
-      "afterBlockScreens": [
-        "The conveyors will move a little faster now."
+      "preBlockScreens": [
+        "Please note that your coin count has been reset.\n\nCoins will now start accumulating for real.\nYou will be given updates on your performance after each block."
       ]
     },
     {

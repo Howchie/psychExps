@@ -15,6 +15,7 @@ import {
   resolvePageBackground,
   validateTaskConfigIsolation,
   ensureEegBridgeReady,
+  asObject,
 } from "@experiments/core";
 import type { CoreConfig, JSONObject, TaskAdapter } from "@experiments/core";
 
@@ -127,9 +128,11 @@ async function bootstrap(): Promise<void> {
     coreDefaultConfig as unknown as JSONObject,
     {},
     {
-      ...(mergedTaskConfig.completion && typeof mergedTaskConfig.completion === "object" && !Array.isArray(mergedTaskConfig.completion)
-        ? { completion: mergedTaskConfig.completion as unknown as JSONObject }
-        : {}),
+      ...(asObject(mergedTaskConfig.completion) ? { completion: mergedTaskConfig.completion as JSONObject } : {}),
+      ...(asObject(mergedTaskConfig.data) ? { data: mergedTaskConfig.data as JSONObject } : {}),
+      ...(asObject(mergedTaskConfig.autoresponder) ? { autoresponder: mergedTaskConfig.autoresponder as JSONObject } : {}),
+      ...(asObject(mergedTaskConfig.ui) ? { ui: mergedTaskConfig.ui as JSONObject } : {}),
+      ...(asObject(mergedTaskConfig.eeg) ? { eeg: mergedTaskConfig.eeg as JSONObject } : {}),
     },
   ) as unknown as CoreConfig;
   const query = new URLSearchParams(window.location.search);

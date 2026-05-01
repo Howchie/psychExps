@@ -371,9 +371,6 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     if (enforceBrickQuota && Number.isFinite(Number(brickQuota)) && practicePressResults.length >= Number(brickQuota)) {
       return;
     }
-    if (pendingEnd?.reason === 'brick_quota_met') {
-      return;
-    }
     if (pendingReplenish) {
       return;
     }

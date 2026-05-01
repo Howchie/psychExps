@@ -215,7 +215,7 @@ Additional CSV outputs:
 - `bricks_surveys`: one row per completed survey response, with trial linkage columns and flattened `survey_answers_*` / `survey_scores_*`
 
 DRT long-format rows remain available via task metadata (`drt_rows`) and include:
-- Bricks trial linkage metadata (`participant_id`, block/trial ids/labels/phase, `manipulation_static_id`, `plan_variant_id`, `plan_variant_label`)
+- Bricks trial linkage metadata (`participant_id`, block/trial ids/labels/phase, `block_static_manipulation_count`, `block_static_manipulation_label`, `block_static_manipulation_speed_px_per_sec`, `plan_variant_id`, `plan_variant_label`)
 - spotlight context at response time (`spotlight_brick_id`, `spotlight_conveyor_id`) when available
 - all flattened columns from each `drt_response_rows` entry (including dynamic transform fields in `transformColumns`)
 

@@ -14,7 +14,7 @@ function printUsageAndExit(code = 0) {
     [
       "Usage:",
       "  node tasks/bricks/scripts/run-difficulty-estimate.mjs --config moray1991 [--trials 10000] [--seed 123456]",
-      "    [--no-by-trial-type] [--no-by-block-trial-type]",
+      "    [--no-by-trial-type] [--no-by-block-trial-type] [--no-by-manipulation]",
       "  node tasks/bricks/scripts/run-difficulty-estimate.mjs --config evanderHons --hold-sweep",
       "    [--hold-ms-list 100,200,300] [--hold-ms-min 100 --hold-ms-max 1500 --hold-ms-step 50]",
       "    [--sweep-block-label \"High Difficulty\" | --sweep-block-index 5]",
@@ -24,6 +24,7 @@ function printUsageAndExit(code = 0) {
       "  - Output includes overall summary plus breakdowns by block and trial_type (plan variant id).",
       "  - Use --no-by-trial-type to omit breakdown.by_trial_type.",
       "  - Use --no-by-block-trial-type (or --no-block-trial-type) to omit breakdown.by_block_trial_type.",
+      "  - Use --no-by-manipulation (or --no-by-manipulation-type) to omit breakdown.by_manipulation.",
       "  - Use --hold-sweep to add fixed-hold calibration outputs:",
       "      • single_box_curve: progress gain per hold vs hold ms",
       "      • trial_completion_by_hold_ms: fixed-hold and adaptive-final-hold clear-all rates",
@@ -43,6 +44,7 @@ function parseArgs(argv) {
     seed: 123456,
     includeByTrialType: true,
     includeByBlockTrialType: true,
+    includeByManipulation: true,
     holdSweep: false,
     holdMsMin: 100,
     holdMsMax: 1500,
@@ -51,6 +53,7 @@ function parseArgs(argv) {
     sweepBlockLabel: null,
     sweepBlockIndex: null,
   };
+  const positional = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -68,6 +71,8 @@ function parseArgs(argv) {
       out.includeByTrialType = false;
     } else if (arg === "--no-by-block-trial-type" || arg === "--no-block-trial-type") {
       out.includeByBlockTrialType = false;
+    } else if (arg === "--no-by-manipulation" || arg === "--no-by-manipulation-type") {
+      out.includeByManipulation = false;
     } else if (arg === "--hold-sweep") {
       out.holdSweep = true;
     } else if (arg === "--hold-ms-min") {
@@ -88,12 +93,17 @@ function parseArgs(argv) {
     } else if (arg === "--sweep-block-index") {
       out.sweepBlockIndex = Number(argv[i + 1]);
       i += 1;
-    } else if (!arg.startsWith("-") && !out._positionalConsumed) {
-      out.config = String(arg).trim();
-      out._positionalConsumed = true;
+    } else if (!arg.startsWith("-")) {
+      positional.push(String(arg).trim());
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+  if (positional[0]) out.config = positional[0];
+  if (positional[1] !== undefined) out.trials = Number(positional[1]);
+  if (positional[2] !== undefined) out.seed = Number(positional[2]);
+  if (positional.length > 3) {
+    throw new Error(`Unknown positional arguments: ${positional.slice(3).join(" ")}`);
   }
   if (!out.config) throw new Error("Missing config name.");
   if (!Number.isFinite(out.trials) || out.trials <= 0) throw new Error("--trials must be a positive number.");
@@ -109,7 +119,6 @@ function parseArgs(argv) {
     }
     out.sweepBlockIndex = Math.floor(out.sweepBlockIndex);
   }
-  delete out._positionalConsumed;
   return out;
 }
 
@@ -208,6 +217,57 @@ function deepMerge(target, source) {
     }
   }
   return target;
+}
+
+function getByPath(source, pathExpr) {
+  if (!pathExpr) return undefined;
+  const normalized = String(pathExpr).replace(/\[(\d+)\]/g, ".$1");
+  const parts = normalized.split(".").filter(Boolean);
+  let current = source;
+  for (const part of parts) {
+    if (!current || typeof current !== "object") return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function resolveBetweenVariables(config, seed, configId) {
+  const cfg = deepClone(config);
+  const betweenSampler = cfg?.variables?.between?.sampler;
+  const samplerType = String(betweenSampler?.type ?? "").trim().toLowerCase();
+  const values = Array.isArray(betweenSampler?.values) ? betweenSampler.values : [];
+  let between = {};
+  if (samplerType === "list" && values.length > 0) {
+    const rand = mulberry32(hashSeedParts([configId, String(seed), "bricks_difficulty_between"]));
+    const idx = Math.floor(rand() * values.length);
+    const picked = values[idx];
+    if (picked && typeof picked === "object" && !Array.isArray(picked)) {
+      between = picked;
+    }
+  }
+
+  const TOKEN_RE = /\$between\.([A-Za-z0-9_.[\]]+)/g;
+  const walk = (value) => {
+    if (Array.isArray(value)) return value.map((item) => walk(item));
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
+    }
+    if (typeof value !== "string") return value;
+
+    const trimmed = value.trim();
+    const full = trimmed.match(/^\$between\.([A-Za-z0-9_.[\]]+)$/);
+    if (full) {
+      const resolved = getByPath(between, full[1]);
+      return resolved === undefined ? value : resolved;
+    }
+
+    return value.replace(TOKEN_RE, (_, pathExpr) => {
+      const resolved = getByPath(between, pathExpr);
+      return resolved === undefined ? `$between.${pathExpr}` : String(resolved);
+    });
+  };
+
+  return walk(cfg);
 }
 
 function hashSeedParts(parts) {
@@ -878,6 +938,8 @@ function buildTrialTemplates(config, seed, configId) {
         trial_index: trialIndex,
         trial_type: variant?.id ?? "default",
         trial_type_label: variant?.label ?? "default",
+        manipulation_ids: selectedManipulations.map((m) => String(m?.id ?? "")).filter(Boolean),
+        manipulation_labels: selectedManipulations.map((m) => String(m?.label ?? m?.id ?? "")).filter(Boolean),
         config: trialConfig,
       });
     }
@@ -950,6 +1012,7 @@ async function main() {
     seed,
     includeByTrialType,
     includeByBlockTrialType,
+    includeByManipulation,
     holdSweep,
     holdMsMin,
     holdMsMax,
@@ -960,14 +1023,16 @@ async function main() {
   } = parseArgs(process.argv.slice(2));
   const holdMsSweep = buildHoldMsSweep({ holdSweep, holdMsMin, holdMsMax, holdMsStep, holdMsList });
   const { config, configPath, configId } = await loadConfig(configName);
+  const resolvedConfig = resolveBetweenVariables(config, seed, configId);
 
-  const templates = buildTrialTemplates(config, seed, configId);
+  const templates = buildTrialTemplates(resolvedConfig, seed, configId);
   if (templates.length === 0) {
     throw new Error("No trial templates could be constructed from config.");
   }
 
   const overall = createAccumulator();
   const byBlock = new Map();
+  const byManipulation = includeByManipulation ? new Map() : null;
   const byTrialType = includeByTrialType ? new Map() : null;
   const byBlockTrialType = includeByBlockTrialType ? new Map() : null;
   const pickTemplate = mulberry32((seed ^ 0xa341316c) >>> 0);
@@ -994,14 +1059,19 @@ async function main() {
     updateAccumulator(overall, feasibilityPct, loadPct, maxClears);
 
     const blockKey = `${template.block_index}|${template.block_label}`;
+    const manipulationIds = Array.isArray(template.manipulation_ids) ? template.manipulation_ids : [];
+    const manipulationLabels = Array.isArray(template.manipulation_labels) ? template.manipulation_labels : [];
+    const manipulationKey = manipulationIds.length > 0 ? manipulationIds.join("+") : "none";
     const trialTypeKey = String(template.trial_type ?? "default");
     const blockTrialTypeKey = `${blockKey}|${trialTypeKey}`;
     if (!byBlock.has(blockKey)) byBlock.set(blockKey, createAccumulator());
+    if (byManipulation && !byManipulation.has(manipulationKey)) byManipulation.set(manipulationKey, createAccumulator());
     if (byTrialType && !byTrialType.has(trialTypeKey)) byTrialType.set(trialTypeKey, createAccumulator());
     if (byBlockTrialType && !byBlockTrialType.has(blockTrialTypeKey)) {
       byBlockTrialType.set(blockTrialTypeKey, createAccumulator());
     }
     updateAccumulator(byBlock.get(blockKey), feasibilityPct, loadPct, maxClears);
+    if (byManipulation) updateAccumulator(byManipulation.get(manipulationKey), feasibilityPct, loadPct, maxClears);
     if (byTrialType) updateAccumulator(byTrialType.get(trialTypeKey), feasibilityPct, loadPct, maxClears);
     if (byBlockTrialType) {
       updateAccumulator(byBlockTrialType.get(blockTrialTypeKey), feasibilityPct, loadPct, maxClears);
@@ -1040,6 +1110,22 @@ async function main() {
         trial_type: String(key),
       }))
     : null;
+  const byManipulationSummary = byManipulation
+    ? summarizeGroupMap(byManipulation, (key) => {
+        const template = templates.find((t) => (Array.isArray(t.manipulation_ids) ? t.manipulation_ids.join("+") : "none") === key);
+        const ids = Array.isArray(template?.manipulation_ids) ? template.manipulation_ids : (key === "none" ? [] : String(key).split("+"));
+        const labels = Array.isArray(template?.manipulation_labels) ? template.manipulation_labels : [];
+        const cfg = template?.config ?? {};
+        const speedValue = cfg?.conveyors?.speedPxPerSec?.value ?? cfg?.conveyors?.speedPxPerSec ?? null;
+        const speedNum = Number(speedValue);
+        return {
+          manipulation_key: key,
+          manipulation_ids: ids,
+          manipulation_labels: labels,
+          conveyor_speed_px_per_sec: Number.isFinite(speedNum) ? speedNum : speedValue,
+        };
+      })
+    : null;
   const byBlockTrialTypeSummary = byBlockTrialType
     ? summarizeGroupMap(byBlockTrialType, (key) => {
         const [blockIndexRaw, blockLabel, trialType] = String(key).split("|");
@@ -1054,6 +1140,9 @@ async function main() {
   const breakdown = {
     by_block: byBlockSummary,
   };
+  if (byManipulationSummary) {
+    breakdown.by_manipulation = byManipulationSummary;
+  }
   if (byTrialTypeSummary) {
     breakdown.by_trial_type = byTrialTypeSummary;
   }
