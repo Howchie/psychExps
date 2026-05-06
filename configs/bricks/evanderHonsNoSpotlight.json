@@ -267,7 +267,7 @@
       "id": "warehouse_concrete_checker"
     },
     "performance": {
-      "maxDevicePixelRatio": 1.5,
+      "maxDevicePixelRatio": 2.5,
       "antialias": true,
       "imageRendering": "auto",
       "pixelSnapBricks": false

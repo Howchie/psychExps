@@ -39,6 +39,7 @@ export interface DrtEvent {
   time: number;
   type: DrtEventType;
   stim_id?: string | null;
+  stim_start?: number | null;
   key?: string;
   rt?: number;
   rt_ms?: number | null;
@@ -97,6 +98,7 @@ export class DrtEngine {
 
   private nextStimAt = 0;
   private nextStimId = 0;
+  private lastStimEndAt = 0;
   private activeStim: DrtStimulusState | null = null;
   private readonly events: DrtEvent[] = [];
   private readonly stats: DrtStats = defaultStats();
@@ -117,6 +119,7 @@ export class DrtEngine {
 
   start(startTimeMs = 0): void {
     if (!this.enabled) return;
+    this.lastStimEndAt = startTimeMs;
     this.nextStimAt = startTimeMs + Math.max(0, this.nextIsiMs());
   }
 
@@ -131,7 +134,7 @@ export class DrtEngine {
       };
       this.activeStim = stim;
       this.stats.presented += 1;
-      this.emit("drt_stimulus_presented", { time: nowMs, stim_id: stim.id });
+      this.emit("drt_stimulus_presented", { time: nowMs, stim_id: stim.id, stim_start: stim.start });
       hooks?.onStimStart?.(stim);
     }
 
@@ -142,13 +145,16 @@ export class DrtEngine {
     if (latency < this.responseDeadlineMs) return;
 
     this.stats.misses += 1;
-    this.emit("drt_miss", { time: nowMs, stim_id: this.activeStim.id, latency });
+    this.lastStimEndAt = nowMs;
+    this.emit("drt_miss", { time: nowMs, stim_id: this.activeStim.id, stim_start: this.activeStim.start, latency });
     this.emit("drt_response", {
       time: nowMs,
       stim_id: this.activeStim.id,
+      stim_start: this.activeStim.start,
       key: this.key,
       hit: false,
       rt_ms: null,
+      note: "miss",
     });
     hooks?.onStimEnd?.(this.activeStim);
     this.activeStim = null;
@@ -159,26 +165,31 @@ export class DrtEngine {
     if (!this.enabled) return false;
 
     const key = normalizeDrtKey(eventKey);
-    if (key !== this.key) {
-      this.stats.falseAlarms += 1;
-      this.emit("drt_false_alarm", { time: nowMs, key });
-      this.emit("drt_response", { time: nowMs, stim_id: null, key, hit: false, rt_ms: null });
-      return false;
-    }
+    if (key !== this.key) return false;
 
     if (!this.activeStim) {
+      const rt = nowMs - this.lastStimEndAt;
       this.stats.falseAlarms += 1;
-      this.emit("drt_false_alarm", { time: nowMs, key, note: "no_active_stimulus" });
-      this.emit("drt_response", { time: nowMs, stim_id: null, key, hit: false, rt_ms: null });
-      return false;
+      this.emit("drt_false_alarm", { time: nowMs, key, rt });
+      this.emit("drt_response", {
+        time: nowMs,
+        stim_id: null,
+        stim_start: null,
+        key,
+        hit: false,
+        rt_ms: rt,
+        note: "false_alarm",
+      });
+      return true;
     }
 
     const stim = this.activeStim;
     stim.responded = true;
     const rt = nowMs - stim.start;
+    this.lastStimEndAt = nowMs;
     this.stats.hits += 1;
-    this.emit("drt_hit", { time: nowMs, stim_id: stim.id, rt });
-    this.emit("drt_response", { time: nowMs, stim_id: stim.id, key, hit: true, rt_ms: rt });
+    this.emit("drt_hit", { time: nowMs, stim_id: stim.id, stim_start: stim.start, rt });
+    this.emit("drt_response", { time: nowMs, stim_id: stim.id, stim_start: stim.start, key, hit: true, rt_ms: rt });
     hooks?.onStimEnd?.(stim);
     this.activeStim = null;
     this.nextStimAt = nowMs + Math.max(0, this.nextIsiMs());
@@ -188,7 +199,17 @@ export class DrtEngine {
   forceEnd(nowMs: number, hooks?: Pick<DrtStepHooks, "onStimEnd">): void {
     if (!this.activeStim) return;
     const stim = this.activeStim;
-    this.emit("drt_forced_end", { time: nowMs, stim_id: stim.id });
+    this.lastStimEndAt = nowMs;
+    this.emit("drt_forced_end", { time: nowMs, stim_id: stim.id, stim_start: stim.start });
+    this.emit("drt_response", {
+      time: nowMs,
+      stim_id: stim.id,
+      stim_start: stim.start,
+      key: this.key,
+      hit: false,
+      rt_ms: null,
+      note: "forced_end",
+    });
     hooks?.onStimEnd?.(stim);
     this.activeStim = null;
   }

@@ -3718,6 +3718,10 @@ export class ConveyorRenderer {
     this.spotlightGraphics.drawRect(0, 0, canvasW, canvasH);
     if (typeof this.spotlightGraphics.beginHole === 'function' && typeof this.spotlightGraphics.endHole === 'function') {
       this.spotlightGraphics.beginHole();
+      // Use native: true for the hole edge if snapping is none to avoid AA smearing
+      if (snapMode === 'none') {
+        this.spotlightGraphics.lineStyle({ width: 0, native: true });
+      }
       this.spotlightGraphics.drawRoundedRect(holeX, holeY, holeW, holeH, cornerRadius);
       this.spotlightGraphics.endHole();
     } else {

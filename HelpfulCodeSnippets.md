@@ -3,6 +3,7 @@ cd /data/work/Experiments/tasks/nback && npx vitest run pm-placement-sim.test.ts
 
 # Code to build and copy (change paths):
 cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/annikaHons/
+cd /data/work/Experiments & npm run build -w @experiments/web && rsync -av --delete /data/work/Experiments/apps/web/dist/ /data/work/jatos/study_assets_root/evanderHons/
 For JATOS deployment, make a single component, add the repo directory with the above commands, set the html to index.html and the component json to:
 ```
 {
@@ -19,11 +20,7 @@ For JATOS deployment, make a single component, add the repo directory with the a
 Replacing the values as required. Disabling local save ensures no csv is downloaded on the participant side.
 
 # JATOS test auto
-pm2 start node --name autoresponder-jatos-once --no-autorestart -- \
-    scripts/run-autoresponder-url.mjs \
-    --url "http://127.0.0.1:9000/publix/Jbc32w1CK6N?auto=true&auto_mode=data-only" \
-    --max-minutes 130 \
-    --done-text "Thank you very much for participating"
+pm2 start node --name autoresponder-jatos-once --no-autorestart --     scripts/run-autoresponder-url.mjs     --url "http://127.0.0.1:9000/publix/Jbc32w1CK6N?auto=true&auto_mode=data-only"     --max-minutes 130     --done-text "Thank you very much for participating"
 pm2 status autoresponder-jatos-once
 pm2 logs autoresponder-jatos-once --lines 10 --nostream
 # Code to run bricks difficulty estimate (from root):

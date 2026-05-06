@@ -1083,9 +1083,15 @@ function buildBricksDrtRows(
           typeof spotlightMeta.texture_category_id === "string" ? spotlightMeta.texture_category_id : null,
         spotlight_texture_category_label:
           typeof spotlightMeta.texture_category_label === "string" ? spotlightMeta.texture_category_label : null,
-        response_time_s: Number.isFinite(responseTimeMs) ? responseTimeMs / 1000 : null,
+        drt_trialStart: Number.isFinite(Number(response.stim_start)) ? Number(response.stim_start) / 1000 : null,
+        drt_trialEnd: Number.isFinite(responseTimeMs) ? responseTimeMs / 1000 : null,
         response_hit: typeof response.hit === "boolean" ? response.hit : null,
-        response_rt_s: Number.isFinite(Number(response.rt_ms)) ? Number(response.rt_ms) / 1000 : null,
+        response_rt_s: (response.hit && Number.isFinite(Number(response.rt_ms)))
+          ? Number(response.rt_ms) / 1000
+          : -1,
+        drt_finishState: response.hit
+          ? "response"
+          : (typeof response.note === "string" ? response.note : "miss"),
         estimate_drift_rate: Number.isFinite(Number(estimateValues?.drift_rate))
           ? Number(estimateValues?.drift_rate)
           : null,
