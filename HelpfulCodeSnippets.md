@@ -27,7 +27,10 @@ pm2 logs autoresponder-jatos-once --lines 10 --nostream
 npm run difficulty -w @experiments/task-bricks -- \
     --config evanderHons --trials 10000 --seed 123456 \
     --no-by-trial-type --no-by-block-trial-type
-
+# Update sprite images
+python3 tasks/bricks/scripts/update-manifests.py
+python3 tasks/bricks/scripts/trim-sprites.py --thresh 1
+https://www.remove.bg/upload
 
 # Code to extract csv from json
 python scripts/jatos_to_long_csv.py temp/annikaHons_jatos_example.txt temp/annikaHons_jatos_example_long.csv

@@ -14,7 +14,7 @@ export const buildHUDLines = ({ stats, remainingMs, blockLabel, drtStats, focusI
   const timeSec = hasTimer ? Math.max(0, remainingMs) / 1000 : null;
   const lines = [`Block: ${blockLabel ?? 'N/A'}`];
   if (showRoundsRemaining && roundsRemaining !== undefined) {
-    lines.push(`Rounds remaining: ${roundsRemaining}`);
+    lines.push(`Rounds Remaining: ${roundsRemaining}`);
   }
   if (showTimer) {
     lines.push(hasTimer ? `Time left: ${timeSec.toFixed(1)}s` : 'Time left: --');

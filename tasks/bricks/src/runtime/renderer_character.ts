@@ -63,7 +63,7 @@ export class CharacterSprite {
   private frameTimer = 0;
   private stateTimer = 0;
   private crossFadeTimer = 0;
-  private currentFrameIdx = 0;
+  private lastIndices = new Map<CharacterState, number>();
   private loaded = false;
   private readonly sizePx: number;
   private readonly timing: Required<CharacterTimingConfig>;
@@ -160,12 +160,7 @@ export class CharacterSprite {
           ? this.timing.celebrateDurationMs
           : this.timing.sadDurationMs;
         
-        // Pick new random frames while in state
-        if (this.frameTimer >= this.timing.idleFrameIntervalMs) {
-          this.frameTimer = 0;
-          this._pickRandomFrame(true);
-        }
-
+        // NO frame picking here - just hold the one we picked in _enterState
         if (this.stateTimer >= holdMs) this._enterState('idle');
         break;
       }
@@ -181,29 +176,32 @@ export class CharacterSprite {
   }
 
   private _enterState(next: CharacterState): void {
+    const isNewState = next !== this.state;
     this.state = next;
     this.frameTimer = 0;
     this.stateTimer = 0;
-    // We don't reset currentFrameIdx because we want to pick a DIFFERENT one
-    this._pickRandomFrame(false);
+    
+    // Cross-fade if we are actually switching states
+    this._pickRandomFrame(isNewState);
   }
 
   private _pickRandomFrame(crossFade: boolean): void {
     const frames = this.textures.get(this.state);
     if (!frames || frames.length === 0) return;
     
-    if (frames.length === 1) {
-      this.currentFrameIdx = 0;
-    } else {
-      let nextIdx = this.currentFrameIdx;
-      // Ensure we actually change the frame
-      while (nextIdx === this.currentFrameIdx) {
+    const lastIdx = this.lastIndices.get(this.state) ?? -1;
+    let nextIdx = 0;
+
+    if (frames.length > 1) {
+      nextIdx = lastIdx;
+      // Ensure we pick a DIFFERENT frame for this specific state
+      while (nextIdx === lastIdx) {
         nextIdx = Math.floor(Math.random() * frames.length);
       }
-      this.currentFrameIdx = nextIdx;
     }
     
-    this._applyFrame(this.state, this.currentFrameIdx, crossFade);
+    this.lastIndices.set(this.state, nextIdx);
+    this._applyFrame(this.state, nextIdx, crossFade);
   }
 
   private _applyFrame(state: CharacterState, idx: number, crossFade: boolean): void {
