@@ -86,6 +86,58 @@ function stripRecordsFromPayload(payload: Record<string, unknown>): Record<strin
   };
 }
 
+const JATOS_CHECKPOINT_MAX_SUMMARY_BYTES = 8_192;
+
+function estimateJsonBytes(value: unknown): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function toCheckpointResultSummary(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      valueType: value === null ? "null" : typeof value,
+      value: value ?? null,
+      approxBytes: estimateJsonBytes(value),
+      summarized: true,
+    };
+  }
+
+  const src = value as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(src)) {
+    if (field == null || typeof field === "string" || typeof field === "number" || typeof field === "boolean") {
+      summary[key] = field;
+      continue;
+    }
+    if (Array.isArray(field)) {
+      summary[`${key}Count`] = field.length;
+      continue;
+    }
+    if (typeof field === "object") {
+      summary[`${key}Keys`] = Object.keys(field as Record<string, unknown>).length;
+      continue;
+    }
+    summary[key] = String(field);
+  }
+
+  const approxBytes = estimateJsonBytes(value);
+  let reduced: Record<string, unknown> = {
+    ...summary,
+    approxBytes,
+    summarized: true,
+  };
+  while (estimateJsonBytes(reduced) > JATOS_CHECKPOINT_MAX_SUMMARY_BYTES && Object.keys(reduced).length > 4) {
+    const removable = Object.keys(reduced).find((key) => key !== "approxBytes" && key !== "summarized");
+    if (!removable) break;
+    delete reduced[removable];
+  }
+  return reduced;
+}
+
 export class CompositeTaskDataSink<TBlock = unknown, TTrial = unknown, TTrialResult = unknown>
   implements TaskDataSink<TBlock, TTrial, TTrialResult>
 {
@@ -232,7 +284,12 @@ export class JatosCheckpointSink<TBlock = unknown, TTrial = unknown, TTrialResul
           checkpoints: this.checkpoints,
         };
         const ok = await submitToJatos(payload);
-        if (!ok) this.hadFailure = true;
+        if (!ok) {
+          this.hadFailure = true;
+          return;
+        }
+        // Keep only unsent deltas; otherwise each checkpoint payload grows forever.
+        this.checkpoints = [];
       })
       .catch(() => {
         this.hadFailure = true;
@@ -247,7 +304,7 @@ export class JatosCheckpointSink<TBlock = unknown, TTrial = unknown, TTrialResul
       blockIndex: args.blockIndex,
       ...(typeof args.blockAttempt === "number" ? { blockAttempt: args.blockAttempt } : {}),
       trialIndex: args.trialIndex,
-      result: args.result,
+      result: toCheckpointResultSummary(args.result),
     });
   }
 

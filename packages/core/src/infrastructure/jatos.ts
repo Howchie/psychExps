@@ -6,6 +6,7 @@ declare global {
     jatos?: {
       submitResultData: (payload: string | JSONObject) => Promise<void>;
       appendResultData?: (payload: string | JSONObject) => Promise<void>;
+      uploadResultFile?: (obj: Blob | string | object, filename: string) => Promise<void>;
       endStudy: () => Promise<void>;
       endStudyAndRedirect: (url: string) => Promise<void>;
       onLoad?: (cb: () => void) => void;
@@ -103,6 +104,18 @@ export async function appendToJatos(payload: string | JSONObject): Promise<boole
     return true;
   } catch (error) {
     console.error("JATOS append failed", error);
+    return false;
+  }
+}
+
+export async function uploadResultFileToJatos(obj: Blob | string | object, filename: string): Promise<boolean> {
+  const api = getJatosApi();
+  if (!api || typeof api.uploadResultFile !== "function") return false;
+  try {
+    await api.uploadResultFile(obj, filename);
+    return true;
+  } catch (error) {
+    console.error("JATOS uploadResultFile failed", error);
     return false;
   }
 }

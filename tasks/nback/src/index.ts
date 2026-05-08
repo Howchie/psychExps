@@ -86,6 +86,17 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
   }
 
     const { parsed, eventLogger } = runtime;
+    const includeJsPsychData = (() => {
+      const taskNode = asObject(context.taskConfig.task);
+      const dataNode = asObject(context.taskConfig.data);
+      const debugNode = asObject(context.taskConfig.debug);
+      const raw =
+        dataNode?.includeJsPsychData ??
+        taskNode?.includeJsPsychData ??
+        debugNode?.includeJsPsychData;
+      if (typeof raw === "boolean") return raw;
+      return String(raw ?? "").trim().toLowerCase() === "true";
+    })();
     applyTaskInstructionConfig(context.taskConfig, {
       ...parsed.instructions,
       blockSummary: {
@@ -126,9 +137,10 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
         showBlockLabel: true,
         summarySectionPattern: /^blockEnd(Before|After)Post_/,
       }),
-      getTaskMetadata: () => ({
-        jsPsychData: jsPsych?.data.get().values() ?? [],
-      }),
+      getTaskMetadata: () =>
+        includeJsPsychData
+          ? { jsPsychData: jsPsych?.data.get().values() ?? [] }
+          : {},
       onTaskStart: () => {
         nbackEnvironment.installKeyScrollBlocker(parsed.allowedKeys);
         nbackEnvironment.installPageScrollLock();

@@ -178,6 +178,7 @@ The NBack task produces a consolidated CSV/JSON payload with suffix `nback_trial
 - **Trial Records:** Every N-Back, PM, and Injector trial is exported as a primary row.
 - **Fields:** `trialType` (`N`, `F`, `PM`, `L<lag>`), `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`, etc.
 - **Module Results:** Detailed DRT and injector module outputs (e.g., transform estimates, raw module logs) are included in the `moduleResults` object in the final JSON payload.
+- **Raw jsPsych Rows (optional):** Full `jsPsychData` is excluded by default to keep JATOS payloads compact. Enable it only when needed with `data.includeJsPsychData: true` (or `task.includeJsPsychData: true`).
 
 ## 6. Stimulus Export Mode
 

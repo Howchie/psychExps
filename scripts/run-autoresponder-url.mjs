@@ -337,6 +337,8 @@ async function main() {
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
   let sawJatosRedirectSignal = false;
+  let sawJatosPersistenceFailure = false;
+  const jatosPersistenceErrors = [];
 
   await page.addInitScript(() => {
     const installJatosDiagnostics = () => {
@@ -361,6 +363,7 @@ async function main() {
       };
       wrap("submitResultData");
       wrap("appendResultData");
+      wrap("uploadResultFile");
       wrap("endStudy");
       wrap("endStudyAndRedirect");
       j.__autoresponderWrapped = true;
@@ -376,6 +379,15 @@ async function main() {
     console.log(line);
     if (msg.text().includes("[AutoResponder] JATOS Redirecting to:")) {
       sawJatosRedirectSignal = true;
+    }
+    if (
+      /JATOS submit failed/i.test(msg.text()) ||
+      /JATOS append failed/i.test(msg.text()) ||
+      /uploadResultFile failed/i.test(msg.text()) ||
+      /\[AutoResponder:JATOS\].*failed:/i.test(msg.text())
+    ) {
+      sawJatosPersistenceFailure = true;
+      jatosPersistenceErrors.push(msg.text());
     }
   });
   page.on("pageerror", (err) => {
@@ -410,6 +422,10 @@ async function main() {
           console.error(`[response:${status}] response body: ${truncatedResText}`);
         }
       }
+      if (/resultData|resultFile/i.test(url)) {
+        sawJatosPersistenceFailure = true;
+        jatosPersistenceErrors.push(`${status} ${method} ${url}`);
+      }
     }
   });
 
@@ -420,12 +436,17 @@ async function main() {
   let sawPublix = launchPublix || isPublixUrl(page.url());
 
   async function completeRun(status, elapsed, reason) {
+    if (status === "completed" && sawJatosPersistenceFailure) {
+      status = "failed";
+      reason = `jatos_persistence_failure:${reason}`;
+    }
     await saveArtifacts(page, artifactDir, "complete");
     const summary = {
       status,
       elapsedMs: elapsed,
       finalUrl: page.url(),
       reason,
+      ...(jatosPersistenceErrors.length > 0 ? { jatosPersistenceErrors } : {}),
       finishedAt: Date.now(),
     };
     await fs.writeFile(path.join(artifactDir, "result.json"), JSON.stringify(summary, null, 2), "utf8");
@@ -444,6 +465,9 @@ async function main() {
       }
 
       const currentUrl = page.url();
+      if (sawJatosPersistenceFailure) {
+        throw new Error(`JATOS persistence failed: ${jatosPersistenceErrors.at(-1) || "unknown error"}`);
+      }
       if (isPublixUrl(currentUrl)) {
         sawPublix = true;
         if (isPublixFinalUrl(currentUrl)) {
