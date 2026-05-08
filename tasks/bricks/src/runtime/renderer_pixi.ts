@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import { brickProgressTint, getBrickVisibleWidth } from './brick_logic.js';
 import { buildHUDLines } from './hud.js';
 import { getOrCreateProceduralTexture, loadCachedImageTexture, makeMaterialKey } from './material_cache.js';
+import { CharacterSprite } from './renderer_character.js';
 
 // Helper to convert CSS color strings or numeric values into Pixi-compatible numbers
 const toPixiColor = (value: unknown) => {
@@ -490,9 +491,11 @@ export class ConveyorRenderer {
   backgroundLayer!: PIXI.Container;
   brickLayer!: PIXI.Container;
   effectLayer!: PIXI.Container;
+  characterLayer!: PIXI.Container;
   spotlightLayer!: PIXI.Container;
   hudLayer!: PIXI.Container;
   drtLayer!: PIXI.Container;
+  characterSprite: CharacterSprite | null = null;
 
   constructor(config: Record<string, any>, { onBrickClick, onBrickHold, onBrickHoldState, onBrickHover, onPointerDebug, runtimeLengths, seed }: Record<string, any> = {}) {
     this.config = config;
@@ -614,6 +617,7 @@ export class ConveyorRenderer {
     this.backgroundLayer = new PIXI.Container();
     this.brickLayer = new PIXI.Container();
     this.effectLayer = new PIXI.Container();
+    this.characterLayer = new PIXI.Container();
     this.spotlightLayer = new PIXI.Container();
     this.hudLayer = new PIXI.Container();
     this.drtLayer = new PIXI.Container();
@@ -623,6 +627,7 @@ export class ConveyorRenderer {
     this.app.stage.addChild(this.interactionLayer);
     this.app.stage.addChild(this.brickLayer);
     this.app.stage.addChild(this.effectLayer);
+    this.app.stage.addChild(this.characterLayer);
     this.app.stage.addChild(this.spotlightLayer);
     this.app.stage.addChild(this.drtLayer);
     this.app.stage.addChild(this.hudLayer);
@@ -633,6 +638,7 @@ export class ConveyorRenderer {
     this._drawBelts();
     this._setupHUD();
     this._setupPointerDebug();
+    await this._initCharacter();
   }
 
   _setupPointerDebug() {
@@ -662,6 +668,25 @@ export class ConveyorRenderer {
       this.pointerDebugText = text;
       this._updatePointerDebugOverlay();
     }
+  }
+
+  async _initCharacter(): Promise<void> {
+    const characterCfg = this.config?.display?.character;
+    if (!characterCfg || characterCfg.enable !== true) return;
+    const canvasWidth = Number(this.config.display.canvasWidth);
+    const offsetYPx = Number(characterCfg.offsetYPx ?? 4);
+    this.characterSprite = new CharacterSprite(characterCfg);
+    this.characterLayer.addChild(this.characterSprite.displayObject);
+    this.characterSprite.displayObject.x = canvasWidth / 2;
+    this.characterSprite.displayObject.y = offsetYPx;
+    await this.characterSprite.load();
+  }
+
+  updateCharacter(dt: number, clearedCount: number, droppedCount: number): void {
+    if (!this.characterSprite) return;
+    if (clearedCount > 0) this.characterSprite.onClear();
+    if (droppedCount > 0) this.characterSprite.onDrop();
+    this.characterSprite.update(dt);
   }
 
   _emitPointerDebug(type: string, brickId: string | null, e: any, extra: Record<string, any> = {}) {
@@ -2381,6 +2406,8 @@ export class ConveyorRenderer {
     const goodThresholdMin = Number(practiceUiCfg.goodThresholdMin ?? -0.2);
     const goodThresholdMax = Number(practiceUiCfg.goodThresholdMax ?? 0.2);
 
+    const customBins = Array.isArray(practiceUiCfg.bins) ? practiceUiCfg.bins : null;
+
     clearEvents.forEach((entry) => {
       if (this.effectVisuals.length >= maxEffects) {
         this.perfStats.effectDropsSkipped += 1;
@@ -2393,7 +2420,37 @@ export class ConveyorRenderer {
       const centerX = Number(entry?.x ?? 0) + width * 0.5;
       const centerY = Number(entry?.y ?? 0) + height * 0.5;
       const startY = centerY - Math.max(1, height * 0.2) - clearCfg.startOffsetYPx;
-      const label = `${Math.round(holdDuration)} ms`;
+      
+      let label = `${Math.round(holdDuration)} ms`;
+      let labelColor = toPixiColor(clearCfg.textColor);
+
+      if (customBins) {
+        // Find the matching bin based on scaledDelta
+        // Bins should be sorted by 'min' ascending
+        const matchingBin = customBins.find((bin: any) => {
+          const min = bin.min !== undefined ? Number(bin.min) : Number.NEGATIVE_INFINITY;
+          const max = bin.max !== undefined ? Number(bin.max) : Number.POSITIVE_INFINITY;
+          return scaledDelta >= min && scaledDelta < max;
+        });
+
+        if (matchingBin) {
+          if (matchingBin.label) {
+            label = matchingBin.label;
+          }
+          if (matchingBin.color) {
+            labelColor = toPixiColor(matchingBin.color);
+          }
+        }
+      } else {
+        if (scaledDelta < goodThresholdMin) {
+          labelColor = binTooFastColor;
+        } else if (scaledDelta > goodThresholdMax) {
+          labelColor = binTooSlowColor;
+        } else {
+          labelColor = binGoodColor;
+        }
+      }
+
       const textSize = Math.max(
         clearCfg.textMinSizePx,
         Math.min(clearCfg.textMaxSizePx, height * clearCfg.textSizeFactor)
@@ -2401,15 +2458,6 @@ export class ConveyorRenderer {
       const container = new PIXI.Container();
       container.x = this.pixelSnapBricks ? Math.round(centerX) : centerX;
       container.y = this.pixelSnapBricks ? Math.round(startY) : startY;
-
-      let labelColor = toPixiColor(clearCfg.textColor);
-      if (scaledDelta < goodThresholdMin) {
-        labelColor = binTooFastColor;
-      } else if (scaledDelta > goodThresholdMax) {
-        labelColor = binTooSlowColor;
-      } else {
-        labelColor = binGoodColor;
-      }
 
       const text = new PIXI.Text(label, {
         fill: labelColor,
@@ -2669,6 +2717,70 @@ export class ConveyorRenderer {
           elapsedMs: 0,
           durationMs: markerFlashMs
         });
+      }
+
+      const lostPoints = Number(drop.lostPoints ?? 0);
+      const dropPenaltyCfg = (this.config?.bricks?.dropPenalty || {}) as Record<string, unknown>;
+      if (lostPoints > 0 && dropPenaltyCfg.showCoinAnimation !== false) {
+        if (this.effectVisuals.length < Math.max(0, Number((this.config?.display?.performance || {} as any).maxActiveEffects ?? 180))) {
+          const clearCfg = this._resolveClearAnimationConfig();
+          const popW = Math.max(1, Number(drop.width ?? 1));
+          const popH = Math.max(1, Number(drop.height ?? 1));
+          const centerX = Number(drop.x ?? 0) + popW * 0.5;
+          const centerY = Number(drop.y ?? 0) + popH * 0.5;
+          const startY = centerY - Math.max(1, popH * 0.2) - clearCfg.startOffsetYPx;
+          const textSize = Math.max(
+            clearCfg.textMinSizePx,
+            Math.min(clearCfg.textMaxSizePx, popH * clearCfg.textSizeFactor)
+          );
+          const label = `-${Math.round(lostPoints)}`;
+          const showCoin = clearCfg.coin.enable && clearCfg.coin.showInPointsAnimation;
+          const coinSize = Math.max(6, Number(clearCfg.coin.sizePx ?? 20));
+          const coinGap = Math.max(0, Number(clearCfg.coin.gapPx ?? 5));
+
+          const popContainer = new PIXI.Container();
+          popContainer.x = this.pixelSnapBricks ? Math.round(centerX) : centerX;
+          popContainer.y = this.pixelSnapBricks ? Math.round(startY) : startY;
+
+          const lossText = new PIXI.Text(label, {
+            fill: toPixiColor(dropPenaltyCfg.lossTextColor ?? '#ef4444'),
+            fontSize: textSize,
+            fontFamily: clearCfg.textFontFamily,
+            fontWeight: clearCfg.textFontWeight as PIXI.TextStyleFontWeight,
+            stroke: toPixiColor(clearCfg.textStrokeColor),
+            strokeThickness: clearCfg.textStrokeThickness,
+            dropShadow: true,
+            dropShadowColor: toPixiColor(clearCfg.textShadowColor),
+            dropShadowBlur: clearCfg.textShadowBlur,
+            dropShadowDistance: clearCfg.textShadowDistance,
+          });
+
+          let totalWidth = lossText.width;
+          if (showCoin) totalWidth += coinGap + coinSize;
+          const left = -totalWidth * 0.5;
+
+          if (showCoin) {
+            const coin = new PIXI.Graphics();
+            const seed = this._seedFromValue(`drop|${drop.brickId ?? ''}|${lostPoints}`, this.seed);
+            this._drawCoinPrimitive(coin, coinSize, clearCfg.coin, seed);
+            coin.x = left + coinSize * 0.5;
+            coin.y = 0;
+            popContainer.addChild(coin);
+          }
+          lossText.x = left + (showCoin ? coinSize + coinGap : 0);
+          lossText.y = -lossText.height * 0.5;
+          popContainer.addChild(lossText);
+
+          this.effectLayer.addChild(popContainer);
+          this.effectVisuals.push({
+            kind: 'clear_points_pop',
+            node: popContainer,
+            elapsedMs: 0,
+            durationMs: clearCfg.timeoutMs,
+            startY: popContainer.y,
+            risePx: clearCfg.risePx,
+          });
+        }
       }
     });
     this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
@@ -3833,7 +3945,8 @@ export class ConveyorRenderer {
       drtStats: blockInfo?.drtStats,
       focusInfo: blockInfo?.focusInfo,
       uiConfig: hudUiConfig,
-      drtEnabled: Boolean(blockInfo?.drtEnabled)
+      drtEnabled: Boolean(blockInfo?.drtEnabled),
+      roundsRemaining: blockInfo?.roundsRemaining,
     });
     const nextText = lines.join('\n');
     if (nextText !== this._lastHudText) {

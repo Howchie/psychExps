@@ -22,7 +22,8 @@ export interface BlockSummaryWhere {
 }
 
 export interface BlockSummaryLineConfig {
-  text: string;
+  text?: string;
+  html?: string;
   where?: BlockSummaryWhere;
   metrics?: Partial<BlockSummaryMetrics>;
 }
@@ -51,6 +52,7 @@ export interface BlockSummaryModel {
   title: string;
   lines: string[];
   text: string;
+  html?: string;
 }
 
 const DEFAULT_SUMMARY: BlockSummaryConfig = {
@@ -113,24 +115,28 @@ function normalizeLine(value: unknown): BlockSummaryLineConfig | null {
   const raw = asObject(value);
   if (!raw) return null;
   const text = asString(raw.text) || asString(raw.template) || asString(raw.line);
-  if (!text) return null;
+  const html = asString(raw.html);
+  if (!text && !html) return null;
   const where = normalizeWhere(asObject(raw.where));
   const metrics = normalizeMetrics(asObject(raw.metrics));
   return {
-    text,
+    ...(text ? { text } : {}),
+    ...(html ? { html } : {}),
     ...(where ? { where } : {}),
     ...(metrics ? { metrics } : {}),
   };
 }
 
 function normalizeLines(value: unknown): BlockSummaryLineConfig[] {
-  const fromStrings = toStringScreens(value).map((text) => ({ text }));
-  if (fromStrings.length > 0) return fromStrings;
   const rawArray = asArray(value);
-  const parsed = rawArray
-    .map((entry) => normalizeLine(entry))
-    .filter((entry): entry is BlockSummaryLineConfig => entry !== null);
-  return parsed;
+  if (rawArray.length > 0) {
+    const parsed = rawArray
+      .map((entry) => normalizeLine(entry))
+      .filter((entry): entry is BlockSummaryLineConfig => entry !== null);
+    if (parsed.length > 0) return parsed;
+  }
+  const fromStrings = toStringScreens(value).map((text) => ({ text }));
+  return fromStrings;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -494,6 +500,7 @@ export function buildBlockSummaryModel(args: {
   config: BlockSummaryConfig | null;
   block: unknown;
   blockIndex: number;
+  summaryIndex?: number;
   trialResults?: unknown[];
   fallbackStats?: BlockSummaryStats;
 }): BlockSummaryModel | null {
@@ -540,10 +547,13 @@ export function buildBlockSummaryModel(args: {
   const experimentDropped = pickTotal(latestExperimentTotals, "dropped", blockDropped);
   const experimentPoints = pickTotal(latestExperimentTotals, "points", blockPoints);
 
+  const summaryIndex = Math.max(0, Math.floor(args.summaryIndex ?? 0));
   const baseVars: Record<string, string> = {
     blockLabel,
     blockIndex: String(args.blockIndex),
     blockIndex1: String(args.blockIndex + 1),
+    summaryIndex: String(summaryIndex),
+    summaryIndex1: String(summaryIndex + 1),
     blockType,
     isPractice: isPractice ? "1" : "0",
     blockSpawned: toTextNumber(blockSpawned, 0),
@@ -566,7 +576,8 @@ export function buildBlockSummaryModel(args: {
     }),
   };
   const title = applyTemplate(cfg.title, globalVars);
-  const lines = cfg.lines.map((lineCfg) => {
+  const hasHtmlLine = cfg.lines.some((lineCfg) => lineCfg.html != null);
+  const lineResults = cfg.lines.map((lineCfg) => {
     const lineWhere = combineWhere(cfg.where, lineCfg.where);
     const lineMetrics: BlockSummaryMetrics = {
       ...cfg.metrics,
@@ -587,11 +598,27 @@ export function buildBlockSummaryModel(args: {
         validRtCount: lineStats.validRtCount,
       }),
     };
-    return applyTemplate(lineCfg.text, lineVars);
+    const textContent = lineCfg.text ? applyTemplate(lineCfg.text, lineVars) : "";
+    const htmlContent = lineCfg.html ? applyTemplate(lineCfg.html, lineVars) : null;
+    return { textContent, htmlContent, isHtml: htmlContent != null };
   });
+  const lines = lineResults.map((r) => r.textContent).filter((line) => line.trim().length > 0);
   const text = [title, ...lines].filter((line) => line.trim().length > 0).join("\n");
-  if (!text) return null;
-  return { at: cfg.at, title, lines, text };
+  if (!text && !hasHtmlLine) return null;
+
+  let html: string | undefined;
+  if (hasHtmlLine) {
+    const titleHtml = title.trim() ? `<h3>${escapeHtml(title)}</h3>` : "";
+    const bodyHtml = lineResults
+      .map((r) => {
+        if (r.isHtml) return r.htmlContent ?? "";
+        return r.textContent.trim() ? `<p>${escapeHtml(r.textContent)}</p>` : "";
+      })
+      .join("");
+    html = `${titleHtml}${bodyHtml}`;
+  }
+
+  return { at: cfg.at, title, lines, text, ...(html != null ? { html } : {}) };
 }
 
 export function renderBlockSummaryCardHtml(model: BlockSummaryModel): string {

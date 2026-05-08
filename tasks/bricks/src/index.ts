@@ -313,12 +313,15 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
           trial: trial as unknown as Record<string, unknown>,
         });
 
+        const roundsRemaining = block.trials - trialIndex;
+
         if (isHoldDurationPractice) {
           record = await runHoldDurationPractice({
             displayElement: stageHost,
             blockLabel: block.label,
             blockIndex: block.index,
             trialIndex,
+            roundsRemaining,
             config: trial,
             drtRuntime: injectedDrtRuntime,
             hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),
@@ -329,6 +332,7 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
             blockLabel: block.label,
             blockIndex: block.index,
             trialIndex,
+            roundsRemaining,
             config: trial,
             drtRuntime: injectedDrtRuntime,
             hudBaseStats: buildHudBaseStats(statsAccumulator, statsPresentation),

@@ -1279,6 +1279,7 @@ export class GameState {
       this.activeBricks.pop();
     }
     const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
+    let lostPoints = 0;
     if (status === BRICK_STATUS.CLEARED) {
       this.stats.cleared += 1;
       const gainedPoints = Math.max(0, Number(brick.value ?? 0));
@@ -1295,6 +1296,11 @@ export class GameState {
       });
     } else if (status === BRICK_STATUS.DROPPED) {
       this.stats.dropped += 1;
+      const dropPenaltyCfg = (this.config?.bricks?.dropPenalty || {}) as Record<string, unknown>;
+      if (dropPenaltyCfg.enable === true) {
+        lostPoints = Math.max(0, Number(brick.value ?? 0));
+        this.stats.points = Math.max(0, this.stats.points - lostPoints);
+      }
       const dropWidth = Math.max(0, Number(payload.visible_width_px ?? brick.width) || 0);
       this.pendingDropVisuals.push({
         brickId: brick.id,
@@ -1306,7 +1312,8 @@ export class GameState {
         color: brick.color,
         borderColor: brick.borderColor,
         shape: brick.shape,
-        textureStyle: brick.textureStyle
+        textureStyle: brick.textureStyle,
+        lostPoints,
       });
     }
     this._log(eventType, {
@@ -1317,6 +1324,7 @@ export class GameState {
       y: brick.y,
       value: brick.value,
       cumulative_points: this.stats.points,
+      ...(lostPoints > 0 ? { lost_points: lostPoints } : {}),
       ...payload
     });
     if (this.forcedControl.enabled && brick.id === this.forcedControl.activeBrickId) {

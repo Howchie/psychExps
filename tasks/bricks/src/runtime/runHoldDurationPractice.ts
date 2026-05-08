@@ -25,6 +25,7 @@ export interface HoldDurationPracticeRunArgs {
   blockLabel: string;
   blockIndex: number;
   trialIndex: number;
+  roundsRemaining?: number;
   config: Record<string, unknown>;
   drtRuntime?: HoldDurationPracticeDrtRuntime;
   hudBaseStats?: Partial<Record<'spawned' | 'cleared' | 'dropped' | 'points', number>>;
@@ -764,8 +765,9 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
           renderer.updateBackground(dt);
           renderer.updateBelts(gameState.conveyors, dt);
           renderer.updateFurnaces(dt);
-          gameState.consumeClearedVisuals();
-          gameState.consumeDroppedVisuals();
+          const clearedVisualsA = gameState.consumeClearedVisuals();
+          const droppedVisualsA = gameState.consumeDroppedVisuals();
+          renderer.updateCharacter(dt, clearedVisualsA.length, droppedVisualsA.length);
           renderer.updateEffects(dt);
           const focusState = gameState.getFocusState();
           renderer.syncBricks(gameState.bricks.values(), resolvedCfg.bricks.completionMode, resolvedCfg.bricks.completionParams, focusState);
@@ -801,9 +803,11 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
           if (hudSignature !== lastHudSignature) {
             lastHudSignature = hudSignature;
             renderer.updateHUD(hudDisplayStats, remainingMs, {
-              label: trial.blockLabel,
+              label: args.blockLabel,
               drtStats: drtEnabled ? drtStatsSnapshot : undefined,
-              focusInfo: focusState,
+              focusInfo: null,
+              drtEnabled,
+              roundsRemaining: args.roundsRemaining,
             });
           }
           if (pendingEnd && gameState.elapsed >= pendingEnd.dueAtMs) {
@@ -832,8 +836,9 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       renderer.updateBelts(gameState.conveyors, dt);
       renderer.updateFurnaces(dt);
       // Ignore normal visual queues because we queue practice feedback on every hold release directly.
-      gameState.consumeClearedVisuals();
-      gameState.consumeDroppedVisuals();
+      const clearedVisualsB = gameState.consumeClearedVisuals();
+      const droppedVisualsB = gameState.consumeDroppedVisuals();
+      renderer.updateCharacter(dt, clearedVisualsB.length, droppedVisualsB.length);
       renderer.updateEffects(dt);
 
       const focusState = gameState.getFocusState();
@@ -870,10 +875,11 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       if (hudSignature !== lastHudSignature) {
         lastHudSignature = hudSignature;
         renderer.updateHUD(hudDisplayStats, remainingMs, {
-          label: trial.blockLabel,
+          label: args.blockLabel,
           drtStats: drtEnabled ? drtStatsSnapshot : undefined,
-          focusInfo: focusState,
+          focusInfo: null,
           drtEnabled,
+          roundsRemaining: args.roundsRemaining,
         });
       }
 

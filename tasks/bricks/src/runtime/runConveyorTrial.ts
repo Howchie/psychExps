@@ -25,6 +25,7 @@ export interface ConveyorTrialRunArgs {
   blockLabel: string;
   blockIndex: number;
   trialIndex: number;
+  roundsRemaining?: number;
   config: Record<string, unknown>;
   drtRuntime?: ConveyorTrialDrtRuntime;
   hudBaseStats?: Partial<Record<'spawned' | 'cleared' | 'dropped' | 'points', number>>;
@@ -260,7 +261,33 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       gameState.handleBrickInteraction(brickId, gameState.elapsed, { x, y });
     },
     onBrickHold: (brickId: string, holdDurationMs: number, x: number, y: number) => {
+      const brickBefore = gameState.bricks.get(brickId);
+      if (!brickBefore) return;
+
+      const holdsBefore = brickBefore.holds ?? 0;
       gameState.handleBrickHold(brickId, holdDurationMs, gameState.elapsed, { x, y });
+      
+      const brickAfter = gameState.bricks.get(brickId);
+      const showHoldFeedback = (resolvedCfg?.ui?.showHoldFeedback === true) || (resolvedCfg?.display?.ui?.showHoldFeedback === true);
+
+      // Only show feedback if the brick STILL exists (wasn't cleared) 
+      // This prevents the feedback label from overlapping with the "coin" animation.
+      if (showHoldFeedback && brickAfter && (brickAfter.holds ?? 0) > holdsBefore) {
+        const params = resolvedCfg.bricks?.completionParams || {};
+        const targetHoldMs = Math.max(50, Number(brickAfter.targetHoldMs ?? params.target_hold_ms ?? 700));
+        const scaledPerformanceDelta = (holdDurationMs - targetHoldMs) / targetHoldMs;
+        
+        renderer.queuePracticeFeedback([{
+          brickId: brickAfter.id,
+          conveyorId: brickAfter.conveyorId,
+          hold_ms: holdDurationMs,
+          scaledPerformanceDelta,
+          x: brickAfter.x,
+          y: brickAfter.y,
+          width: brickAfter.width,
+          height: brickAfter.height,
+        }]);
+      }
     },
     onBrickHoldState: (brickId: string, isHolding: boolean, x: number, y: number) => {
       gameState.handleBrickHoldState(brickId, isHolding, gameState.elapsed, { x, y });
@@ -587,8 +614,11 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       renderer.updateBackground(dt);
       renderer.updateBelts(gameState.conveyors, dt);
       renderer.updateFurnaces(dt);
-      renderer.queueClearEffects(gameState.consumeClearedVisuals());
-      renderer.queueDropEffects(gameState.consumeDroppedVisuals());
+      const clearedVisuals = gameState.consumeClearedVisuals();
+      const droppedVisuals = gameState.consumeDroppedVisuals();
+      renderer.queueClearEffects(clearedVisuals);
+      renderer.queueDropEffects(droppedVisuals);
+      renderer.updateCharacter(dt, clearedVisuals.length, droppedVisuals.length);
       renderer.updateEffects(dt);
 
       const focusState = gameState.getFocusState();
@@ -629,6 +659,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
           drtStats: drtEnabled ? drtStatsSnapshot : undefined,
           focusInfo: focusState,
           drtEnabled,
+          roundsRemaining: trial.roundsRemaining,
         });
       }
 

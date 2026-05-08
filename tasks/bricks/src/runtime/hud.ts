@@ -2,16 +2,20 @@
 /**
  * Formats HUD copy so the renderer can stay focused on drawing.
  */
-export const buildHUDLines = ({ stats, remainingMs, blockLabel, drtStats, focusInfo, uiConfig = {}, drtEnabled = false }) => {
+export const buildHUDLines = ({ stats, remainingMs, blockLabel, drtStats, focusInfo, uiConfig = {}, drtEnabled = false, roundsRemaining }) => {
   const showTimer = uiConfig.showTimer !== false;
   const showRemainingBlocks = uiConfig.showRemainingBlocks !== false;
   const showDroppedBlocks = uiConfig.showDroppedBlocks !== false;
+  const showRoundsRemaining = uiConfig.showRoundsRemaining === true;
   const showPoints = uiConfig.showPoints === true;
   const pointsLabel = String(uiConfig.pointsLabel ?? 'Points');
   const showDRT = drtEnabled && uiConfig.showDRT !== false;
   const hasTimer = showTimer && Number.isFinite(remainingMs);
   const timeSec = hasTimer ? Math.max(0, remainingMs) / 1000 : null;
   const lines = [`Block: ${blockLabel ?? 'N/A'}`];
+  if (showRoundsRemaining && roundsRemaining !== undefined) {
+    lines.push(`Rounds remaining: ${roundsRemaining}`);
+  }
   if (showTimer) {
     lines.push(hasTimer ? `Time left: ${timeSec.toFixed(1)}s` : 'Time left: --');
   }

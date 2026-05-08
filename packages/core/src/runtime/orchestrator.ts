@@ -201,6 +201,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
     const cardFontSize = asString(uiConfig?.cardFontSize) ?? undefined;
     const cardFontFamily = asString(uiConfig?.cardFontFamily) ?? undefined;
     const blockSummaryRaw = instructions?.blockSummary;
+    let summaryDisplayCount = 0;
     const repeatEvaluationCache = new Map<string, ReturnType<typeof evaluateBlockRepeatUntil>>();
     const makeRepeatCacheKey = (blockIndex: number, blockAttempt: number): string => `${blockIndex}:${blockAttempt}`;
     const evaluateRepeatForAttempt = (ctx: {
@@ -640,15 +641,20 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             config: summarySpec,
             block: ctx.block,
             blockIndex: ctx.blockIndex,
+            summaryIndex: summaryDisplayCount,
             trialResults: ctx.trialResults as unknown[],
           });
+          if (summaryModel) summaryDisplayCount += 1;
           const beforePostInsertions = selectInsertionGroups("block_end_before_post", ctx);
           const afterPostInsertions = selectInsertionGroups("block_end_after_post", ctx);
           if (summaryModel) {
+            const summaryEntry = summaryModel.html != null
+              ? { html: summaryModel.html }
+              : { text: summaryModel.text };
             if (summaryModel.at === "block_end_after_post") {
-              afterPostInsertions.push([{ text: summaryModel.text }]);
+              afterPostInsertions.push([summaryEntry]);
             } else {
-              beforePostInsertions.push([{ text: summaryModel.text }]);
+              beforePostInsertions.push([summaryEntry]);
             }
           }
           const repeatPostBlockPages = toInstructionScreenSpecs(
