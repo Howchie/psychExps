@@ -920,12 +920,18 @@ function buildBricksEventRows(
     const timeline = Array.isArray((row as any).timeline_events)
       ? ((row as any).timeline_events as Array<Record<string, unknown>>)
       : [];
+    let hudPoints: number | null = null;
     timeline.forEach((event, eventIndex) => {
+      const cumulativePoints = Number(event.cumulative_points ?? NaN);
+      if (Number.isFinite(cumulativePoints)) {
+        hudPoints = cumulativePoints;
+      }
       const flat: Record<string, string | number | boolean | null> = {
         ...trialContext,
         index: eventIndex,
         time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
         type: typeof event.type === "string" ? event.type : null,
+        hud_points: hudPoints,
       };
       const cleanedEvent = pruneEmptyUnknown(event);
       if (cleanedEvent !== undefined) {

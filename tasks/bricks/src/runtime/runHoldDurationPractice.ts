@@ -236,6 +236,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   };
 
   const gameState = new GameState(resolvedCfg, { onEvent: logEvent, seed: baseSeed });
+  const initialHudPoints = Number.isFinite(hudBaseStats.points) ? Number(hudBaseStats.points) : 0;
+  gameState.stats.points = initialHudPoints;
   if (forceCenteredBrick) {
     const conveyor = gameState.conveyors[0];
     const active = gameState.activeBricks[0];
@@ -346,6 +348,10 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     const drtData = drtController
       ? (injectedDrtRuntime?.stopOnCleanup === false ? drtController.exportData() : drtController.stop())
       : { enabled: false, stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 }, events: [] };
+    const gameData = gameState.exportData() as Record<string, any>;
+    if (gameData?.stats && Number.isFinite(Number(gameData.stats.points))) {
+      gameData.stats.points = Number(gameData.stats.points) - initialHudPoints;
+    }
     return {
       block_label: trial.blockLabel,
       block_index: trial.blockIndex,
@@ -356,7 +362,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       difficulty_estimate: difficultyEstimate,
       resolved_display_preset_id: resolvedDisplayPresetId,
       config_snapshot: resolvedCfg,
-      game: gameState.exportData(),
+      game: gameData,
       drt: drtData,
       timeline_events: timelineEvents,
       performance_deltas: practicePerformanceDeltas,
@@ -659,7 +665,10 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     const endTrial = (reason: string, keyHandler: (e: KeyboardEvent) => void) => {
       if (ended) return;
       cleanup(keyHandler);
-      const gameData = gameState.exportData();
+      const gameData = gameState.exportData() as Record<string, any>;
+      if (gameData?.stats && Number.isFinite(Number(gameData.stats.points))) {
+        gameData.stats.points = Number(gameData.stats.points) - initialHudPoints;
+      }
       const drtData = finalizedDrtData ?? drtController?.exportData() ?? emptyDrtData;
       const frameCount = Math.max(1, frameStats.frames);
       const avgRawDtMs = frameStats.rawDtSumMs / frameCount;
@@ -778,7 +787,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
             spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? hudBaseStats.spawned : 0),
             cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? hudBaseStats.cleared : 0),
             dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
-            points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
+            points: Number(hudStats.points ?? 0),
           };
           const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
           const hudShowTimer = hudUiCfg.showTimer !== false;
@@ -850,7 +859,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? hudBaseStats.spawned : 0),
         cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? hudBaseStats.cleared : 0),
         dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
-        points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? hudBaseStats.points : 0),
+        points: Number(hudStats.points ?? 0),
       };
       const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
       const hudShowTimer = hudUiCfg.showTimer !== false;

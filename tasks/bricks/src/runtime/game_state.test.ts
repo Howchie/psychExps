@@ -120,3 +120,48 @@ describe('GameState conveyor speed scheduling', () => {
     expect(speedChangeEvents.every((event: any) => event.conveyor_id === 'c1')).toBe(true);
   });
 });
+
+describe('GameState drop accounting', () => {
+  it('applies drop penalties for every brick that is destroyed in the same frame', () => {
+    const cfg: any = buildConfig();
+    cfg.conveyors.nConveyors = 2;
+    cfg.conveyors.lengthPx = { type: 'fixed', value: 200 };
+    cfg.conveyors.speedPxPerSec = { type: 'fixed', value: 50 };
+    cfg.bricks.completionMode = 'hold_duration';
+    cfg.bricks.completionParams = {};
+    cfg.bricks.dropPenalty = { enable: true };
+    cfg.bricks.forcedSet = [
+      { conveyorIndex: 0, x: 120, width: 80, value: 3 },
+      { conveyorIndex: 1, x: 120, width: 80, value: 4 },
+    ];
+
+    const gameState: any = new GameState(cfg, { seed: 7 });
+    expect(gameState.bricks.size).toBe(2);
+
+    gameState.stats.points = 20;
+    gameState.step(1000);
+
+    expect(gameState.stats.dropped).toBe(2);
+    expect(gameState.stats.points).toBe(13);
+    expect(gameState.consumeDroppedVisuals()).toHaveLength(2);
+  });
+
+  it('caps drop popup loss to the applied HUD loss when points floor is reached', () => {
+    const cfg: any = buildConfig();
+    cfg.conveyors.lengthPx = { type: 'fixed', value: 200 };
+    cfg.conveyors.speedPxPerSec = { type: 'fixed', value: 50 };
+    cfg.bricks.completionMode = 'hold_duration';
+    cfg.bricks.completionParams = {};
+    cfg.bricks.dropPenalty = { enable: true };
+    cfg.bricks.forcedSet = [{ conveyorIndex: 0, x: 120, width: 80, value: 5 }];
+
+    const gameState: any = new GameState(cfg, { seed: 11 });
+    gameState.stats.points = 4;
+    gameState.step(1000);
+
+    expect(gameState.stats.points).toBe(0);
+    const drops = gameState.consumeDroppedVisuals();
+    expect(drops).toHaveLength(1);
+    expect(Number(drops[0]?.lostPoints ?? NaN)).toBe(4);
+  });
+});

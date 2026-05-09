@@ -251,6 +251,17 @@ interface StaircaseRecord {
 
 async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = parseSftConfig(context.taskConfig, context.selection);
+  const includeJsPsychData = (() => {
+    const taskNode = asObject(context.taskConfig.task);
+    const dataNode = asObject(context.taskConfig.data);
+    const debugNode = asObject(context.taskConfig.debug);
+    const raw =
+      dataNode?.includeJsPsychData ??
+      taskNode?.includeJsPsychData ??
+      debugNode?.includeJsPsychData;
+    if (typeof raw === "boolean") return raw;
+    return String(raw ?? "").trim().toLowerCase() === "true";
+  })();
   const rng = createMulberry32(hashSeed(context.selection.participant.participantId, context.selection.participant.sessionId, context.selection.configPath ?? "", "sft"));
   const root = context.container;
   const plan = buildBlockPlan(parsed, rng);
@@ -488,7 +499,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
       return {
         records,
         staircaseRecords,
-        jsPsychData: jsPsych?.data.get().values() ?? [],
+        ...(includeJsPsychData ? { jsPsychData: jsPsych?.data.get().values() ?? [] } : {}),
       };
     },
     renderInstruction: createInstructionRenderer({

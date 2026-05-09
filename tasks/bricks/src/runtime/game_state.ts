@@ -1280,6 +1280,7 @@ export class GameState {
     }
     const eventType = status === BRICK_STATUS.CLEARED ? 'brick_cleared' : 'brick_dropped';
     let lostPoints = 0;
+    let nominalLostPoints = 0;
     if (status === BRICK_STATUS.CLEARED) {
       this.stats.cleared += 1;
       const gainedPoints = Math.max(0, Number(brick.value ?? 0));
@@ -1298,8 +1299,10 @@ export class GameState {
       this.stats.dropped += 1;
       const dropPenaltyCfg = (this.config?.bricks?.dropPenalty || {}) as Record<string, unknown>;
       if (dropPenaltyCfg.enable === true) {
-        lostPoints = Math.max(0, Number(brick.value ?? 0));
-        this.stats.points = Math.max(0, this.stats.points - lostPoints);
+        nominalLostPoints = Math.max(0, Number(brick.value ?? 0));
+        const pointsBefore = Math.max(0, Number(this.stats.points ?? 0));
+        lostPoints = Math.min(pointsBefore, nominalLostPoints);
+        this.stats.points = Math.max(0, pointsBefore - lostPoints);
       }
       const dropWidth = Math.max(0, Number(payload.visible_width_px ?? brick.width) || 0);
       this.pendingDropVisuals.push({
@@ -1325,6 +1328,7 @@ export class GameState {
       value: brick.value,
       cumulative_points: this.stats.points,
       ...(lostPoints > 0 ? { lost_points: lostPoints } : {}),
+      ...(nominalLostPoints > 0 ? { nominal_lost_points: nominalLostPoints } : {}),
       ...payload
     });
     if (this.forcedControl.enabled && brick.id === this.forcedControl.activeBrickId) {
@@ -1662,8 +1666,16 @@ export class GameState {
     this._updateDynamicConveyorSpeeds();
 
     // Update brick positions and check for drops.
-    this.bricks.forEach((brick: BrickRecord) => {
+    // Iterate over a stable snapshot because finalization mutates `this.bricks`.
+    // Using the live Map iterator can skip entries when multiple bricks are
+    // removed in one frame (e.g., simultaneous drops across conveyors).
+    const activeSnapshot = Array.from(this.bricks.values());
+    activeSnapshot.forEach((brick: BrickRecord) => {
       if (brick.status !== BRICK_STATUS.ACTIVE) {
+        return;
+      }
+      // Brick may already have been finalized earlier in this frame.
+      if (!this.bricks.has(brick.id)) {
         return;
       }
       const conveyor = this.conveyorsById.get(brick.conveyorId);

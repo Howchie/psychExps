@@ -268,6 +268,17 @@ export const goNoGoAdapter = createTaskAdapter({
   },
   run: async (context: TaskAdapterContext) => {
     const config = parseGoNoGoConfig(context.taskConfig);
+    const includeJsPsychData = (() => {
+      const taskNode = asObject(context.taskConfig.task);
+      const dataNode = asObject(context.taskConfig.data);
+      const debugNode = asObject(context.taskConfig.debug);
+      const raw =
+        dataNode?.includeJsPsychData ??
+        taskNode?.includeJsPsychData ??
+        debugNode?.includeJsPsychData;
+      if (typeof raw === "boolean") return raw;
+      return String(raw ?? "").trim().toLowerCase() === "true";
+    })();
     const selection = context.selection;
     const participantId = selection.participant.participantId;
     const rng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.configPath ?? "", "go_no_go"));
@@ -360,7 +371,7 @@ export const goNoGoAdapter = createTaskAdapter({
       getTaskMetadata: () => ({
         runner: "jspsych",
         records,
-        jsPsychData: jsPsych?.data.get().values() ?? [],
+        ...(includeJsPsychData ? { jsPsychData: jsPsych?.data.get().values() ?? [] } : {}),
       }),
       renderInstruction: createInstructionRenderer({
         showBlockLabel: config.instructions.showBlockLabel,
