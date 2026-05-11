@@ -33,6 +33,7 @@ import {
   ensureJsPsychCanvasCentered,
   applyTaskInstructionConfig,
   createTaskAdapter,
+  resolveIncludeJsPsychData,
   buildJsPsychRtTimelineNodes,
   resolveRtTaskConfig,
   buildConditionSequence,
@@ -120,17 +121,7 @@ export const flankerAdapter = createTaskAdapter({
 
 async function runFlankerTask(context: TaskAdapterContext): Promise<unknown> {
   const parsed = await parseFlankerConfig(context.taskConfig);
-  const includeJsPsychData = (() => {
-    const taskNode = asObject(context.taskConfig.task);
-    const dataNode = asObject(context.taskConfig.data);
-    const debugNode = asObject(context.taskConfig.debug);
-    const raw =
-      dataNode?.includeJsPsychData ??
-      taskNode?.includeJsPsychData ??
-      debugNode?.includeJsPsychData;
-    if (typeof raw === "boolean") return raw;
-    return String(raw ?? "").trim().toLowerCase() === "true";
-  })();
+  const includeJsPsychData = resolveIncludeJsPsychData(context.taskConfig);
   const selection = context.selection;
   const participantId = selection.participant.participantId;
   const baseRng = createMulberry32(hashSeed(participantId, selection.participant.sessionId, selection.configPath ?? "", "flanker"));

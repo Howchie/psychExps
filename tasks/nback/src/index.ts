@@ -67,6 +67,7 @@ import {
   StandardTaskInstructionConfig,
   TaskOrchestrator,
   createTaskAdapter,
+  resolveIncludeJsPsychData,
   buildJsPsychRtTimelineNodes,
   initStandardJsPsych,
   type EventLogger,
@@ -86,17 +87,7 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
   }
 
     const { parsed, eventLogger } = runtime;
-    const includeJsPsychData = (() => {
-      const taskNode = asObject(context.taskConfig.task);
-      const dataNode = asObject(context.taskConfig.data);
-      const debugNode = asObject(context.taskConfig.debug);
-      const raw =
-        dataNode?.includeJsPsychData ??
-        taskNode?.includeJsPsychData ??
-        debugNode?.includeJsPsychData;
-      if (typeof raw === "boolean") return raw;
-      return String(raw ?? "").trim().toLowerCase() === "true";
-    })();
+    const includeJsPsychData = resolveIncludeJsPsychData(context.taskConfig);
     applyTaskInstructionConfig(context.taskConfig, {
       ...parsed.instructions,
       blockSummary: {

@@ -320,3 +320,17 @@ export function resolveInstructionScreenSlots(
     end: pickFirstScreens(["endPages", "outroPages", "end", "outro"], defaults?.end),
   };
 }
+
+/**
+ * Resolves whether to include raw jsPsych data in the task results.
+ * Checks 'includeJsPsychData' in 'data', 'task', and 'debug' config nodes.
+ */
+export function resolveIncludeJsPsychData(config: Record<string, unknown> | null | undefined): boolean {
+  if (!config) return false;
+  const taskNode = asObject(config.task);
+  const dataNode = asObject(config.data);
+  const debugNode = asObject(config.debug);
+  const raw = dataNode?.includeJsPsychData ?? taskNode?.includeJsPsychData ?? debugNode?.includeJsPsychData;
+  if (typeof raw === "boolean") return raw;
+  return String(raw ?? "").trim().toLowerCase() === "true";
+}

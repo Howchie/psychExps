@@ -168,13 +168,15 @@ export class GameState {
   brickCategories: CategoryEntry[];
   forcedControl: ForcedControlState;
   hasDynamicConveyorSpeed: boolean;
+  private initialPoints: number;
 
-  constructor(config: Record<string, any>, { onEvent, seed }: { onEvent?: (event: GameEvent) => void; seed?: unknown } = {}) {
+  constructor(config: Record<string, any>, { onEvent, seed, initialPoints }: { onEvent?: (event: GameEvent) => void; seed?: unknown; initialPoints?: number } = {}) {
     this.config = config;
     this.onEvent = typeof onEvent === 'function' ? onEvent : () => {};
     this.rng = createCoreRng(seed ?? config?.trial?.seed);
     this.samplerCache = new WeakMap();
     this.elapsed = 0;
+    this.initialPoints = Number.isFinite(initialPoints) ? Number(initialPoints) : 0;
 
     this.events = [];
     this.stats = {
@@ -1300,9 +1302,9 @@ export class GameState {
       const dropPenaltyCfg = (this.config?.bricks?.dropPenalty || {}) as Record<string, unknown>;
       if (dropPenaltyCfg.enable === true) {
         nominalLostPoints = Math.max(0, Number(brick.value ?? 0));
-        const pointsBefore = Math.max(0, Number(this.stats.points ?? 0));
-        lostPoints = Math.min(pointsBefore, nominalLostPoints);
-        this.stats.points = Math.max(0, pointsBefore - lostPoints);
+        const pointsBeforeCumulative = this.initialPoints + this.stats.points;
+        lostPoints = Math.min(Math.max(0, pointsBeforeCumulative), nominalLostPoints);
+        this.stats.points -= lostPoints;
       }
       const dropWidth = Math.max(0, Number(payload.visible_width_px ?? brick.width) || 0);
       this.pendingDropVisuals.push({

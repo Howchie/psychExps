@@ -158,9 +158,8 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     }
   };
 
-  const gameState = new GameState(resolvedCfg, { onEvent: logEvent, seed: baseSeed });
   const initialHudPoints = Number.isFinite(hudBaseStats.points) ? Number(hudBaseStats.points) : 0;
-  gameState.stats.points = initialHudPoints;
+  const gameState = new GameState(resolvedCfg, { onEvent: logEvent, seed: baseSeed, initialPoints: initialHudPoints });
   const runtimeConveyorLengths = gameState.conveyors.map((conveyor: any) => conveyor.length);
   const difficultyEstimate = estimateTrialDifficulty(gameState, resolvedCfg);
 
@@ -243,9 +242,6 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         })()
       : { enabled: false, stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 }, events: [] };
     const gameData = gameState.exportData() as Record<string, any>;
-    if (gameData?.stats && Number.isFinite(Number(gameData.stats.points))) {
-      gameData.stats.points = Number(gameData.stats.points) - initialHudPoints;
-    }
     return {
       block_label: trial.blockLabel,
       block_index: trial.blockIndex,
@@ -503,9 +499,6 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       if (ended) return;
       cleanup(keyHandler);
       const gameData = gameState.exportData() as Record<string, any>;
-      if (gameData?.stats && Number.isFinite(Number(gameData.stats.points))) {
-        gameData.stats.points = Number(gameData.stats.points) - initialHudPoints;
-      }
       const drtData = finalizedDrtData ?? drtController?.exportData() ?? emptyDrtData;
       const frameCount = Math.max(1, frameStats.frames);
       const avgRawDtMs = frameStats.rawDtSumMs / frameCount;
@@ -625,6 +618,7 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       renderer.updateFurnaces(dt);
       const clearedVisuals = gameState.consumeClearedVisuals();
       const droppedVisuals = gameState.consumeDroppedVisuals();
+      // TODO: Clear effects are prioritized over drop effects if visuals budget is reached.
       renderer.queueClearEffects(clearedVisuals);
       renderer.queueDropEffects(droppedVisuals);
       renderer.updateCharacter(dt, clearedVisuals.length, droppedVisuals.length);
@@ -636,10 +630,10 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
       const hudStats = gameState.getHUDStats();
       const hudDisplayStats = {
         ...hudStats,
-        spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? hudBaseStats.spawned : 0),
-        cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? hudBaseStats.cleared : 0),
-        dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? hudBaseStats.dropped : 0),
-        points: Number(hudStats.points ?? 0),
+        spawned: Number(hudStats.spawned ?? 0) + (Number.isFinite(hudBaseStats.spawned) ? Number(hudBaseStats.spawned) : 0),
+        cleared: Number(hudStats.cleared ?? 0) + (Number.isFinite(hudBaseStats.cleared) ? Number(hudBaseStats.cleared) : 0),
+        dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? Number(hudBaseStats.dropped) : 0),
+        points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? Number(hudBaseStats.points) : 0),
       };
       const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
       const hudShowTimer = hudUiCfg.showTimer !== false;
