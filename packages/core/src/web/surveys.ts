@@ -45,6 +45,7 @@ export interface SurveyDefinition {
   questionBorder?: string;
   questionBorderRadius?: string;
   questions: SurveyQuestion[];
+  questionsLayout?: "vertical" | "grid";
   submitLabel?: string;
   submitButtonStyle?: ButtonStyleOverrides;
   autoFocusSubmitButton?: boolean;
@@ -195,6 +196,7 @@ function autoFillSurvey(container: HTMLElement, survey: SurveyDefinition): numbe
       const slot = sampleAutoInteger(0, slotCount) ?? Math.floor(slotCount / 2);
       const value = min + slot * step;
       input.value = String(Math.max(min, Math.min(max, value)));
+      input.dataset.touched = "true";
       syncSliderValueLabel(container, question.id);
       count += 1;
     }
@@ -220,6 +222,12 @@ function collectSurveyAnswers(container: HTMLElement, survey: SurveyDefinition):
       answers[question.id] = null;
       continue;
     }
+    const isRequired = question.required !== false;
+    const isTouched = slider.dataset.touched === "true";
+    if (isRequired && !isTouched) {
+      answers[question.id] = null;
+      continue;
+    }
     answers[question.id] = Number(slider.value);
   }
   return answers;
@@ -230,7 +238,10 @@ function hydrateSurveyInteractions(container: HTMLElement, survey: SurveyDefinit
     if (question.type !== "slider") continue;
     const slider = getElementBySafeId(container, sliderInputId(question.id));
     if (!(slider instanceof HTMLInputElement)) continue;
-    const update = () => syncSliderValueLabel(container, question.id);
+    const update = () => {
+      slider.dataset.touched = "true";
+      syncSliderValueLabel(container, question.id);
+    };
     slider.addEventListener("input", update);
     slider.addEventListener("change", update);
     syncSliderValueLabel(container, question.id);
@@ -256,6 +267,12 @@ function buildSurveyHtml(
   const showRequiredAsterisk = survey.showRequiredAsterisk !== false;
   const questionBorder = resolveInlineStyleValue(survey.questionBorder, "1px solid #e5e7eb");
   const questionBorderRadius = resolveInlineStyleValue(survey.questionBorderRadius, "8px");
+
+  const isGrid = survey.questionsLayout === "grid";
+  const questionsContainerStyle = isGrid
+    ? `display:grid;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr));gap:1rem;`
+    : "";
+
   const questionsHtml = survey.questions
     .map((question, index) => renderQuestion(
       question,
@@ -264,6 +281,7 @@ function buildSurveyHtml(
       showRequiredAsterisk,
       questionBorder,
       questionBorderRadius,
+      isGrid,
     ))
     .join("");
   const submitLabel = escapeHtml(survey.submitLabel ?? "Submit");
@@ -274,7 +292,7 @@ function buildSurveyHtml(
   const colorOverride = options.cardColor ? `color:${options.cardColor};` : "";
   const cardStyle = `width:min(900px,96vw);padding:24px 32px;${bgOverride}${borderOverride}${radiusOverride}${colorOverride}`;
 
-  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div class="card" style="${cardStyle}">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div>${questionsHtml}<p style="margin:1.5rem 0 0 0;text-align:center;"><button class="exp-continue-btn" id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
+  return `<section class="${escapeHtml(rootClass)}" style="width:100%;min-height:70vh;display:flex;align-items:center;justify-content:center;"><div class="card" style="${cardStyle}">${title}${description}<div data-exp-survey-errors style="display:none;margin:0 0 1rem 0;padding:0.6rem 0.75rem;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;"></div><div style="${questionsContainerStyle}">${questionsHtml}</div><p style="margin:1.5rem 0 0 0;text-align:center;"><button class="exp-continue-btn" id="${escapeHtml(buttonId)}" type="button">${submitLabel}</button></p></div></section>`;
 }
 
 function renderQuestion(
@@ -284,6 +302,7 @@ function renderQuestion(
   showRequiredAsterisk: boolean,
   questionBorder: string,
   questionBorderRadius: string,
+  isGrid: boolean = false,
 ): string {
   const required = question.required !== false;
   const star = required && showRequiredAsterisk ? " <span aria-hidden=\"true\" style=\"color:#b91c1c;\">*</span>" : "";
@@ -292,7 +311,15 @@ function renderQuestion(
   const help = question.helpText ? `<p style="margin:0 0 0.6rem 0;color:#374151;">${escapeHtml(question.helpText)}</p>` : "";
   const inner = question.type === "single_choice" ? renderSingleChoice(question) : renderSlider(question);
   const legend = showQuestionNumbers ? `<legend style="padding:0 0.3rem;">Q${index}</legend>` : "";
-  return `<fieldset style="margin:0 0 1rem 0;padding:0.75rem 0.85rem;border:${questionBorder};border-radius:${questionBorderRadius};">${legend}${prompt}${help}${inner}</fieldset>`;
+
+  const margin = isGrid ? "margin:0;" : "margin:0 0 1rem 0;";
+  const display = isGrid ? "display:flex;flex-direction:column;" : "";
+  const fieldsetStyle = `${margin}padding:0.75rem 0.85rem;border:${questionBorder};border-radius:${questionBorderRadius};${display}`;
+
+  const promptArea = `<div style="${isGrid ? "flex-grow:1;" : ""}">${prompt}${help}</div>`;
+  const inputArea = `<div style="${isGrid ? "margin-top:0.5rem;" : ""}">${inner}</div>`;
+
+  return `<fieldset style="${fieldsetStyle}">${legend}${promptArea}${inputArea}</fieldset>`;
 }
 
 function renderSingleChoice(question: SurveySingleChoiceQuestion): string {
@@ -316,7 +343,7 @@ function renderSlider(question: SurveySliderQuestion): string {
   const showValue = question.showValue !== false;
   const minLabel = question.minLabel ? `<span>${escapeHtml(question.minLabel)}</span>` : "<span></span>";
   const maxLabel = question.maxLabel ? `<span>${escapeHtml(question.maxLabel)}</span>` : "<span></span>";
-  const value = showValue ? `<div style="margin:0.3rem 0 0 0;color:#111827;">Value: <strong id="${sliderValueId(question.id)}">${Math.round(initial)}</strong></div>` : "";
+  const value = showValue ? `<div style="margin:0.3rem 0 0 0;color:#111827;display: flex; justify-content: center; align-items: center;">Rating:&nbsp <strong id="${sliderValueId(question.id)}">${Math.round(initial)}</strong></div>` : "";
   return `<div><input id="${sliderInputId(question.id)}" type="range" min="${min}" max="${max}" step="${step}" value="${initial}" style="width:100%;" /><div style="display:flex;justify-content:space-between;color:#4b5563;margin-top:0.2rem;">${minLabel}${maxLabel}</div>${value}</div>`;
 }
 
@@ -481,6 +508,8 @@ export interface NasaTlxSurveyOptions {
   autoFocusSubmitButton?: boolean;
   showValue?: boolean;
   required?: boolean;
+  questionsLayout?: "vertical" | "grid";
+  showSubscaleLabels?: boolean;
 }
 
 export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyDefinition {
@@ -489,6 +518,8 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
   const max = Number.isFinite(options.max) ? Number(options.max) : 100;
   const step = Number.isFinite(options.step) ? Number(options.step) : 1;
   const defaultInitial = Number.isFinite(options.initial) ? Number(options.initial) : min + (max - min) / 2;
+  const showSubscaleLabels = options.showSubscaleLabels !== false;
+
   return {
     id: options.id ?? "nasa_tlx",
     title: options.title ?? "NASA TLX",
@@ -497,11 +528,12 @@ export function createNasaTlxSurvey(options: NasaTlxSurveyOptions = {}): SurveyD
     showRequiredAsterisk: options.showRequiredAsterisk,
     questionBorder: options.questionBorder,
     questionBorderRadius: options.questionBorderRadius,
+    questionsLayout: options.questionsLayout,
     questions: selectedSubscales.map((subscale) => ({
       id: subscale.id,
       type: "slider",
       prompt: subscale.prompt,
-      helpText: subscale.label,
+      helpText: showSubscaleLabels ? subscale.label : undefined,
       min,
       max,
       step,
@@ -576,6 +608,8 @@ export type SurveyPresetSpec =
       autoFocusSubmitButton?: boolean;
       showValue?: boolean;
       required?: boolean;
+      questionsLayout?: "vertical" | "grid";
+      showSubscaleLabels?: boolean;
     };
 
 function resolveInlineStyleValue(raw: string | undefined, fallback: string): string {
@@ -583,6 +617,7 @@ function resolveInlineStyleValue(raw: string | undefined, fallback: string): str
   return escapeHtml(value);
 }
 
+// TODO generalise this and stop hardcoding functions for each survey type
 export function createSurveyFromPreset(spec: SurveyPresetSpec): SurveyDefinition {
   if (spec.preset === "atwit") {
     return createAtwitSurvey(spec);

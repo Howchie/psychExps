@@ -10,5 +10,6 @@ dist/
 *.tsbuildinfo
 /test-results/.last-run.json
 /Data
-/conductor
+conductor/
 /.playwright-cli
+.jules/

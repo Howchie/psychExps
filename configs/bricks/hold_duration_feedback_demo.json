@@ -1,0 +1,48 @@
+{
+  "display": {
+    "canvasWidth": 1200,
+    "canvasHeight": 800,
+    "practiceFeedback": {
+      "showHoldProgressCircle": true,
+      "holdProgressCircleRadius": 40,
+      "holdProgressCircleThickness": 6,
+      "holdProgressCircleColor": "#10b981",
+      "holdProgressCircleColorOvertime": "#f59e0b",
+      "holdProgressCircleBgAlpha": 0.3
+    }
+  },
+  "conveyors": {
+    "nConveyors": 1,
+    "lengthPx": 1200,
+    "speedPxPerSec": 0
+  },
+  "bricks": {
+    "completionMode": "hold_duration",
+    "completionParams": {
+      "target_hold_ms": 1000
+    },
+    "spawn": {
+      "ratePerSec": 0
+    },
+    "forcedSet": [
+      {
+        "conveyorIndex": 0,
+        "xFraction": 0.5,
+        "width": 100,
+        "height": 100,
+        "color": "#3b82f6"
+      }
+    ]
+  },
+  "trial": {
+    "holdDurationPractice": {
+      "requiredPresses": 10
+    }
+  },
+  "blocks": [
+    {
+      "label": "Hold Progress Circle Demo",
+      "phase": "practice"
+    }
+  ]
+}

@@ -187,6 +187,35 @@ Notes:
 }
 ```
 
+### `display.practiceFeedback`
+
+Configures visual feedback for `hold_duration` practice.
+
+```ts
+{
+  colorTooFast?: string | number;
+  colorTooSlow?: string | number;
+  colorGood?: string | number;
+  goodThresholdMin?: number;
+  goodThresholdMax?: number;
+  bins?: Array<{
+    min?: number;
+    max?: number;
+    label?: string;
+    color?: string | number;
+  }>;
+
+  // Real-time progress circle
+  showHoldProgressCircle?: boolean;
+  holdProgressCircleRadius?: number;      // default 24
+  holdProgressCircleThickness?: number;   // default 4
+  holdProgressCircleColor?: string | number; // default "#3b82f6"
+  holdProgressCircleColorOvertime?: string | number; // default "#ef4444"
+  holdProgressCircleBgColor?: string | number; // default "#ffffff"
+  holdProgressCircleBgAlpha?: number;     // default 0.2
+}
+```
+
 ### `display.endFurnace`
 
 Supports `enable`, `offsetX`, and visual style values used by renderer presets:

@@ -55,6 +55,7 @@ interface BlockPlanItem {
   trials: number;
   manipulationId: string | null;
   manipulationIds: string[];
+  manipulationLabels: string[];
   staticManipulationIds: string[];
   staticManipulationLabels: Array<string | null>;
   staticManipulationSpeedPxPerSec: number | null;
@@ -423,37 +424,24 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
     },
     csvOptions: {
       suffix: "bricks_events",
-      getRecords: (res) => buildBricksEventRows(
-        res.blocks.flatMap((b: any) => b.trialResults) as ConveyorTrialData[],
-        blockPlan,
-        {
-          participantId: selection.participant.participantId,
-        },
-      ),
+      getRecords: () => [],
       getExtraCsvs: ({ sessionResult }) => {
         const trialRows = sessionResult.blocks.flatMap((b: any) => b.trialResults) as ConveyorTrialData[];
-        const brickOutcomeRows = buildBricksBrickOutcomeRows(
-          trialRows,
-          blockPlan,
-          {
-            participantId: selection.participant.participantId,
-          },
-        );
-        const drtRows = buildBricksDrtRows(
-          trialRows,
-          blockPlan,
-          {
-            participantId: selection.participant.participantId,
-          },
-        );
-        const surveyRows = buildBricksSurveyRows(
-          trialRows,
-          blockPlan,
-          {
-            participantId: selection.participant.participantId,
-          },
-        );
+        const ids = { participantId: selection.participant.participantId };
+        
+        const experimentInfoRows = buildBricksExperimentInfoRows(trialRows, blockPlan, ids);
+        const brickHoldRows = buildBricksBrickHoldRows(trialRows, blockPlan, ids);
+        const brickOutcomeRows = buildBricksBrickOutcomeRows(trialRows, blockPlan, ids);
+        const drtRows = buildBricksDrtRows(trialRows, blockPlan, ids);
+        const surveyRows = buildBricksSurveyRows(trialRows, blockPlan, ids);
+
         const extras: Array<{ contents: string; suffix?: string }> = [];
+        if (experimentInfoRows.length > 0) {
+          extras.push({ contents: recordsToCsv(experimentInfoRows), suffix: "bricks_experiment_info" });
+        }
+        if (brickHoldRows.length > 0) {
+          extras.push({ contents: recordsToCsv(brickHoldRows), suffix: "bricks_brick_hold" });
+        }
         if (brickOutcomeRows.length > 0) {
           extras.push({ contents: recordsToCsv(brickOutcomeRows), suffix: "bricks_brick_outcomes" });
         }
@@ -466,15 +454,18 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         return extras;
       },
     },
-    getTaskMetadata: (res) => ({
-      drt_rows: buildBricksDrtRows(
-        res.blocks.flatMap((b: any) => b.trialResults),
-        blockPlan,
-        {
-          participantId: selection.participant.participantId,
-        },
-      ),
-    }),
+    excludeModuleResults: true,
+    excludeEvents: true,
+    forceJatosResultFiles: true,
+    getTaskMetadata: (res) => {
+      const trialRows = res.blocks.flatMap((b: any) => b.trialResults) as ConveyorTrialData[];
+      const ids = { participantId: selection.participant.participantId };
+      return {
+        drt_rows: buildBricksDrtRows(trialRows, blockPlan, ids),
+        experiment_info: buildBricksExperimentInfoRows(trialRows, blockPlan, ids),
+        brick_hold: buildBricksBrickHoldRows(trialRows, blockPlan, ids),
+      };
+    },
   });
 }
 
@@ -607,6 +598,9 @@ function buildBlockPlan(
       trials,
       manipulationId,
       manipulationIds: [...manipulationIds],
+      manipulationLabels: selectedManipulations
+        .map((m) => resolveStringLabel(m.label, resolver))
+        .filter((l): l is string => l !== null),
       staticManipulationIds: [...staticManipulationIds],
       staticManipulationLabels: selectedManipulations
         .filter((manipulation) => !planManipulationIds.includes(asString(manipulation.id) ?? ""))
@@ -651,8 +645,7 @@ function buildBricksStimulusRows(
         trial_index: trialIndex,
         manipulation_id: block.manipulationId,
         block_static_manipulation_count: block.staticManipulationIds.length,
-        block_static_manipulation_label:
-          block.staticManipulationLabels.length === 1 ? block.staticManipulationLabels[0] ?? null : null,
+        block_static_manipulation_label: block.manipulationLabels.join("+") || null,
         block_static_manipulation_speed_px_per_sec:
           block.staticManipulationLabels.length === 1 ? block.staticManipulationSpeedPxPerSec ?? null : null,
         plan_variant_id: planVariantId,
@@ -885,22 +878,35 @@ function buildTrialCsvContext(
   ids: { participantId: string },
 ): Record<string, string | number | boolean | null> {
   const blockMeta = blockPlan[row.block_index];
-  const trialNode = asObject(asObject((row as any).config_snapshot)?.trial);
+  const configSnapshot = asObject((row as any).config_snapshot);
+  const trialNode = asObject(configSnapshot?.trial);
+  const conveyorsNode = asObject(configSnapshot?.conveyors);
+
   const planVariantId = asString(trialNode?.planVariantId);
   const planVariantLabel = asString(trialNode?.planVariantLabel);
   const staticManipulationLabel =
     blockMeta?.staticManipulationLabels.length === 1 ? blockMeta.staticManipulationLabels[0] ?? null : null;
   const staticManipulationSpeedPxPerSec =
     blockMeta?.staticManipulationLabels.length === 1 ? blockMeta.staticManipulationSpeedPxPerSec ?? null : null;
+
+  const speedPxPerSec = conveyorsNode?.speedPxPerSec;
+  const trialConveyorSpeed = typeof speedPxPerSec === 'number'
+    ? speedPxPerSec
+    : (asObject(speedPxPerSec)?.value as number | undefined);
+
+  const manipulationLabel = blockMeta?.manipulationLabels.join("+") ?? null;
+
   return {
     participant_id: ids.participantId,
     block_index: row.block_index,
     block_label: row.block_label,
     block_phase: blockMeta?.phase ?? null,
     block_is_practice: blockMeta?.isPractice ?? null,
+    block_manipulation_id: blockMeta?.manipulationId ?? null,
+    block_static_manipulation_label: manipulationLabel,
     block_static_manipulation_count: blockMeta?.staticManipulationIds.length ?? 0,
-    block_static_manipulation_label: staticManipulationLabel,
     block_static_manipulation_speed_px_per_sec: staticManipulationSpeedPxPerSec,
+    trial_conveyor_speed: trialConveyorSpeed ?? null,
     plan_variant_id: planVariantId ?? null,
     plan_variant_label: planVariantLabel ?? null,
     trial_index: row.trial_index,
@@ -909,11 +915,12 @@ function buildTrialCsvContext(
   };
 }
 
-function buildBricksEventRows(
+function buildBricksExperimentInfoRows(
   rows: ConveyorTrialData[],
   blockPlan: BlockPlanItem[],
   ids: { participantId: string },
 ): Array<Record<string, string | number | boolean | null>> {
+  const infoTypes = ['brick_spawned', 'brick_focus_changed', 'brick_cleared', 'brick_dropped'];
   const out: Array<Record<string, string | number | boolean | null>> = [];
   for (const row of rows) {
     const trialContext = buildTrialCsvContext(row, blockPlan, ids);
@@ -922,6 +929,9 @@ function buildBricksEventRows(
       : [];
     let hudPoints: number | null = null;
     timeline.forEach((event, eventIndex) => {
+      const type = typeof event.type === "string" ? event.type : null;
+      if (!type || !infoTypes.includes(type)) return;
+
       const cumulativePoints = Number(event.cumulative_points ?? NaN);
       if (Number.isFinite(cumulativePoints)) {
         hudPoints = cumulativePoints;
@@ -930,13 +940,56 @@ function buildBricksEventRows(
         ...trialContext,
         index: eventIndex,
         time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
-        type: typeof event.type === "string" ? event.type : null,
+        type,
         hud_points: hudPoints,
       };
       const cleanedEvent = pruneEmptyUnknown(event);
       if (cleanedEvent !== undefined) {
         flattenUnknown(cleanedEvent, "", flat);
       }
+      out.push(flat);
+    });
+  }
+  return out;
+}
+
+function buildBricksBrickHoldRows(
+  rows: ConveyorTrialData[],
+  blockPlan: BlockPlanItem[],
+  ids: { participantId: string },
+): Array<Record<string, string | number | boolean | null>> {
+  const dropColumns = [
+    "reason", "active_order_index", "speed_px_s", "conveyor_length_px",
+    "spawn_x_px", "previous_brick_id", "visible_width_spawn_px",
+    "active_brick_id", "brick_id", "conveyor_id", "shape", "texture_style",
+    "x", "y", "valid", "hold_floor_ms", "hold_ceiling_ms", "width_reference_px"
+  ];
+  const out: Array<Record<string, string | number | boolean | null>> = [];
+  for (const row of rows) {
+    const trialContext = buildTrialCsvContext(row, blockPlan, ids);
+    const timeline = Array.isArray((row as any).timeline_events)
+      ? ((row as any).timeline_events as Array<Record<string, unknown>>)
+      : [];
+    timeline.forEach((event, eventIndex) => {
+      const type = typeof event.type === "string" ? event.type : null;
+      if (type !== "brick_hold") return;
+
+      const flat: Record<string, string | number | boolean | null> = {
+        ...trialContext,
+        index: eventIndex,
+        time_ms: Number(event.time ?? event.time_ms ?? eventIndex),
+        type,
+      };
+      const cleanedEvent = pruneEmptyUnknown(event);
+      if (cleanedEvent !== undefined) {
+        flattenUnknown(cleanedEvent, "", flat);
+      }
+      
+      // Drop requested columns
+      for (const col of dropColumns) {
+        delete flat[col];
+      }
+      
       out.push(flat);
     });
   }
@@ -1081,14 +1134,15 @@ function buildBricksDrtRows(
     for (const responseRow of responseRows) {
       const response = (responseRow.response ?? {}) as Record<string, unknown>;
       const responseTimeMs = Number(response.time ?? response.rt_ms ?? 0);
-      const spotlightAtResponse = spotlightLookup.findSpotlightAtMs(responseTimeMs);
-      const spotlightMeta = spotlightAtResponse.spotlightBrickMeta ?? {};
+      const stimStartMs = Number(response.stim_start ?? responseTimeMs);
+      const spotlightAtOnset = spotlightLookup.findSpotlightAtMs(stimStartMs);
+      const spotlightMeta = spotlightAtOnset.spotlightBrickMeta ?? {};
       const estimate = (responseRow.estimate ?? null) as Record<string, unknown> | null;
       const estimateValues = (estimate?.values ?? null) as Record<string, unknown> | null;
       out.push({
         ...trialContext,
-        spotlight_brick_id: spotlightAtResponse.spotlightBrickId,
-        spotlight_conveyor_id: spotlightAtResponse.spotlightConveyorId,
+        spotlight_brick_id: spotlightAtOnset.spotlightBrickId,
+        spotlight_conveyor_id: spotlightAtOnset.spotlightConveyorId,
         spotlight_texture_category_id:
           typeof spotlightMeta.texture_category_id === "string" ? spotlightMeta.texture_category_id : null,
         spotlight_texture_category_label:

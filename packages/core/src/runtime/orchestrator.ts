@@ -45,6 +45,9 @@ export interface TaskOrchestratorArgs<TBlock, TTrial, TTrialResult> {
   ) => Promise<void> | void;
   getTaskMetadata?: (sessionResult: any) => Record<string, unknown>;
   getEvents?: (sessionResult: any) => unknown[];
+  excludeModuleResults?: boolean;
+  excludeEvents?: boolean;
+  forceJatosResultFiles?: boolean;
   resolveUiContainer?: (baseContainer: HTMLElement) => HTMLElement;
   shouldAutoStartModule?: (ctx: {
     scope: "block" | "trial";
@@ -784,9 +787,9 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
         blockIndex: b.blockIndex,
         label: (b.block as any).label,
       })),
-      records,
-      moduleResults: moduleRunner.getResults(),
-      events: Array.isArray(taskEvents) ? taskEvents : [],
+      ...(records.length > 0 ? { records } : {}),
+      ...(args.excludeModuleResults ? {} : { moduleResults: moduleRunner.getResults() }),
+      ...(!args.excludeEvents ? { events: (Array.isArray(taskEvents) ? taskEvents : []) } : {}),
       ...taskMetadata,
     };
 
@@ -802,6 +805,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
         coreConfig: context.coreConfig,
         selection,
         payload,
+        forceJatosResultFiles: args.forceJatosResultFiles,
         csv: args.csvOptions ? { 
           contents: recordsToCsv(records), 
           suffix: args.csvOptions.suffix 

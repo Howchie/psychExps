@@ -7,6 +7,7 @@ export interface FinalizeTaskRunArgs {
   coreConfig: CoreConfig;
   selection: SelectionContext;
   payload: unknown;
+  forceJatosResultFiles?: boolean;
   csv?: {
     contents: string;
     suffix?: string;
@@ -36,24 +37,33 @@ function buildReducedJatosPayload(payload: Record<string, unknown>): Record<stri
   const moduleResults = asObject(payload.moduleResults);
   const jsPsychData = Array.isArray(payload.jsPsychData) ? payload.jsPsychData : [];
   const drtRows = Array.isArray(payload.drt_rows) ? payload.drt_rows : [];
+  const experimentInfo = Array.isArray(payload.experiment_info) ? payload.experiment_info : [];
+  const brickHold = Array.isArray(payload.brick_hold) ? payload.brick_hold : [];
+
+  const reduced = { ...payload };
+  delete reduced.records;
+  delete reduced.events;
+  delete reduced.moduleResults;
+  delete reduced.jsPsychData;
+  delete reduced.drt_rows;
+  delete reduced.experiment_info;
+  delete reduced.brick_hold;
+
   return {
-    ...payload,
-    records: undefined,
-    events: undefined,
-    moduleResults: undefined,
-    jsPsychData: undefined,
-    drt_rows: undefined,
+    ...reduced,
     recordCount: records.length,
     eventCount: events.length,
     moduleResultKeys: moduleResults ? Object.keys(moduleResults) : [],
     jsPsychDataCount: jsPsychData.length,
     drtRowCount: drtRows.length,
+    experimentInfoCount: experimentInfo.length,
+    brickHoldCount: brickHold.length,
     payloadReducedForJatos: true,
   };
 }
 
 const JATOS_RESULTDATA_SOFT_LIMIT_BYTES = 4_500_000;
-const JATOS_RESULTFILE_FIELD_KEYS = ["records", "events", "moduleResults", "jsPsychData", "drt_rows"] as const;
+const JATOS_RESULTFILE_FIELD_KEYS = ["records", "events", "moduleResults", "jsPsychData", "drt_rows", "experiment_info", "brick_hold"] as const;
 
 function estimateJsonBytes(value: unknown): number {
   try {
@@ -63,28 +73,30 @@ function estimateJsonBytes(value: unknown): number {
   }
 }
 
-async function submitToJatosWithFallback(payload: unknown): Promise<boolean> {
+async function submitToJatosWithFallback(payload: unknown, forceSplit = false): Promise<boolean> {
   const payloadObject = asObject(payload);
   if (!payloadObject) return submitToJatos({ payload });
 
   const payloadBytes = estimateJsonBytes(payloadObject);
-  if (payloadBytes > JATOS_RESULTDATA_SOFT_LIMIT_BYTES) {
+  
+  // If definitely too large, or if splitting is forced, go straight to splitting
+  if (forceSplit || payloadBytes > JATOS_RESULTDATA_SOFT_LIMIT_BYTES) {
     const { payload: reducedPayload, missingCriticalKeys } = await buildResultFileBackedPayload(payloadObject);
-    if (missingCriticalKeys.length > 0) {
-      console.error(`JATOS persistence failed: could not upload critical result fields: ${missingCriticalKeys.join(", ")}`);
-      return false;
+    if (missingCriticalKeys.length === 0) {
+      if (await submitToJatos(reducedPayload)) return true;
     }
+  }
+
+  // Try the full payload if splitting wasn't needed or failed
+  if (!forceSplit) {
+    if (await submitToJatos(payloadObject)) return true;
+  }
+
+  // Final fallback to splitting
+  const { payload: reducedPayload, missingCriticalKeys } = await buildResultFileBackedPayload(payloadObject);
+  if (missingCriticalKeys.length === 0) {
     if (await submitToJatos(reducedPayload)) return true;
   }
-
-  if (await submitToJatos(payloadObject)) return true;
-
-  const { payload: reducedPayload, missingCriticalKeys } = await buildResultFileBackedPayload(payloadObject);
-  if (missingCriticalKeys.length > 0) {
-    console.error(`JATOS persistence failed: could not upload critical result fields: ${missingCriticalKeys.join(", ")}`);
-    return false;
-  }
-  if (await submitToJatos(reducedPayload)) return true;
 
   const appendEnvelope = {
     kind: "finalize_fallback",
@@ -164,7 +176,7 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
     if (localSaveFormat !== "json") {
       const csvContents =
         args.csv?.contents ?? inferCsvFromPayload(args.payload);
-      if (csvContents != null) {
+      if (csvContents != null && csvContents.length > 0) {
         downloadCsv(csvContents, filePrefix, args.selection, args.csv?.suffix ?? "trials");
       }
       const extraCsvs = Array.isArray(args.extraCsvs) ? args.extraCsvs : [];
@@ -181,7 +193,7 @@ export async function finalizeTaskRun(args: FinalizeTaskRunArgs): Promise<Finali
 
   const submittedToJatos = args.jatosHandledBySink
     ? true
-    : await submitToJatosWithFallback(args.payload);
+    : await submitToJatosWithFallback(args.payload, args.forceJatosResultFiles);
 
   const redirectCfg = args.coreConfig.completion?.redirect;
   const template =

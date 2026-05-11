@@ -462,6 +462,7 @@ export class ConveyorRenderer {
   furnaceFlickerTimeMs: number;
   spotlightGraphics: PIXI.Graphics | null;
   spotlightRing: PIXI.Graphics | null;
+  holdProgressGraphics: PIXI.Graphics | null;
   spotlightRect: { x: number; y: number; w: number; h: number } | null;
   activeBrickId: string | null;
   brickHoldStart: Map<string, { t: number; x: number; y: number }>;
@@ -540,6 +541,7 @@ export class ConveyorRenderer {
     this.furnaceFlickerTimeMs = 0;
     this.spotlightGraphics = null;
     this.spotlightRing = null;
+    this.holdProgressGraphics = null;
     this.spotlightRect = null;
     this.activeBrickId = null;
     this.brickHoldStart = new Map();
@@ -631,6 +633,9 @@ export class ConveyorRenderer {
     this.app.stage.addChild(this.spotlightLayer);
     this.app.stage.addChild(this.drtLayer);
     this.app.stage.addChild(this.hudLayer);
+
+    this.holdProgressGraphics = new PIXI.Graphics();
+    this.effectLayer.addChild(this.holdProgressGraphics);
 
     await this._prepareBackgroundTexture();
     await this._prepareBeltTexture();
@@ -1670,13 +1675,11 @@ export class ConveyorRenderer {
       zone.on('pointerout', (e) => {
         this.spotlightPointerInside = false;
         this.spotlightPointerPos = this._extractPointerPosition(e);
-        endSpotlightHold(e);
         this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
       });
       zone.on('pointerleave', (e) => {
         this.spotlightPointerInside = false;
         this.spotlightPointerPos = this._extractPointerPosition(e);
-        endSpotlightHold(e);
         this._syncSpotlightHoverTarget(this.config?.bricks?.completionMode);
       });
       zone.on('pointercancel', (e) => {
@@ -1762,7 +1765,6 @@ export class ConveyorRenderer {
     zone.on('pointerupoutside', endConveyorHold);
     zone.on('pointerout', (e) => {
       const cid = (zone as any).conveyorId;
-      endConveyorHold(e);
       if (this.config?.bricks?.completionMode !== 'hover_to_clear') {
         return;
       }
@@ -1787,7 +1789,6 @@ export class ConveyorRenderer {
         this._emitPointerDebug('conveyor_hover_end', prev, e, { conveyor_id: cid });
         this.onBrickHover(prev, false, pos.x, pos.y);
       }
-      endConveyorHold(e);
     });
     zone.on('pointercancel', (e) => {
       const cid = (zone as any).conveyorId;
@@ -2787,6 +2788,8 @@ export class ConveyorRenderer {
   }
 
   updateEffects(dtMs: number) {
+    this._updateHoldProgress();
+
     if (!this.effectVisuals.length) {
       return;
     }
@@ -2847,6 +2850,90 @@ export class ConveyorRenderer {
     this.perfStats.peakActiveEffects = Math.max(this.perfStats.peakActiveEffects, this.effectVisuals.length);
   }
 
+  _updateHoldProgress() {
+    if (!this.holdProgressGraphics) return;
+    this.holdProgressGraphics.clear();
+
+    const practiceUiCfg = this.config?.display?.practiceFeedback || {};
+    if (practiceUiCfg.showHoldProgressCircle !== true) return;
+
+    // Check spotlight
+    let hold = this.spotlightHoldStart;
+    let pos = this.spotlightPointerPos;
+
+    // Check conveyors if no spotlight hold
+    if (!hold || hold.mode !== 'hold_duration') {
+      for (const [cid, h] of this.conveyorHoldStart) {
+        if (h.mode === 'hold_duration') {
+          hold = h;
+          pos = this.conveyorPointerPos.get(cid) ?? { x: null, y: null };
+          break;
+        }
+      }
+    }
+
+    // Check direct brick holds if still no hold
+    if (!hold || hold.mode !== 'hold_duration') {
+      for (const [bid, h] of this.brickHoldStart) {
+        hold = { brickId: bid, t: h.t, mode: 'hold_duration' };
+        pos = { x: h.x, y: h.y };
+        break;
+      }
+    }
+
+    if (!hold || hold.mode !== 'hold_duration' || hold.t === null) return;
+    
+    let drawX = pos.x;
+    let drawY = pos.y;
+    if (this.pointerInCanvas && this.pointerCanvasPos.x !== null && this.pointerCanvasPos.y !== null) {
+      drawX = this.pointerCanvasPos.x;
+      drawY = this.pointerCanvasPos.y;
+    }
+
+    if (drawX === null || drawY === null) return;
+
+    const sprite = this.brickSprites.get(hold.brickId);
+    const targetMs = Math.max(50, Number(sprite?.targetHoldMs ?? this.config.bricks.completionParams?.target_hold_ms ?? 700));
+    const elapsedMs = performance.now() - hold.t;
+    const progress = elapsedMs / targetMs;
+
+    const radius = Number(practiceUiCfg.holdProgressCircleRadius ?? 24);
+    const thickness = Number(practiceUiCfg.holdProgressCircleThickness ?? 4);
+    const color = toPixiColor(practiceUiCfg.holdProgressCircleColor ?? '#3b82f6');
+    const colorOvertime = toPixiColor(practiceUiCfg.holdProgressCircleColorOvertime ?? '#ef4444');
+    const bgColor = practiceUiCfg.holdProgressCircleBgColor ? toPixiColor(practiceUiCfg.holdProgressCircleBgColor) : 0xffffff;
+    const bgAlpha = Number(practiceUiCfg.holdProgressCircleBgAlpha ?? 0.2);
+
+    // Draw background circle
+    this.holdProgressGraphics.beginFill(bgColor, bgAlpha);
+    this.holdProgressGraphics.drawCircle(drawX, drawY, radius);
+    this.holdProgressGraphics.endFill();
+
+    // Draw progress arc
+    if (progress > 0) {
+      const startAngle = -Math.PI / 2;
+      
+      if (progress <= 1) {
+        // First lap
+        this.holdProgressGraphics.lineStyle(thickness, color, 1);
+        const endAngle = startAngle + (Math.PI * 2 * progress);
+        this.holdProgressGraphics.arc(drawX, drawY, radius - thickness / 2, startAngle, endAngle);
+      } else {
+        // Overtime - Second lap (or more)
+        // 1. Draw full circle of the base color
+        this.holdProgressGraphics.lineStyle(thickness, color, 1);
+        this.holdProgressGraphics.drawCircle(drawX, drawY, radius - thickness / 2);
+        
+        // 2. Draw the overshoot arc on top
+        const overProgress = progress % 1;
+        this.holdProgressGraphics.lineStyle(thickness, colorOvertime, 1);
+        const endAngle = startAngle + (Math.PI * 2 * (overProgress === 0 ? 1 : overProgress));
+        this.holdProgressGraphics.arc(drawX, drawY, radius - thickness / 2, startAngle, endAngle);
+      }
+      this.holdProgressGraphics.lineStyle(0);
+    }
+  }
+
   _setupHUD() {
     const uiCfg = this.config?.display?.ui ?? this.config?.ui ?? {};
     if (uiCfg.showHUD === false) {
@@ -2903,6 +2990,7 @@ export class ConveyorRenderer {
         this.brickSprites.set(brick.id, sprite);
         this.brickLayer.addChild(sprite);
       }
+      sprite.targetHoldMs = brick.targetHoldMs;
 
       // Late-initialize baseline if not already present (for existing bricks during transition)
       if (sprite.initialSimX === undefined) {
@@ -3096,9 +3184,15 @@ export class ConveyorRenderer {
       // the pointer is down, which can otherwise drop the release callback.
       sprite.on('pointerup', endHold);
       sprite.on('pointerupoutside', endHold);
-      sprite.on('pointerout', endHold);
-      sprite.on('pointerleave', endHold);
-      sprite.on('pointeroutoutside', endHold);
+      sprite.on('pointerout', (e: any) => {
+        this._emitPointerDebug('brick_pointerout', brick.id, e);
+      });
+      sprite.on('pointerleave', (e: any) => {
+        this._emitPointerDebug('brick_pointerleave', brick.id, e);
+      });
+      sprite.on('pointeroutoutside', (e: any) => {
+        this._emitPointerDebug('brick_pointeroutoutside', brick.id, e);
+      });
       sprite.on('pointercancel', endHold);
     } else if (this.config.bricks.completionMode === 'hold_to_clear') {
       const beginHold = (e: any) => {
@@ -3116,9 +3210,15 @@ export class ConveyorRenderer {
       sprite.on('pointerdown', beginHold);
       sprite.on('pointerup', endHold);
       sprite.on('pointerupoutside', endHold);
-      sprite.on('pointerout', endHold);
-      sprite.on('pointerleave', endHold);
-      sprite.on('pointeroutoutside', endHold);
+      sprite.on('pointerout', (e: any) => {
+        this._emitPointerDebug('brick_pointerout', brick.id, e);
+      });
+      sprite.on('pointerleave', (e: any) => {
+        this._emitPointerDebug('brick_pointerleave', brick.id, e);
+      });
+      sprite.on('pointeroutoutside', (e: any) => {
+        this._emitPointerDebug('brick_pointeroutoutside', brick.id, e);
+      });
       sprite.on('pointercancel', endHold);
     } else if (this.config.bricks.completionMode === 'hover_to_clear') {
       const beginHover = (e: any) => {
