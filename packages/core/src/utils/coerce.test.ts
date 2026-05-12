@@ -4,9 +4,32 @@ import {
   asPositiveNumberArray,
   coerceInstructionInsertions,
   resolveBlockScreenSlotValue,
+  toInstructionScreenSpecs,
 } from './coerce';
 
 describe('coerce utilities', () => {
+  describe('toInstructionScreenSpecs', () => {
+    it('should handle a single string', () => {
+      expect(toInstructionScreenSpecs('hello')).toEqual([{ text: 'hello' }]);
+    });
+
+    it('should handle an array of strings', () => {
+      expect(toInstructionScreenSpecs(['a', 'b'])).toEqual([{ text: 'a' }, { text: 'b' }]);
+    });
+
+    it('should handle an array of objects', () => {
+      expect(toInstructionScreenSpecs([{ text: 'a', title: 'T' }])).toEqual([{ text: 'a', title: 'T' }]);
+    });
+
+    it('should handle a single object (IMPORTANT for config robustess)', () => {
+      expect(toInstructionScreenSpecs({ text: 'a', title: 'T' })).toEqual([{ text: 'a', title: 'T' }]);
+    });
+
+    it('should handle html property in object', () => {
+      expect(toInstructionScreenSpecs({ html: '<div></div>' })).toEqual([{ html: '<div></div>' }]);
+    });
+  });
+
   describe('asStringArray', () => {
     it('should return a string array from valid input', () => {
       expect(asStringArray(['a', 'b'], ['fallback'])).toEqual(['a', 'b']);

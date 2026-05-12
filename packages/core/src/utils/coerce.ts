@@ -259,7 +259,7 @@ export function toInstructionScreenSpecs(value: unknown): InstructionScreenSpec[
     return text ? [{ text }] : [];
   }
   const out: InstructionScreenSpec[] = [];
-  const arrayValue = asArray(value);
+  const arrayValue = Array.isArray(value) ? value : (asObject(value) ? [value] : []);
   for (let i = 0; i < arrayValue.length; i += 1) {
     const item = arrayValue[i];
     if (typeof item === "string") {

@@ -35,6 +35,8 @@ export interface HoldDurationPracticeData {
   block_label: string;
   block_index: number;
   trial_index: number;
+  clockTime: string;
+  clockTimeUnixMs: number;
   trial_duration_ms: number;
   end_reason: string;
   runtime_conveyor_lengths: number[];
@@ -348,10 +350,13 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
       ? (injectedDrtRuntime?.stopOnCleanup === false ? drtController.exportData() : drtController.stop())
       : { enabled: false, stats: { presented: 0, hits: 0, misses: 0, falseAlarms: 0 }, events: [] };
     const gameData = gameState.exportData() as Record<string, any>;
+    const clockTimeUnixMs = Date.now();
     return {
       block_label: trial.blockLabel,
       block_index: trial.blockIndex,
       trial_index: trial.trialIndex,
+      clockTime: new Date(clockTimeUnixMs).toISOString(),
+      clockTimeUnixMs,
       trial_duration_ms: gameState.elapsed,
       end_reason: pendingEnd?.reason ?? 'time_limit',
       runtime_conveyor_lengths: runtimeConveyorLengths,
@@ -684,10 +689,13 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
         severe_ratio: frameStats.frames > 0 ? (frameStats.severeFrames / frameStats.frames) : 0,
         renderer: rendererPerf,
       };
+      const clockTimeUnixMs = Date.now();
       const trialData: HoldDurationPracticeData = {
         block_label: trial.blockLabel,
         block_index: trial.blockIndex,
         trial_index: trial.trialIndex,
+        clockTime: new Date(clockTimeUnixMs).toISOString(),
+        clockTimeUnixMs,
         trial_duration_ms: gameState.elapsed,
         end_reason: reason,
         runtime_conveyor_lengths: runtimeConveyorLengths,

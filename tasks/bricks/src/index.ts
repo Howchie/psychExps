@@ -910,6 +910,8 @@ function buildTrialCsvContext(
     plan_variant_id: planVariantId ?? null,
     plan_variant_label: planVariantLabel ?? null,
     trial_index: row.trial_index,
+    clockTime: row.clockTime,
+    clockTimeUnixMs: row.clockTimeUnixMs,
     trial_duration_ms: row.trial_duration_ms,
     trial_end_reason: row.end_reason,
   };
