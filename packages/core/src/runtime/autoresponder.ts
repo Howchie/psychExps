@@ -255,6 +255,19 @@ export function isAutoResponderEnabled(): boolean {
   return !!activeProfile?.enabled;
 }
 
+export function isSkipModeEnabled(): boolean {
+  if (isAutoResponderEnabled()) return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("skip_conveyor") === "1") return true;
+    if (!isJatosAvailable()) return false;
+    const jatosParams = readJatosUrlQueryParameters();
+    return jatosParams.get("skip_conveyor") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function getAutoResponderProfile(): ResolvedAutoResponderProfile | null {
   return activeProfile;
 }

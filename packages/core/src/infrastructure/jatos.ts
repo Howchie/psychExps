@@ -143,7 +143,12 @@ export async function endJatosStudyAndRedirect(url: string): Promise<void> {
       return;
     }
     if (typeof api.endStudyAndRedirect === "function") {
-      await api.endStudyAndRedirect(url);
+      // JATOS handles both the server-side completion signal and the redirect internally.
+      // endStudy() alone returns undefined (not a Promise) in JATOS 3.x and redirects to
+      // its own ../end URL, which our window.location.assign would then override before
+      // that URL ever loads. endStudyAndRedirect sends the completion GET request first,
+      // then navigates to url only after the server confirms — no manual redirect needed.
+      api.endStudyAndRedirect(url);
     } else {
       await api.endStudy();
       window.location.assign(url);

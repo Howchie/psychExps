@@ -7,6 +7,7 @@ import {
   DrtController,
   getAutoResponderProfile,
   isAutoResponderEnabled,
+  isSkipModeEnabled,
   normalizeKey,
   resolveScopedModuleConfig,
   resolveButtonStyleOverrides,
@@ -199,7 +200,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   const resolvedDrtConfig =
     injectedDrtRuntime?.config ?? resolveBricksDrtConfig(legacyDrtRaw);
   const autoProfile = getAutoResponderProfile();
-  const shouldSimulateDataOnly = isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === 'data-only';
+  const skipConveyor = isSkipModeEnabled();
+  const shouldSimulateDataOnly = skipConveyor || (isAutoResponderEnabled() && autoProfile?.jsPsychSimulationMode === 'data-only');
   const drtController = injectedDrtRuntime?.controller ?? null;
   if (resolvedDrtConfig.enabled && !drtController) {
     throw new Error('Bricks DRT is enabled but no module-scoped DRT runtime was injected.');
@@ -269,7 +271,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
   const maxTimeSecRaw = resolvedCfg.trial?.maxTimeSec;
   const configuredMaxDuration =
     Number.isFinite(maxTimeSecRaw) && maxTimeSecRaw !== null ? Math.max(0, Math.floor(maxTimeSecRaw * 1000)) : null;
-  const maxDuration = configuredMaxDuration ?? (autoEnabled ? Math.max(5_000, Number(autoProfile?.maxTrialDurationMs ?? 90_000)) : null);
+  const maxDuration = skipConveyor ? 500 : (configuredMaxDuration ?? (autoEnabled ? Math.max(5_000, Number(autoProfile?.maxTrialDurationMs ?? 90_000)) : null));
   const trialCfg = (resolvedCfg?.trial || {}) as Record<string, unknown>;
   const globalEndDelayMsRaw = Number(trialCfg.endDelayMs);
   const globalEndDelayMs = Number.isFinite(globalEndDelayMsRaw) ? Math.max(0, Math.floor(globalEndDelayMsRaw)) : 0;
@@ -282,7 +284,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     (trialCfg.stopDrtOnBrickQuotaMet === true || trialCfg.endDrtOnBrickQuotaMet === true);
 
   // Fast headless path: skip renderer and run virtual-time loop.
-  if (autoEnabled && autoProfile?.jsPsychSimulationMode === 'data-only') {
+  // Also entered when skip_conveyor=1 URL param is set (without auto mode, so JATOS/instruction flows remain human-driven).
+  if ((autoEnabled && autoProfile?.jsPsychSimulationMode === 'data-only') || skipConveyor) {
     injectedDrtRuntime?.attachBindings?.({
       displayElement: null,
       getElapsedMs: () => gameState.elapsed,
@@ -293,7 +296,8 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
     const DATA_ONLY_STEP_MS = 16;
     const practicePerformanceDeltas: number[] = [];
     const practicePressResultsDataOnly: boolean[] = [];
-    let nextAutoActionAt = Math.max(40, sampleAutoInteractionDelayMs() ?? 900);
+    const interactionDelayFallbackMs = skipConveyor ? 40 : 900;
+    let nextAutoActionAt = Math.max(40, sampleAutoInteractionDelayMs() ?? interactionDelayFallbackMs);
     let pendingReplenishDataOnly: { brickId: string; dueAtMs: number } | null = null;
     let pendingEnd: { reason: string; dueAtMs: number } | null = null;
     while (!pendingEnd || gameState.elapsed < pendingEnd.dueAtMs) {
@@ -333,7 +337,7 @@ export async function runHoldDurationPractice(args: HoldDurationPracticeRunArgs)
             pendingReplenishDataOnly = { brickId: String(candidate.id), dueAtMs: gameState.elapsed + replenishDelayMs };
           }
         }
-        nextAutoActionAt = gameState.elapsed + Math.max(40, sampleAutoInteractionDelayMs() ?? 900);
+        nextAutoActionAt = gameState.elapsed + Math.max(40, sampleAutoInteractionDelayMs() ?? interactionDelayFallbackMs);
       }
       if (!pendingEnd && enforceBrickQuota && practicePressResultsDataOnly.length >= (brickQuota ?? 0)) {
         pendingEnd = { reason: 'brick_quota_met', dueAtMs: gameState.elapsed + brickQuotaEndDelayMs };

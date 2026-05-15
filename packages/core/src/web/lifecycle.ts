@@ -87,10 +87,8 @@ async function submitToJatosWithFallback(payload: unknown, forceSplit = false): 
     }
   }
 
-  // Try the full payload if splitting wasn't needed or failed
-  if (!forceSplit) {
-    if (await submitToJatos(payloadObject)) return true;
-  }
+  // Try the full payload if splitting wasn't needed, or as a fallback when file uploads failed
+  if (await submitToJatos(payloadObject)) return true;
 
   // Final fallback to splitting
   const { payload: reducedPayload, missingCriticalKeys } = await buildResultFileBackedPayload(payloadObject);

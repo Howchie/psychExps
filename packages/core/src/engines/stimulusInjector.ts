@@ -1,6 +1,6 @@
 import type { TaskModule, TaskModuleHandle, TaskModuleAddress, TaskModuleContext } from "../api/taskModule";
 import { generateProspectiveMemoryPositions, type ProspectiveMemoryScheduleConfig } from "./prospectiveMemory";
-import { coercePoolDrawConfig, createPoolDrawer, type PoolDrawConfig } from "../infrastructure/pools";
+import { coercePoolDrawConfig, createCategoryPoolDrawer, createPoolDrawer, type CategoryDrawMode, type PoolDrawConfig } from "../infrastructure/pools";
 import { asObject, asString } from "../utils/coerce";
 
 export interface StimulusInjectionCategorySource {
@@ -20,6 +20,7 @@ export interface StimulusInjectionSourceDrawConfig {
   mode?: PoolDrawConfig["mode"];
   scope?: "block" | "participant";
   shuffle?: boolean;
+  categoryMode?: CategoryDrawMode;
 }
 
 export interface StimulusInjectionSetters {
@@ -179,15 +180,32 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
     injectionId?: string,
   ): InjectionDrawer {
     const sourceDraw = this.coerceSourceDrawConfig(sourceDrawRaw);
-    const candidates = this.collectCandidates(source, context);
-    if (candidates.length === 0) {
-      const fallbackCategory = source.type === "literal"
-        ? String(source.sourceCategory ?? "literal")
-        : "unknown";
-      return () => ({ item: "injected_item", sourceCategory: fallbackCategory });
-    }
 
     const buildDrawer = (): InjectionDrawer => {
+      if (sourceDraw.categoryMode !== undefined && source.type === "category_in") {
+        const categories = Array.isArray(source.categories) ? source.categories : [];
+        const draw = createCategoryPoolDrawer(
+          context.stimuliByCategory ?? {},
+          categories,
+          context.rng!,
+          {
+            itemDraw: { mode: sourceDraw.mode, shuffle: sourceDraw.shuffle },
+            categoryDraw: { mode: sourceDraw.categoryMode, shuffle: sourceDraw.shuffle },
+          },
+        );
+        return () => {
+          const picked = draw();
+          return { item: picked.item, sourceCategory: picked.category };
+        };
+      }
+
+      const candidates = this.collectCandidates(source, context);
+      if (candidates.length === 0) {
+        const fallbackCategory = source.type === "literal"
+          ? String(source.sourceCategory ?? "literal")
+          : "unknown";
+        return () => ({ item: "injected_item", sourceCategory: fallbackCategory });
+      }
       const draw = createPoolDrawer(
         candidates.map((pick) => ({ item: pick.item, category: pick.sourceCategory })),
         context.rng!,
@@ -209,17 +227,27 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
     return created;
   }
 
-  private coerceSourceDrawConfig(value: StimulusInjectionSourceDrawConfig | null): Required<StimulusInjectionSourceDrawConfig> {
+  private coerceSourceDrawConfig(value: StimulusInjectionSourceDrawConfig | null): {
+    mode: PoolDrawConfig["mode"];
+    shuffle: boolean;
+    scope: "block" | "participant";
+    categoryMode: CategoryDrawMode | undefined;
+  } {
     const raw = asObject(value);
     const draw = coercePoolDrawConfig(raw, { mode: "without_replacement", shuffle: true });
     const scopeRaw = asString(raw?.scope)?.toLowerCase();
     const scope = scopeRaw === "participant" ? "participant" : "block";
-    return { mode: draw.mode, shuffle: draw.shuffle, scope };
+    const categoryModeRaw = asString(raw?.categoryMode)?.toLowerCase();
+    const validCategoryModes: CategoryDrawMode[] = ["ordered", "with_replacement", "without_replacement", "round_robin"];
+    const categoryMode = validCategoryModes.includes(categoryModeRaw as CategoryDrawMode)
+      ? (categoryModeRaw as CategoryDrawMode)
+      : undefined;
+    return { mode: draw.mode, shuffle: draw.shuffle, scope, categoryMode };
   }
 
   private makeParticipantScopedDrawerId(
     source: StimulusInjectionSource,
-    sourceDraw: Required<StimulusInjectionSourceDrawConfig>,
+    sourceDraw: { mode: PoolDrawConfig["mode"]; shuffle: boolean; scope: string; categoryMode: CategoryDrawMode | undefined },
     injectionId?: string,
   ): string {
     const sourceKey = source.type === "literal"

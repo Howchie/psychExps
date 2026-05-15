@@ -1,4 +1,4 @@
-import { isAutoResponderEnabled, sampleAutoInteger, sampleAutoSurveySubmitDelayMs } from "../runtime/autoresponder";
+import { isAutoResponderEnabled, isSkipModeEnabled, sampleAutoInteger, sampleAutoSurveySubmitDelayMs } from "../runtime/autoresponder";
 import { applyButtonStyleOverrides, escapeHtml, sleep, type ButtonStyleOverrides } from "./ui";
 import { getElementBySafeId } from "./domUtils";
 
@@ -167,6 +167,9 @@ function waitForSurveySubmit(
           complete();
         })();
       }
+    } else if (isSkipModeEnabled()) {
+      autoFillSurvey(container, survey);
+      void Promise.resolve().then(() => complete());
     }
   });
 }

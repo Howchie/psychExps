@@ -52,7 +52,8 @@
             "sourceDraw": {
               "mode": "without_replacement",
               "scope": "participant",
-              "shuffle": true
+              "shuffle": true,
+              "categoryMode": "without_replacement"
             },
             "set": {
               "trialType": "PM",

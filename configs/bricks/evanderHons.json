@@ -538,7 +538,7 @@
         "condition_plan"
       ],
       "preBlockScreens": [
-        {"html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Great work!<p><img src='assets/evander-bricks/sprite/boxy_cheer.png' alt='Boxy Cheering' style='max-height: 120px; height: 100%; width: auto;'/></p><p>Now, we will use this same click-and-hold strategy to open some boxes! In the following trials, boxes will move slowly along the conveyor belts. You must click-and-hold for {bricks.completionParams.target_hold_ms} ms ({bricks.completionParams.target_hold_ms / 1000} second) several times on each box, until it opens. The wider the box, the more work it takes to open. You will still receive feedback on your clicks, but we will no longer show the exact durations.</p>You can only open the box that Boxy has currently highlighted. Once you clear a box, Boxy will highlight another random box for you to work on. Open as many boxes as possible before they are destroyed to maximise your coins!</p>"},"In the following block there will be four rounds.\nOne round is a full conveyor trial with multiple boxes."
+        {"html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Great work!<p><img src='assets/evander-bricks/sprite/boxy_cheer.png' alt='Boxy Cheering' style='max-height: 120px; height: 100%; width: auto;'/></p><p>Now, we will use this same click-and-hold strategy to open some boxes! In the following trials, boxes will move slowly along the conveyor belts. You must click-and-hold for {bricks.completionParams.target_hold_ms} ms ({bricks.completionParams.target_hold_ms / 1000} second) several times on each box, until it opens. The wider the box, the more work it takes to open. You will still receive feedback on your clicks, but we will no longer show the exact durations.</p>You can only open the box that Boxy has currently highlighted. Once you clear a box, Boxy will highlight another random box for you to work on. Open as many boxes as possible before they are destroyed to maximise your coins!</p>"},"In the following block there will be two rounds.\nOne round is a full conveyor trial with multiple boxes."
       ],
       "afterBlockScreens": [
         {
@@ -605,6 +605,11 @@
         "difficulty_practice2",
         "condition_plan"
       ],
+      "overrides": {
+          "surveys": {
+          "postTrial": []
+        }
+      },
       "afterBlockScreens": [
          {"html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>Well done!<p><img src='assets/evander-bricks/sprite/boxy_point.png' alt='Boxy Pointing' style='max-height: 120px; height: 100%; width: auto;'/></p><p>From here on you will always complete both the detection task and the conveyor task. The conveyor will change speeds between blocks and sometimes it will be difficult to open all the boxes. You will continue to receive colour-coded feedback on your clicks. Please try your best to open as many boxes as you can within the time limit!</p><p>Remember: Opening boxes gives you coins, but boxes being destroyed results in coins being taken away!</p>"},{"html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45;'>After each round, you will also be asked to rate some aspects of your workload and performance on the task. Please carefully read each question, as they ask different things. We encourage you to use the full scale range as the experiment progresses."}
       ]
@@ -618,7 +623,7 @@
         "condition_plan"
       ],
       "preBlockScreens": [
-        "You will now proceed through a series of experimental blocks\n\nThere will be ten (10) blocks in total, each consisiting of eight (8) rounds of the box task.\nAfter each round you will respond to the workload survey and then you will continue the task.\n\nBetween blocks you you will be given updates on your progress including your coin total, and invited to take a short break before continuing."
+        "You will now proceed through a series of experimental blocks\n\nThere will be eight (8) blocks in total, each consisiting of eight (8) rounds of the box task.\nAfter each round you will respond to the workload survey and then you will continue the task.\n\nBetween blocks you you will be given updates on your progress including your coin total, and invited to take a short break before continuing."
       ]
     },
     {
@@ -683,10 +688,12 @@
         "cell_2",
         "condition_plan"
       ],
-      "overrides": {
-        "blockSummary": {
-            "enabled": false
-        }
+      "blockSummary": {
+        "enabled": true,
+        "title": "",
+        "lines": [
+            { "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45; style='text-align:center; margin-bottom:12px''>DO NOT CLOSE THIS WINDOW!<p><img src='assets/evander-bricks/break_images/finish_screen.png' style='max-width: 300px; width: 100%; height: auto; image-rendering:pixelated'></p><p>Congratulations! Your final coin balance is: {experimentPoints}.</p><p>Across the experiment you opened {blockCleared} boxes, and only let {blockDropped} boxes be destroyed. Boxy and his family are very happy.</p><p>You have now completed the experiment. Thank you very much for participating. Please read the debrief form on the next screen, then click Continue. The experiment will redirect to SONA and automatically apply your credits.</p><p>Do not close the window until you see a message from SONA that your credits have been awarded!</p>"}
+        ]
       }
     }
   ],
@@ -707,9 +714,9 @@
       "when": {
         "isPractice": false
       },
-      "title": "End of {blockLabel} of 10",
+      "title": "End of {blockLabel} of 8",
       "lines": [                                                                                                                                                                                        
-      { "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45; style='text-align:center; margin-bottom:12px''>Great work, time for a short break.<p><img src='assets/evander-bricks/break_images/break{summaryIndex1}.png' style='max-width: 300px; width: 100%; height: auto; image-rendering:pixelated'; margin-top: -2px; margin-bottom: -2px; margin-left: -2px; margin-right: -2px></p><p>Your current coint balance is: {experimentPoints}.</p><p>Across the experiment you have opened {blockCleared} boxes, and let {blockDropped} boxes be destroyed.</div>" }],
+      { "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45; style='text-align:center; margin-bottom:12px''>Great work, time for a short break.<p><img src='assets/evander-bricks/break_images/break{summaryIndex1}.png' style='max-width: 300px; width: 100%; height: auto; image-rendering:pixelated'; margin-top: -2px; margin-bottom: -2px; margin-left: -2px; margin-right: -2px></p><p>Your current coin balance is: {experimentPoints}.</p><p>Across the experiment you have opened {blockCleared} boxes, and let {blockDropped} boxes be destroyed.</div>" }],
       "metrics": {
         "correctField": "responseCorrect",
         "rtField": "responseRtMs"
@@ -717,7 +724,7 @@
     },
     "showBlockIntro": false,
     "showBlockLabel": false,
-    "endPages": [{ "html": "<div style='font-family: system-ui, -apple-system, sans-serif; font-size: 1.2rem; line-height: 1.45; style='text-align:center; margin-bottom:12px''>DO NOT CLOSE THIS WINDOW!<p><img src='assets/evander-bricks/break_images/finish_screen.png' style='max-width: 300px; width: 100%; height: auto; image-rendering:pixelated'></p><p>You helped Boxy feed his family! He is very happy.</p><p>You have now completed the experiment. Thank you very much for participating. Please read the debrief form on the next screen, then click Continue. The experiment will redirect to SONA and automatically apply your credits.</p><p>Do not close the window until you see a message from SONA that your credits have been awarded!</p>"}],
+    "endPages": [],
     "insertions": [
       {
         "id": "start_fullscreen",
