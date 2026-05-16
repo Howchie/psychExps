@@ -464,6 +464,8 @@ async function runBricksTask(context: TaskAdapterContext): Promise<unknown> {
         drt_rows: buildBricksDrtRows(trialRows, blockPlan, ids),
         experiment_info: buildBricksExperimentInfoRows(trialRows, blockPlan, ids),
         brick_hold: buildBricksBrickHoldRows(trialRows, blockPlan, ids),
+        brick_outcomes: buildBricksBrickOutcomeRows(trialRows, blockPlan, ids),
+        surveys: buildBricksSurveyRows(trialRows, blockPlan, ids),
       };
     },
   });

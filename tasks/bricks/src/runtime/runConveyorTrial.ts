@@ -530,10 +530,13 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         severe_ratio: frameStats.frames > 0 ? (frameStats.severeFrames / frameStats.frames) : 0,
         renderer: rendererPerf
       };
+      const clockTimeUnixMs = Date.now();
       const trialData: ConveyorTrialData = {
         block_label: trial.blockLabel,
         block_index: trial.blockIndex,
         trial_index: trial.trialIndex,
+        clockTime: new Date(clockTimeUnixMs).toISOString(),
+        clockTimeUnixMs,
         trial_duration_ms: gameState.elapsed,
         end_reason: reason,
         runtime_conveyor_lengths: runtimeConveyorLengths,

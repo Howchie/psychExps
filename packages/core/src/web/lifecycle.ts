@@ -39,6 +39,8 @@ function buildReducedJatosPayload(payload: Record<string, unknown>): Record<stri
   const drtRows = Array.isArray(payload.drt_rows) ? payload.drt_rows : [];
   const experimentInfo = Array.isArray(payload.experiment_info) ? payload.experiment_info : [];
   const brickHold = Array.isArray(payload.brick_hold) ? payload.brick_hold : [];
+  const brickOutcomes = Array.isArray(payload.brick_outcomes) ? payload.brick_outcomes : [];
+  const surveys = Array.isArray(payload.surveys) ? payload.surveys : [];
 
   const reduced = { ...payload };
   delete reduced.records;
@@ -48,6 +50,8 @@ function buildReducedJatosPayload(payload: Record<string, unknown>): Record<stri
   delete reduced.drt_rows;
   delete reduced.experiment_info;
   delete reduced.brick_hold;
+  delete reduced.brick_outcomes;
+  delete reduced.surveys;
 
   return {
     ...reduced,
@@ -58,12 +62,14 @@ function buildReducedJatosPayload(payload: Record<string, unknown>): Record<stri
     drtRowCount: drtRows.length,
     experimentInfoCount: experimentInfo.length,
     brickHoldCount: brickHold.length,
+    brickOutcomesCount: brickOutcomes.length,
+    surveysCount: surveys.length,
     payloadReducedForJatos: true,
   };
 }
 
 const JATOS_RESULTDATA_SOFT_LIMIT_BYTES = 4_500_000;
-const JATOS_RESULTFILE_FIELD_KEYS = ["records", "events", "moduleResults", "jsPsychData", "drt_rows", "experiment_info", "brick_hold"] as const;
+const JATOS_RESULTFILE_FIELD_KEYS = ["records", "events", "moduleResults", "jsPsychData", "drt_rows", "experiment_info", "brick_hold", "brick_outcomes", "surveys"] as const;
 
 function estimateJsonBytes(value: unknown): number {
   try {
