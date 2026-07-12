@@ -71,6 +71,25 @@ describe("resolveSelection", () => {
     expect(selection.configPath).toBe("nback/annikaHons");
   });
 
+  it("uses the variant URL param as the config path when config is absent", () => {
+    (globalThis as any).window = {
+      location: { search: "?task=matb&variant=parasuraman-high" },
+    };
+
+    const selection = resolveSelection(CORE_CONFIG);
+    expect(selection.taskId).toBe("matb");
+    expect(selection.configPath).toBe("parasuraman-high");
+  });
+
+  it("prefers an explicit config param over the variant alias", () => {
+    (globalThis as any).window = {
+      location: { search: "?task=matb&variant=parasuraman-high&config=matb/basic" },
+    };
+
+    const selection = resolveSelection(CORE_CONFIG);
+    expect(selection.configPath).toBe("matb/basic");
+  });
+
   it("keeps real URL params as higher priority than JATOS query parameters when both exist", () => {
     (globalThis as any).window = {
       location: { search: "?SONA_ID=URL_ID&auto=false" },

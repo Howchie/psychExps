@@ -14,24 +14,19 @@ Effective baseline behavior comes from the selected variant config JSON.
 
 ### Config file bundling and access
 
-All JSON files under `configs/**/*.json` are automatically bundled at build time via `import.meta.glob` — no explicit import is needed. However, the two URL access methods have different registration requirements:
+All JSON files under `configs/**/*.json` are automatically bundled at build time via `import.meta.glob` — no explicit import or registration is needed:
 
-| Access method | URL | Registration required? |
+| Access method | URL | Behavior |
 | :--- | :--- | :--- |
-| Named variant | `?task=X&variant=myconfig` | Yes — must be listed in the task adapter `variants[]` manifest |
-| Explicit path | `?task=X&config=X/myconfig` | No — any bundled JSON works immediately |
-| Bare name (task-scoped fallback) | `?task=X&config=myconfig` | No — resolves as `X/myconfig` first; if `myconfig` matches a variant id, that variant `configPath` is tried first |
+| Explicit path | `?task=X&config=X/myconfig` | Any bundled JSON works immediately |
+| Bare name (task-scoped fallback) | `?task=X&config=myconfig` | Resolves as `X/myconfig` first, then `myconfig` |
+| Variant alias | `?task=X&variant=myconfig` | Alias for the bare-name form; used when no `config` param is present. JATOS inputs may use `variantId`/`variant` |
 
-**To iterate quickly on a new config without touching code**, use `?config=`:
+`config` takes precedence over `variant` when both are present.
+
+**To add a new config without touching code:**
 1. Place `configs/<taskId>/myvariant.json`.
-2. Open either `?task=<taskId>&config=<taskId>/myvariant` or `?task=<taskId>&config=myvariant`.
-
-**To publish a named variant** (so `?variant=<id>` works), add it to `tasks/<taskId>/src/index.ts`:
-```typescript
-variants: [
-  { id: "myvariant", label: "My Variant", configPath: "<taskId>/myvariant" },
-]
-```
+2. Open `?task=<taskId>&variant=myvariant` (or the equivalent `config=` forms above).
 
 ### Merger Behavior: `buildMergedConfig`
 

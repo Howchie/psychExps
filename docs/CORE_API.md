@@ -84,10 +84,10 @@ Task/variant precedence:
 2. URL (`task`, `variant`)
 3. `coreConfig.selection`
 
-JATOS config-path precedence:
-1. JATOS component input `config`
-2. JATOS component input aliases `configID` / `configId`
-3. URL `config`
+Config-path precedence:
+1. JATOS component input `config` (aliases `configID` / `configId`)
+2. URL `config`
+3. `variant` as a config alias — URL `variant`, or JATOS `variantId` / `variant` / `variant_id` — resolved task-scoped first (`configs/<taskId>/<variant>.json`)
 
 Overrides precedence:
 1. JATOS `overrides`

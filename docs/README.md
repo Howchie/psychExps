@@ -38,7 +38,7 @@ These components can be integrated into any compatible task adapter via `task.mo
 
 ## Most Common Recipes
 
-`?config=<taskId>/<file>` loads a config directly without needing it registered in the task manifest — prefer this for development. `?variant=<id>` is a shortcut for configs already listed in the task's `variants[]` manifest.
+`?config=<taskId>/<file>` loads a config directly — prefer this for development. `?variant=<id>` is an alias for `?config=<id>` (resolved task-scoped first, i.e. `configs/<taskId>/<id>.json`); `config` wins when both are present.
 
 ```
 # Start dev server

@@ -124,6 +124,16 @@ export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
     ?? pickFirstSelectionValue(jatosTaskObject, ["configPath", "config", "configID", "configId", "config_id"])
     ?? pickFirstSelectionValue(jatosVariantObject, ["configPath", "config", "configID", "configId", "config_id"]);
 
+  // Back-compat: `variant` selects the config of the same name when no explicit
+  // `config` is given (variant ids map to configs/<taskId>/<variant>.json).
+  // Launch links and tests use ?task=X&variant=Y; JATOS inputs may use variantId.
+  const variantKeys = ["variantId", "variant", "variant_id"];
+  const variantAsConfig = asNonEmptyString(params.get("variant"))
+    ?? pickFirstSelectionValue(jatosInput, variantKeys)
+    ?? pickFirstSelectionValue(jatosSelection, variantKeys)
+    ?? pickFirstSelectionValue(jatosParams, variantKeys)
+    ?? pickFirstSelectionValue(jatosVariables, variantKeys);
+
   const taskId = jatosTask ?? urlTask ?? coreConfig.selection.taskId;
 
   const taskSource: SelectionContext["source"]["task"] = jatosTask ? "jatos" : urlTask ? "url" : "default";
@@ -136,7 +146,7 @@ export function resolveSelection(coreConfig: CoreConfig): SelectionContext {
   return {
     platform: detectPlatform(params),
     taskId,
-    configPath: jatosConfigPath ?? asNonEmptyString(params.get("config")),
+    configPath: jatosConfigPath ?? asNonEmptyString(params.get("config")) ?? variantAsConfig,
     overrides: jatosOverrides ?? urlOverrides,
     auto: parseBooleanParam(params.get("auto")),
     participant,
