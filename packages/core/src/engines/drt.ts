@@ -967,12 +967,8 @@ export class DrtController {
     };
     const scheduleVirtualAutoResponse = (stimulus: DrtStimulusState) => {
       if (!isAutoResponderEnabled()) return;
-      const sampledWaldRtSeconds = sampleAutoResponseRtSecondsWald({
-        drift: 3,
-        threshold: 2,
-        t0Seconds: 0.1,
-        noiseScale: 1,
-      });
+      // Parameters come from the autoresponder profile's responseRtWald (drift 3, threshold 2, t0 0.1s by default).
+      const sampledWaldRtSeconds = sampleAutoResponseRtSecondsWald({ noiseScale: 1 });
       if (sampledWaldRtSeconds == null) return;
       if (sampledWaldRtSeconds > (this.config.responseWindowMs / 1000)) return;
       const delayMs = Math.max(

@@ -121,6 +121,7 @@ Global defaults belong in core config (`configs/core/default.json`), and task co
     "continueDelayMs": { "minMs": 800, "maxMs": 2600 },
     "surveySubmitDelayMs": { "minMs": 120, "maxMs": 420 },
     "responseRtMs": { "meanMs": 720, "sdMs": 210, "minMs": 180, "maxMs": 3200 },
+    "responseRtWald": { "drift": 3, "threshold": 2, "t0Seconds": 0.1 },
     "timeoutRate": 0.08,
     "errorRate": 0.12,
     "interActionDelayMs": { "minMs": 450, "maxMs": 1200 },
@@ -149,6 +150,10 @@ Notes:
 - `distribution` defaults to `"uniform"` when omitted.
 - For `"normal"`, `truncate` defaults to `true`; set `false` to allow out-of-bounds samples for stress testing.
 - `minMs`/`maxMs` are used for truncation bounds when `truncate=true`.
+- `responseRtWald` parameterizes the shifted-Wald RT model used by data-only DRT simulation
+  (`drift`, `threshold`, `t0Seconds`). It is kept conjugate-aligned with the online Wald
+  parameter-transform model (noise scale fixed at 1), so simulated DRT responses are drawn
+  from the same family the transform estimates. Defaults: drift 3, threshold 2, t0 0.1 s.
 
 Resolution order:
 1. `coreConfig.autoresponder`

@@ -9,6 +9,8 @@ export interface ResolvedAutoResponderProfile {
   continueDelayMs: { minMs: number; maxMs: number };
   surveySubmitDelayMs?: { minMs: number; maxMs: number };
   responseRtMs: { meanMs: number; sdMs: number; minMs: number; maxMs: number };
+  /** Shifted-Wald RT model used by data-only DRT simulation (kept conjugate-aligned with noiseScale=1). */
+  responseRtWald?: { drift: number; threshold: number; t0Seconds: number };
   timeoutRate: number;
   errorRate: number;
   interActionDelayMs: { minMs: number; maxMs: number };
@@ -30,6 +32,7 @@ const DEFAULT_PROFILE: ResolvedAutoResponderProfile = {
   continueDelayMs: { minMs: 800, maxMs: 2600 },
   surveySubmitDelayMs: { minMs: 120, maxMs: 420 },
   responseRtMs: { meanMs: 720, sdMs: 210, minMs: 180, maxMs: 3200 },
+  responseRtWald: { drift: 3, threshold: 2, t0Seconds: 0.1 },
   timeoutRate: 0.08,
   errorRate: 0.12,
   interActionDelayMs: { minMs: 450, maxMs: 1200 },
@@ -117,6 +120,19 @@ function resolveHoldDuration(
   };
 }
 
+function resolveWald(
+  value: unknown,
+  fallback: NonNullable<ResolvedAutoResponderProfile["responseRtWald"]>,
+): NonNullable<ResolvedAutoResponderProfile["responseRtWald"]> {
+  const input = asObject(value);
+  if (!input) return fallback;
+  return {
+    drift: Math.max(1e-6, toFiniteNumber(input.drift, fallback.drift)),
+    threshold: Math.max(1e-6, toFiniteNumber(input.threshold, fallback.threshold)),
+    t0Seconds: Math.max(0, toFiniteNumber(input.t0Seconds, fallback.t0Seconds)),
+  };
+}
+
 function sampleNormal(random: () => number): number {
   const u1 = Math.max(Number.EPSILON, random());
   const u2 = Math.max(Number.EPSILON, random());
@@ -196,6 +212,7 @@ export function resolveAutoResponderProfile(args: {
       DEFAULT_PROFILE.surveySubmitDelayMs ?? DEFAULT_PROFILE.continueDelayMs,
     ),
     responseRtMs: resolveResponseRt(source.responseRtMs, DEFAULT_PROFILE.responseRtMs),
+    responseRtWald: resolveWald(source.responseRtWald, DEFAULT_PROFILE.responseRtWald!),
     timeoutRate: clampUnit(toFiniteNumber(source.timeoutRate, DEFAULT_PROFILE.timeoutRate), DEFAULT_PROFILE.timeoutRate),
     errorRate: clampUnit(toFiniteNumber(source.errorRate, DEFAULT_PROFILE.errorRate), DEFAULT_PROFILE.errorRate),
     interActionDelayMs: resolveRange(source.interActionDelayMs, DEFAULT_PROFILE.interActionDelayMs),
@@ -328,9 +345,10 @@ export function sampleAutoResponseRtSecondsWald(args: {
   noiseScale?: number;
 }): number | null {
   if (!activeProfile) return null;
-  const drift = Math.max(1e-6, Number(args.drift ?? 3));
-  const threshold = Math.max(1e-6, Number(args.threshold ?? 2));
-  const t0Seconds = Math.max(0, Number(args.t0Seconds ?? 0.1));
+  const profileWald = activeProfile.responseRtWald;
+  const drift = Math.max(1e-6, Number(args.drift ?? profileWald?.drift ?? 3));
+  const threshold = Math.max(1e-6, Number(args.threshold ?? profileWald?.threshold ?? 2));
+  const t0Seconds = Math.max(0, Number(args.t0Seconds ?? profileWald?.t0Seconds ?? 0.1));
   const noiseScale = Number(args.noiseScale ?? 1);
   if (!Number.isFinite(noiseScale) || Math.abs(noiseScale - 1) > 1e-12) {
     throw new Error(`Wald auto-responder requires noiseScale=1 for conjugate model alignment; received ${String(args.noiseScale)}`);

@@ -173,31 +173,9 @@ describe('BricksTaskAdapter', () => {
     expect(brickOutcomes.contents).toContain('24');
     expect(brickOutcomes.contents).not.toContain('manipulation_static_id');
 
-    const eventRows = runArgs.csvOptions.getRecords({
-      blocks: [
-        {
-          trialResults: [
-            {
-              block_index: 0,
-              block_label: 'B1',
-              trial_index: 0,
-              trial_duration_ms: 1000,
-              end_reason: 'time_limit',
-              config_snapshot: { trial: {} },
-              timeline_events: [
-                { type: 'brick_spawned', time: 0, brick_id: 'brick-1', conveyor_id: 'c0', cumulative_points: 10 },
-                { type: 'brick_hold', time: 200, brick_id: 'brick-1', conveyor_id: 'c0', valid: true },
-                { type: 'brick_dropped', time: 900, brick_id: 'brick-1', conveyor_id: 'c0', cumulative_points: 7 },
-                { type: 'brick_focus_changed', time: 950, active_brick_id: 'brick-2' },
-              ],
-            },
-          ],
-        },
-      ],
-    });
-    expect(Array.isArray(eventRows)).toBe(true);
-    expect(eventRows.length).toBeGreaterThan(0);
-    expect(eventRows[0]).toHaveProperty('hud_points');
-    expect(eventRows.map((row: any) => row.hud_points)).toEqual([10, 10, 7, 7]);
+    // Raw timeline events are intentionally not exported as a flat events CSV
+    // (dropped to keep JATOS result chunks small); the dedicated extra CSVs
+    // above carry the exported data instead.
+    expect(runArgs.csvOptions.getRecords()).toEqual([]);
   });
 });

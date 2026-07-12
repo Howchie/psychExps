@@ -178,6 +178,8 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
     falseAlarms: 0,
   };
   const hudTimerGranularityMs = Math.max(10, Number(resolvedCfg?.display?.ui?.hudTimerGranularityMs ?? 100));
+  const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
+  const hudShowTimer = hudUiCfg.showTimer !== false;
   let lastHudSignature = '';
   const autoEnabled = isAutoResponderEnabled();
   const maxTimeSecRaw = resolvedCfg.trial?.maxTimeSec;
@@ -647,8 +649,6 @@ export async function runConveyorTrial(args: ConveyorTrialRunArgs): Promise<Conv
         dropped: Number(hudStats.dropped ?? 0) + (Number.isFinite(hudBaseStats.dropped) ? Number(hudBaseStats.dropped) : 0),
         points: Number(hudStats.points ?? 0) + (Number.isFinite(hudBaseStats.points) ? Number(hudBaseStats.points) : 0),
       };
-      const hudUiCfg = ((resolvedCfg?.display?.ui ?? resolvedCfg?.ui) || {}) as Record<string, unknown>;
-      const hudShowTimer = hudUiCfg.showTimer !== false;
       const hudShowDrt = drtEnabled && hudUiCfg.showDRT !== false;
       const remainingBucket = remainingMs === null ? 'none' : String(Math.floor(remainingMs / hudTimerGranularityMs));
       const hudSignature = [

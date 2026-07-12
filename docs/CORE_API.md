@@ -179,6 +179,26 @@ Returns:
 - `totalDurationMs`
 - `stageTimings[]`
 
+### `runEpochSubTaskStandalone(context, spec): Promise<unknown>`
+
+Runs any `SubTaskHandle` (see the concurrent runner) as a standalone orchestrated
+experiment: each trial is a timed epoch during which scenario events are injected
+according to a config-declared schedule. The MATB standalone adapters
+(`matb-comms`, `matb-sysmon`, `matb-resman`) are thin `EpochStandaloneTaskSpec`
+objects over this runner.
+
+The spec supplies the irreducibly task-specific pieces:
+- `createHandle` — sub-task handle factory
+- `parseScheduleEntry(raw)` / `toScenarioEvents(event)` — schedule parsing and scenario-event expansion
+- `trialRecordFields(result)` / `trialEndEventFields?(result)` — per-trial CSV columns and trial_end event payload
+- `auxMetadataKey?` / `collectAuxRecords?(result)` — auxiliary per-trial records accumulated into task metadata
+- identity/config keys: `taskId`, `mode`, `runnerName`, `csvSuffix`, `buttonIdPrefix`, `subTaskConfigKey`, `scheduleKey`, stage size, instruction defaults, duration/ITI defaults
+
+`parseEpochStandaloneConfig(taskConfig, spec)` handles the shared config shape:
+`task.title`, `instructions`, `plan.blocks[]` (label/phase/trials/trialDurationMs,
+before/after block screens, per-block schedule + sub-task config overrides),
+`trialDefaults`, and `interTrialIntervalMs`.
+
 ## 4. UI, keyboard, and jsPsych bridge helpers
 
 ### `normalizeKey(key): string`
@@ -325,6 +345,7 @@ Manages the lifecycle of active modules.
 ### Shared task helpers
 
 - `resolveScopedModuleConfig(raw, moduleId)`: read module overrides from either `modules.<id>` or `task.modules.<id>` with local precedence.
+- `resolveUniformBlockScopedModuleConfig({ trialConfigs, moduleId, coerce, warnLabel? })`: resolve the single block-scoped config for a module across all trial configs in a block; warns and uses the first resolved config when trials disagree.
 - `maybeExportStimulusRows({ context, rows, suffix })`: centralized `exportStimuliOnly` gate and export finalization path.
 - `parseSurveyDefinitions(entries)`: parse mixed survey configs (preset or inline `questions[]`) into `SurveyDefinition[]`.
 - `collectSurveyEntries(config, { arrayKey, singletonKey })`: collect survey candidate entries from `surveys` arrays/scoped arrays and optional singleton aliases.
@@ -455,6 +476,13 @@ Helpers:
 Converts object rows to CSV with escaping.
 - primitive cells are written directly
 - object/array cells are JSON-serialized (instead of `[object Object]`)
+
+### CSV row-shaping helpers
+
+- `toPrimitiveCell(value)`: coerce any value to a CSV-safe primitive (objects/arrays JSON-serialized, null/undefined → null).
+- `nonEmptyString(value)`: trimmed string or null.
+- `flattenUnknown(value, prefix, out)`: flatten nested objects into `prefix_key` columns; arrays are JSON-serialized rather than expanded.
+- `pruneEmptyUnknown(value)`: recursively drop null/blank/empty entries; returns `undefined` when nothing remains.
 
 ### `finalizeTaskRun(args): Promise<{ submittedToJatos: boolean; redirected: boolean }>`
 

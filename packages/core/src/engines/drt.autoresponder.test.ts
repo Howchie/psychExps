@@ -152,6 +152,8 @@ describe("DrtController autoresponder integration", () => {
       seed: "drt-session-transform-test",
       continueDelayMs: { minMs: 0, maxMs: 0 },
       responseRtMs: { meanMs: 70, sdMs: 1, minMs: 50, maxMs: 90 },
+      // Fast Wald (mean RT ~= t0 + a/v = 175ms) so many responses fit in each simulation window.
+      responseRtWald: { drift: 8, threshold: 1, t0Seconds: 0.05 },
       timeoutRate: 0,
       errorRate: 0,
       interActionDelayMs: { minMs: 0, maxMs: 0 },
@@ -173,19 +175,29 @@ describe("DrtController autoresponder integration", () => {
       dataOnlySimulationDurationMs: 2500,
     } as any;
 
+    // Not every response row carries an estimate (e.g. non-hit rows, or rows before
+    // the transform's minimum window fills), so read the latest row that has one.
+    const lastEstimateSampleSize = (rows: Array<{ transformColumns?: Record<string, unknown> }>): number => {
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        const size = Number(rows[i]?.transformColumns?.transform_sample_size);
+        if (Number.isFinite(size) && size > 0) return size;
+      }
+      return 0;
+    };
+
     const first = module.start(
       config,
       { scope: "block", blockIndex: 0, trialIndex: null },
       { participantId: "p1", sessionId: "s1", configPath: "configs/bricks/evanderHons.json", taskId: "bricks" },
     ).stop();
-    const firstSize = Number(first.responseRows.at(-1)?.transformColumns?.transform_sample_size ?? 0);
+    const firstSize = lastEstimateSampleSize(first.responseRows);
 
     const second = module.start(
       config,
       { scope: "block", blockIndex: 1, trialIndex: null },
       { participantId: "p1", sessionId: "s1", configPath: "configs/bricks/evanderHons.json", taskId: "bricks" },
     ).stop();
-    const secondSize = Number(second.responseRows.at(-1)?.transformColumns?.transform_sample_size ?? 0);
+    const secondSize = lastEstimateSampleSize(second.responseRows);
 
     expect(firstSize).toBeGreaterThan(0);
     expect(secondSize).toBeGreaterThan(firstSize);

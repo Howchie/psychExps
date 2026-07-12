@@ -1,5 +1,6 @@
 /temp
 /test-results
+*.pid
 /.Rtmp
 /.ipynb_checkpoints
 **/.ipynb_checkpoints/

@@ -85,6 +85,73 @@ export function recordsToCsv<T extends object>(records: T[]): string {
   return rows.join("\n");
 }
 
+/** Coerce any value to a CSV-safe primitive; objects/arrays are JSON-serialized. */
+export function toPrimitiveCell(value: unknown): string | number | boolean | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  return JSON.stringify(value);
+}
+
+export function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Flatten a nested value into `out` using `prefix_key` column names.
+ * Arrays are JSON-serialized rather than expanded.
+ */
+export function flattenUnknown(
+  value: unknown,
+  prefix: string,
+  out: Record<string, string | number | boolean | null>,
+): void {
+  if (value === null || value === undefined) {
+    out[prefix] = null;
+    return;
+  }
+  if (Array.isArray(value)) {
+    out[prefix] = JSON.stringify(value);
+    return;
+  }
+  if (typeof value !== "object") {
+    out[prefix] = toPrimitiveCell(value);
+    return;
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) {
+    out[prefix] = "{}";
+    return;
+  }
+  for (const [key, nested] of entries) {
+    const child = prefix ? `${prefix}_${String(key)}` : String(key);
+    flattenUnknown(nested, child, out);
+  }
+}
+
+/** Recursively drop null/undefined/blank-string/empty-object entries; returns undefined when nothing remains. */
+export function pruneEmptyUnknown(value: unknown): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim().length === 0) return undefined;
+  if (Array.isArray(value)) {
+    const cleaned = value
+      .map((entry) => pruneEmptyUnknown(entry))
+      .filter((entry) => entry !== undefined);
+    return cleaned;
+  }
+  if (typeof value !== "object") return value;
+  const entries = Object.entries(value as Record<string, unknown>);
+  const cleanedEntries: Array<[string, unknown]> = [];
+  for (const [key, nested] of entries) {
+    const cleaned = pruneEmptyUnknown(nested);
+    if (cleaned === undefined) continue;
+    cleanedEntries.push([key, cleaned]);
+  }
+  if (cleanedEntries.length === 0) return undefined;
+  return Object.fromEntries(cleanedEntries);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

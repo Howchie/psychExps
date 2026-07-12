@@ -79,6 +79,11 @@ export interface AutoResponderConfig {
     minMs?: number;
     maxMs?: number;
   };
+  responseRtWald?: {
+    drift?: number;
+    threshold?: number;
+    t0Seconds?: number;
+  };
   timeoutRate?: number;
   errorRate?: number;
   interActionDelayMs?: AutoResponderRangeConfig;

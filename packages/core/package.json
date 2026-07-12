@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --exclude \"**/dist/**\""
   },
   "dependencies": {
     "@jspsych/plugin-canvas-keyboard-response": "^2.1.0",

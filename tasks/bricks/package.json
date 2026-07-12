@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"**/dist/**\"",
     "difficulty": "node ./scripts/run-difficulty-estimate.mjs",
     "expand:trial-summary": "node ./scripts/expand-trial-summary.mjs",
     "render:stimuli": "node ./scripts/render-brick-stimuli.mjs"

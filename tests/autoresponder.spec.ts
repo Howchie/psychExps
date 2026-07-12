@@ -58,6 +58,26 @@ test("change_detection completes in auto mode", async ({ page }, testInfo) => {
   expect(files.length).toBeGreaterThan(0);
 });
 
+// Standalone MATB sub-task adapters share the core epoch runner; one short
+// epoch per task verifies the full parse → orchestrate → run → CSV path.
+for (const task of ["matb-comms", "matb-sysmon", "matb-resman"] as const) {
+  test(`${task} standalone completes in auto mode`, async ({ page }, testInfo) => {
+    const capture = installDownloadCapture(page, testInfo);
+    const overrides = JSON.stringify({
+      interTrialIntervalMs: 100,
+      plan: { blocks: [{ label: "E2E", trials: 1, trialDurationMs: 6000 }] },
+    });
+    const downloadPromise = page.waitForEvent("download", { timeout: 120_000 });
+    await page.goto(
+      `/?task=${task}&variant=default&auto=true&participant=auto_e2e_${task}&overrides=${encodeURIComponent(overrides)}`,
+    );
+    await downloadPromise;
+    await page.waitForTimeout(1000);
+    const files = await capture.flush();
+    expect(files.length).toBeGreaterThan(0);
+  });
+}
+
 test("nback pm_module_export_demo exports stimulus list with trial codes", async ({ page }, testInfo) => {
   const capture = installDownloadCapture(page, testInfo);
   const downloadPromise = page.waitForEvent("download", { timeout: 90_000 });

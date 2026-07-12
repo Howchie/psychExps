@@ -29,7 +29,12 @@ import {
   type TaskModuleAddress,
   type DrtController,
   resolveScopedModuleConfig,
+  resolveUniformBlockScopedModuleConfig,
   recordsToCsv,
+  toPrimitiveCell,
+  nonEmptyString,
+  flattenUnknown,
+  pruneEmptyUnknown,
   TaskOrchestrator,
   createTaskAdapter,
 } from '@experiments/core';
@@ -680,16 +685,12 @@ function normalizeVariants(input: unknown): Array<Record<string, unknown>> {
 }
 
 function resolveBlockScopedDrtConfig(trialConfigs: Array<Record<string, unknown>>): BricksScopedDrtConfig | null {
-  const blockScoped = trialConfigs
-    .map((trialConfig) => resolveBricksDrtConfig(resolveScopedModuleConfig(trialConfig, "drt")))
-    .filter((entry) => entry.enabled && entry.scope === "block");
-  if (blockScoped.length === 0) return null;
-  const canonical = JSON.stringify(blockScoped[0]);
-  const hasMismatch = blockScoped.some((entry) => JSON.stringify(entry) !== canonical);
-  if (hasMismatch) {
-    console.warn("Bricks config includes mismatched block-scoped DRT settings within one block; using the first resolved config.");
-  }
-  return blockScoped[0];
+  return resolveUniformBlockScopedModuleConfig({
+    trialConfigs,
+    moduleId: "drt",
+    coerce: (raw) => resolveBricksDrtConfig(raw),
+    warnLabel: "Bricks",
+  });
 }
 
 function extractNumericStats(stats: Record<string, unknown>): Record<string, number> {
@@ -736,67 +737,6 @@ function blockHasEnabledDrt(rows: ConveyorTrialData[]): boolean {
     const presented = Number((drt.stats as any)?.presented ?? 0);
     return Number.isFinite(presented) && presented > 0;
   });
-}
-
-function toPrimitiveCell(value: unknown): string | number | boolean | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
-  return JSON.stringify(value);
-}
-
-function nonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function flattenUnknown(
-  value: unknown,
-  prefix: string,
-  out: Record<string, string | number | boolean | null>,
-): void {
-  if (value === null || value === undefined) {
-    out[prefix] = null;
-    return;
-  }
-  if (Array.isArray(value)) {
-    out[prefix] = JSON.stringify(value);
-    return;
-  }
-  if (typeof value !== "object") {
-    out[prefix] = toPrimitiveCell(value);
-    return;
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length === 0) {
-    out[prefix] = "{}";
-    return;
-  }
-  for (const [key, nested] of entries) {
-    const child = prefix ? `${prefix}_${String(key)}` : String(key);
-    flattenUnknown(nested, child, out);
-  }
-}
-
-function pruneEmptyUnknown(value: unknown): unknown {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "string" && value.trim().length === 0) return undefined;
-  if (Array.isArray(value)) {
-    const cleaned = value
-      .map((entry) => pruneEmptyUnknown(entry))
-      .filter((entry) => entry !== undefined);
-    return cleaned;
-  }
-  if (typeof value !== "object") return value;
-  const entries = Object.entries(value as Record<string, unknown>);
-  const cleanedEntries: Array<[string, unknown]> = [];
-  for (const [key, nested] of entries) {
-    const cleaned = pruneEmptyUnknown(nested);
-    if (cleaned === undefined) continue;
-    cleanedEntries.push([key, cleaned]);
-  }
-  if (cleanedEntries.length === 0) return undefined;
-  return Object.fromEntries(cleanedEntries);
 }
 
 function buildSpotlightLookup(row: ConveyorTrialData): {

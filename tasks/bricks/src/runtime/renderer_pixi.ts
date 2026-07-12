@@ -3,403 +3,16 @@ import { brickProgressTint, getBrickVisibleWidth } from './brick_logic.js';
 import { buildHUDLines } from './hud.js';
 import { getOrCreateProceduralTexture, loadCachedImageTexture, makeMaterialKey } from './material_cache.js';
 import { CharacterSprite } from './renderer_character.js';
+import {
+  toPixiColor,
+  normalizeBrickShape,
+  normalizeTextureStyleId,
+  BUILTIN_BRICK_TEXTURE_STYLES,
+  BUILTIN_END_FURNACE_STYLES,
+  BUILTIN_WAREHOUSE_TEXTURE_STYLES,
+  BUILTIN_BELT_TEXTURE_STYLES,
+} from './renderer_textures.js';
 
-// Helper to convert CSS color strings or numeric values into Pixi-compatible numbers
-const toPixiColor = (value: unknown) => {
-  if (value === null || value === undefined || value === '') {
-    return 0xffffff;
-  }
-  const normalized = typeof value === 'string' ? value.trim() : value;
-  try {
-    return PIXI.Color.shared.setValue(normalized as PIXI.ColorSource).toNumber();
-  } catch (error) {
-    console.warn(`[bricks] Failed to convert color: ${value}`, error);
-    return 0xffffff;
-  }
-};
-const normalizeBrickShape = (rawShape: unknown): string => {
-  if (typeof rawShape !== 'string') {
-    return 'rounded_rect';
-  }
-  const normalized = rawShape.trim().toLowerCase();
-  if (!normalized) {
-    return 'rounded_rect';
-  }
-  const aliases = {
-    square: 'rect',
-    rectangle: 'rect',
-    rounded: 'rounded_rect',
-    rounded_rectangle: 'rounded_rect'
-  };
-  return (aliases as Record<string, string>)[normalized] ?? normalized;
-};
-
-const normalizeTextureStyleId = (value: unknown): string => {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
-};
-
-const BUILTIN_BRICK_TEXTURE_STYLES = {
-  crate: {
-    pattern: 'wood_planks',
-    baseFillColor: '#8b6f4e',
-    baseFillAlpha: 1,
-    alpha: 0.95,
-    plankCount: 3,
-    grainCount: 5,
-    seamColor: '#3b2f22',
-    highlightColor: '#f5e9d8',
-  },
-  present: {
-    pattern: 'gift_wrap',
-    baseFillColor: '#ff2d2d',
-    baseFillAlpha: 1,
-    alpha: 1,
-    ribbonColor: '#ffe14d',
-    ribbonAlpha: 1,
-    ribbonWidthRatio: 0.2,
-    ribbonInsetPx: 2,
-    topSheenAlpha: 0.08,
-    paperPatternColor: '#ffffff',
-    paperPatternAlpha: 0.38,
-  },
-  pizza: {
-    pattern: 'pizza',
-    baseFillColor: '#e2b07b',
-    baseFillAlpha: 1,
-    alpha: 1,
-    sliceCount: 6,
-    toppingCount: 7,
-    crustColor: '#a16207',
-    sauceColor: '#b91c1c',
-    cheeseColor: '#facc15',
-    toppingColor: '#7f1d1d',
-    sliceLineColor: '#7c2d12',
-  },
-  box: {
-    pattern: 'checkerboard',
-    baseFillColor: '#b4936b',
-    checkerColorA: '#9a7651',
-    checkerColorB: '#5f6976',
-    checkerCellPx: 2,
-    baseFillAlpha: 1,
-    alpha: 0.9,
-    insetPx: 2,
-    topSheenAlpha: 0,
-    highlightColor: '#f1e5d5',
-  },
-  checkerboard: {
-    pattern: 'checkerboard',
-    baseFillColor: '#7d8794',
-    checkerColorA: '#a9b4c2',
-    checkerColorB: '#7e5f40',
-    checkerCellPx: 12,
-    baseFillAlpha: 1,
-    alpha: 0.9,
-    insetPx: 2,
-    topSheenAlpha: 0,
-    highlightColor: '#f8fafc',
-  },
-  parcel_label: {
-    pattern: 'cardboard_block',
-    baseFillColor: '#b4936b',
-    baseFillAlpha: 1,
-    alpha: 0.96,
-    insetPx: 2,
-    topSheenAlpha: 0,
-    highlightColor: '#f1e5d5',
-    fiberColor: '#9a7651',
-    fiberAlpha: 0,
-    fiberStepPx: 6,
-    speckleColor: '#7e5f40',
-    speckleAlpha: 0,
-    speckleCount: 0,
-    labelPatch: true,
-    labelPatchColor: '#fbfdff',
-    labelPatchAlpha: 0.86,
-    labelPatchBorderColor: '#475569',
-    labelBarcodeColor: '#111827',
-  },
-  chest: {
-    pattern: 'wood_planks',
-    baseFillColor: '#6d4b31',
-    baseFillAlpha: 1,
-    alpha: 0.98,
-    plankCount: 3,
-    seamWidthPx: 1,
-    grainCount: 5,
-    nailRadiusPx: 1.25,
-    insetPx: 2,
-    topSheenAlpha: 0.22,
-    seamColor: '#2b1e14',
-    highlightColor: '#f5d8a6',
-    bandColor: '#f1f5f9',
-    bandAlpha: 0.3,
-    lockPlateColor: '#fef3c7',
-    lockPlateAlpha: 0.7,
-  },
-};
-
-const BUILTIN_END_FURNACE_STYLES = {
-  furnace: {},
-  crusher: {
-    wallColor: '#6b7280',
-    wallShadeColor: '#434a55',
-    rimColor: '#f3f4f6',
-    mouthColor: '#111827',
-    emberColor: '#ef4444',
-    bodyPanelLines: true,
-    hazardStripes: true,
-    sideRivets: true,
-  },
-  shredder: {
-    wallColor: '#475569',
-    wallShadeColor: '#334155',
-    rimColor: '#cbd5e1',
-    mouthColor: '#020617',
-    emberColor: '#60a5fa',
-    bodyPanelLines: true,
-    hazardStripes: false,
-    sideRivets: true,
-  },
-  plasma_recycler: {
-    wallColor: '#0f172a',
-    wallShadeColor: '#1e293b',
-    rimColor: '#94a3b8',
-    mouthColor: '#020617',
-    emberColor: '#a78bfa',
-    bodyPanelLines: false,
-    hazardStripes: false,
-    sideRivets: true,
-  },
-};
-
-const BUILTIN_WAREHOUSE_TEXTURE_STYLES = {
-  concrete_checker: {
-    tileSizePx: 240,
-    paverWidthPx: 82,
-    paverHeightPx: 82,
-    groutPx: 3,
-    layout: 'grid',
-    rowOffsetPx: 0,
-    pattern: 'checker_alternating',
-    alternationStrength: 0.07,
-    variation: 0.12,
-    edgeShadingAlpha: 0,
-    noiseCount: 20,
-    seamDashCount: 8,
-    baseColor: '#8f959c',
-    groutColor: '#6e757e',
-    seamDarkColor: '#4b545f',
-    seamLightColor: '#b4bac1',
-    scratchColor: '#5a616b',
-  },
-  cold_blueprint: {
-    tileSizePx: 228,
-    paverWidthPx: 76,
-    paverHeightPx: 76,
-    groutPx: 2,
-    layout: 'grid',
-    pattern: 'checker_alternating',
-    alternationStrength: 0.06,
-    variation: 0.08,
-    edgeShadingAlpha: 0,
-    noiseCount: 18,
-    seamDashCount: 8,
-    baseColor: '#96acbf',
-    groutColor: '#72889b',
-    seamDarkColor: '#526678',
-    seamLightColor: '#c9d7e3',
-    scratchColor: '#5f7387',
-  },
-  lab_metal_rivet: {
-    tileSizePx: 220,
-    paverWidthPx: 72,
-    paverHeightPx: 72,
-    groutPx: 2,
-    layout: 'grid',
-    pattern: 'checker_alternating',
-    alternationStrength: 0.05,
-    variation: 0.07,
-    edgeShadingAlpha: 0.06,
-    noiseCount: 14,
-    seamDashCount: 8,
-    rivetCount: 36,
-    dentCount: 6,
-    baseColor: '#8ea0ad',
-    groutColor: '#617380',
-    seamDarkColor: '#465560',
-    seamLightColor: '#c6d3de',
-    scratchColor: '#51606b',
-    rivetColor: '#dbe8f2',
-  },
-  wood_corrugation: {
-    tileSizePx: 246,
-    paverWidthPx: 92,
-    paverHeightPx: 76,
-    groutPx: 2,
-    layout: 'staggered',
-    rowOffsetPx: 46,
-    pattern: 'none',
-    variation: 0.12,
-    edgeShadingAlpha: 0.15,
-    noiseCount: 20,
-    seamDashCount: 12,
-    baseColor: '#9a8266',
-    groutColor: '#715c47',
-    seamDarkColor: '#5a4736',
-    seamLightColor: '#c3ae92',
-    scratchColor: '#5b4939',
-  },
-  damaged_salvage: {
-    tileSizePx: 232,
-    paverWidthPx: 84,
-    paverHeightPx: 84,
-    groutPx: 2,
-    layout: 'grid',
-    pattern: 'checker_alternating',
-    alternationStrength: 0.08,
-    variation: 0.11,
-    edgeShadingAlpha: 0.08,
-    noiseCount: 22,
-    seamDashCount: 14,
-    rivetCount: 18,
-    dentCount: 12,
-    crackCount: 14,
-    baseColor: '#7a838e',
-    groutColor: '#545c66',
-    seamDarkColor: '#3d434c',
-    seamLightColor: '#9ea7b2',
-    scratchColor: '#474e57',
-    rivetColor: '#cbd5e1',
-  },
-  salvage_rivet: {
-    tileSizePx: 224,
-    paverWidthPx: 74,
-    paverHeightPx: 74,
-    groutPx: 2,
-    layout: 'grid',
-    pattern: 'checker_alternating',
-    alternationStrength: 0.06,
-    variation: 0.08,
-    edgeShadingAlpha: 0.06,
-    noiseCount: 16,
-    seamDashCount: 10,
-    rivetCount: 28,
-    dentCount: 8,
-    baseColor: '#7f8b97',
-    groutColor: '#596572',
-    seamDarkColor: '#414b55',
-    seamLightColor: '#bac7d4',
-    scratchColor: '#49545f',
-    rivetColor: '#d8e3ee',
-  },
-};
-
-const BUILTIN_BELT_TEXTURE_STYLES = {
-  industrial_ribbed: {
-    tileSizePx: 120,
-    ribStepPx: 12,
-    ribWidthPx: 8,
-    sideBandPx: 18,
-    sideCleatStepPx: 16,
-    sideCleatLengthPx: 12,
-    shadeAlpha: 0.55,
-    baseColor: '#2a323b',
-    shadeColor: '#202730',
-    ribColor: '#4d5863',
-    grooveColor: '#2b333c',
-    sideCleatColor: '#6b7280',
-    sideLineDarkColor: '#111827',
-    sideLineLightColor: '#9ca3af',
-  },
-  cold_blueprint_belt: {
-    tileSizePx: 126,
-    ribStepPx: 13,
-    ribWidthPx: 8,
-    sideBandPx: 18,
-    sideCleatStepPx: 16,
-    sideCleatLengthPx: 11,
-    shadeAlpha: 0.5,
-    baseColor: '#3a5166',
-    shadeColor: '#23384a',
-    ribColor: '#69859e',
-    grooveColor: '#2b3f51',
-    sideCleatColor: '#8aa4bc',
-    sideLineDarkColor: '#0f172a',
-    sideLineLightColor: '#dbeafe',
-  },
-  lab_ribbed: {
-    tileSizePx: 122,
-    ribStepPx: 12,
-    ribWidthPx: 8,
-    sideBandPx: 18,
-    sideCleatStepPx: 16,
-    sideCleatLengthPx: 12,
-    shadeAlpha: 0.56,
-    baseColor: '#3a4c5c',
-    shadeColor: '#223544',
-    ribColor: '#617b90',
-    grooveColor: '#2a3b49',
-    sideCleatColor: '#8ca1b4',
-    sideLineDarkColor: '#0f172a',
-    sideLineLightColor: '#dbeafe',
-    scuffCount: 8,
-  },
-  wood_corrugation_belt: {
-    tileSizePx: 116,
-    ribStepPx: 10,
-    ribWidthPx: 7,
-    sideBandPx: 16,
-    sideCleatStepPx: 14,
-    sideCleatLengthPx: 10,
-    shadeAlpha: 0.58,
-    baseColor: '#4a3929',
-    shadeColor: '#2e2419',
-    ribColor: '#70583f',
-    grooveColor: '#3b2d21',
-    sideCleatColor: '#8a7359',
-    sideLineDarkColor: '#1a130d',
-    sideLineLightColor: '#d1bfa7',
-  },
-  damaged_patched_belt: {
-    tileSizePx: 118,
-    ribStepPx: 11,
-    ribWidthPx: 7,
-    sideBandPx: 17,
-    sideCleatStepPx: 15,
-    sideCleatLengthPx: 10,
-    shadeAlpha: 0.62,
-    baseColor: '#38414a',
-    shadeColor: '#212a33',
-    ribColor: '#55606b',
-    grooveColor: '#2a323b',
-    sideCleatColor: '#68727d',
-    sideLineDarkColor: '#0b1120',
-    sideLineLightColor: '#b7c2ce',
-    scuffCount: 18,
-    patchCount: 8,
-  },
-  salvage_shredder_belt: {
-    tileSizePx: 114,
-    ribStepPx: 11,
-    ribWidthPx: 7,
-    sideBandPx: 17,
-    sideCleatStepPx: 15,
-    sideCleatLengthPx: 10,
-    shadeAlpha: 0.6,
-    baseColor: '#343d46',
-    shadeColor: '#1f2730',
-    ribColor: '#515d69',
-    grooveColor: '#2a333c',
-    sideCleatColor: '#738190',
-    sideLineDarkColor: '#060b14',
-    sideLineLightColor: '#d6e0ea',
-    scuffCount: 10,
-  },
-};
 
 /**
  * ConveyorRenderer
@@ -419,6 +32,26 @@ const BUILTIN_BELT_TEXTURE_STYLES = {
  * PixiJS renderer responsible for drawing conveyors, bricks, HUD, and optional
  * visual DRT stimuli. Audio DRT is handled by the jsPsych plugin directly.
  */
+function parseBeltScrollConfig(beltTextureCfg: any): { factor: number; direction: 1 | -1; snapMode: 'screen' | 'texture' | 'none' } {
+  const factorRaw = Number(beltTextureCfg?.scrollFactor ?? 1);
+  const factor = Number.isFinite(factorRaw) ? factorRaw : 1;
+  const dirRaw = beltTextureCfg?.scrollDirection;
+  let direction: 1 | -1 = 1;
+  if (typeof dirRaw === 'number' && Number.isFinite(dirRaw)) {
+    direction = dirRaw < 0 ? -1 : 1;
+  } else {
+    const text = String(dirRaw ?? 'right').trim().toLowerCase();
+    direction = (text === 'left' || text === 'rtl' || text === 'reverse' || text === 'backward') ? -1 : 1;
+  }
+  const snapText = String(beltTextureCfg?.scrollSnapMode ?? 'screen').trim().toLowerCase();
+  const snapMode = (snapText === 'texture' || snapText === 'legacy')
+    ? 'texture'
+    : (snapText === 'none' || snapText === 'off' || snapText === 'false')
+      ? 'none'
+      : 'screen';
+  return { factor, direction, snapMode };
+}
+
 export class ConveyorRenderer {
   config: Record<string, any>;
   onBrickClick: (brickId: string, x: number | null, y: number | null) => void;
@@ -486,6 +119,8 @@ export class ConveyorRenderer {
     peakBrickSprites: number;
   };
   _styleLookupCache: WeakMap<Record<string, any>, Map<string, any>>;
+  /** Belt scroll settings parsed once from config (config is immutable per renderer instance). */
+  _beltScroll: { factor: number; direction: 1 | -1; snapMode: 'screen' | 'texture' | 'none' };
   seed: number;
   _rngState: number;
   beltLayer!: PIXI.Container;
@@ -567,6 +202,7 @@ export class ConveyorRenderer {
     };
     this.seed = Number.isFinite(Number(seed)) ? (Number(seed) >>> 0) : 0x9e3779b9;
     this._rngState = this.seed || 0x9e3779b9;
+    this._beltScroll = parseBeltScrollConfig(config?.display?.beltTexture);
   }
 
   _nextRand() {
@@ -1990,6 +1626,7 @@ export class ConveyorRenderer {
     });
     this.furnaceVisuals.set(String(conveyorId), {
       style,
+      styleId: normalizeTextureStyleId(style ?? 'furnace'),
       ember,
       core,
       intakeGlow,
@@ -2018,26 +1655,7 @@ export class ConveyorRenderer {
     if (!hasAnimatedBelts) {
       return;
     }
-    const factor = Number(this.config?.display?.beltTexture?.scrollFactor ?? 1);
-    const dirRaw = this.config?.display?.beltTexture?.scrollDirection;
-    const snapModeRaw = this.config?.display?.beltTexture?.scrollSnapMode;
-    const scrollSnapMode = (() => {
-      const text = String(snapModeRaw ?? 'screen').trim().toLowerCase();
-      if (text === 'texture' || text === 'legacy') {
-        return 'texture';
-      }
-      if (text === 'none' || text === 'off' || text === 'false') {
-        return 'none';
-      }
-      return 'screen';
-    })();
-    const scrollDirection = (() => {
-      if (typeof dirRaw === 'number' && Number.isFinite(dirRaw)) {
-        return dirRaw < 0 ? -1 : 1;
-      }
-      const text = String(dirRaw ?? 'right').trim().toLowerCase();
-      return (text === 'left' || text === 'rtl' || text === 'reverse' || text === 'backward') ? -1 : 1;
-    })();
+    const { factor, direction: scrollDirection, snapMode: scrollSnapMode } = this._beltScroll;
     const dt = Math.max(0, Number(dtMs) || 0) / 1000;
     const resolution = Math.max(1, Number(this.app?.renderer?.resolution ?? 1));
     const brickSnapStep = this.pixelSnapBricks ? 1 : (1 / resolution);
@@ -2106,7 +1724,7 @@ export class ConveyorRenderer {
         Math.min(1, baseIntensity + (blend - 0.5) * 2 * alphaAmplitude + jitter)
       );
 
-      const styleId = normalizeTextureStyleId(vis?.style ?? 'furnace');
+      const styleId = vis.styleId ?? normalizeTextureStyleId(vis?.style ?? 'furnace');
       const isFireStyle = styleId === 'furnace';
 
       if (vis.ember) {
@@ -2999,20 +2617,19 @@ export class ConveyorRenderer {
         const vis = this.beltVisuals[conveyorIdx];
         sprite.initialRendererOffsetX = vis ? Number(vis.offsetX ?? 0) : 0;
       }
-      const desiredFill = toPixiColor(brick.color ?? this.config.display.brickColor);
-      const desiredBorder = toPixiColor(brick.borderColor ?? this.config.display.brickBorderColor ?? 0x0f172a);
-      const desiredShape = normalizeBrickShape(brick.shape ?? this.config.display.brickShape);
       const progressChanged = sprite.progressValue !== brick.clearProgress;
       const needsProgressRedraw =
         progressChanged &&
         (completionMode === 'hold_duration' || completionMode === 'hover_to_clear' || completionMode === 'hold_to_clear') &&
         !sprite.usesProgressMask;
+      // Compare raw inputs; _drawBrickGraphics caches them alongside the
+      // normalized values, so normalization only runs when something changed.
       if (
         sprite.modeValue !== completionMode ||
-        sprite.fillColorValue !== desiredFill ||
-        sprite.borderColorValue !== desiredBorder ||
-        sprite.textureStyleValue !== normalizeTextureStyleId(brick.textureStyle ?? '') ||
-        sprite.shapeValue !== desiredShape ||
+        sprite.rawFillValue !== brick.color ||
+        sprite.rawBorderValue !== brick.borderColor ||
+        sprite.rawTextureStyleValue !== brick.textureStyle ||
+        sprite.rawShapeValue !== brick.shape ||
         sprite.brickWidth !== brick.width ||
         sprite.brickHeight !== brick.height ||
         needsProgressRedraw
@@ -3025,7 +2642,13 @@ export class ConveyorRenderer {
       const step = this.pixelSnapBricks ? 1 : (1 / resolution);
 
       // Lock visual X to the belt offset to eliminate relative drift jitter.
-      const conveyorIdx = Number(String(brick.conveyorId ?? '').replace(/\D/g, ''));
+      // The regex parse is cached per sprite and keyed on the raw id so it
+      // self-invalidates if a brick ever changes conveyor.
+      if (sprite.conveyorIdRaw !== brick.conveyorId) {
+        sprite.conveyorIdRaw = brick.conveyorId;
+        sprite.conveyorIdx = Number(String(brick.conveyorId ?? '').replace(/\D/g, ''));
+      }
+      const conveyorIdx = sprite.conveyorIdx;
       const vis = this.beltVisuals[conveyorIdx];
       let x = 0;
       if (vis) {
@@ -3379,6 +3002,12 @@ export class ConveyorRenderer {
     sprite.shapeValue = shape;
     sprite.brickWidth = brick.width;
     sprite.brickHeight = brick.height;
+    // Raw (un-normalized) inputs, so per-frame sync can detect "nothing changed"
+    // without re-running toPixiColor/normalize* on every brick every frame.
+    sprite.rawFillValue = brick.color;
+    sprite.rawBorderValue = brick.borderColor;
+    sprite.rawShapeValue = brick.shape;
+    sprite.rawTextureStyleValue = brick.textureStyle;
     sprite.progressValue = brick.clearProgress;
     sprite.progressMaskWidth = -1;
     sprite.progressMaskBypassed = false;
