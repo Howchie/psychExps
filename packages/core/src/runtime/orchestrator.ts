@@ -503,7 +503,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
               configPath: context.selection.configPath ?? undefined,
               taskId: context.selection.taskId,
               resolver: context.resolver,
-              locals: (ctx.block as any).variables,
+              locals: asObject(toBlockObject(ctx.block).variables) ?? undefined,
               displayElement: resolvedTrialModuleContext?.displayElement ?? container,
             ...(resolvedTrialModuleContext?.borderTargetElement
               ? { borderTargetElement: resolvedTrialModuleContext.borderTargetElement }
@@ -564,7 +564,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
               configPath: context.selection.configPath ?? undefined,
               taskId: context.selection.taskId,
               resolver: context.resolver,
-              locals: (ctx.block as any).variables,
+              locals: asObject(toBlockObject(ctx.block).variables) ?? undefined,
               displayElement: resolvedBlockModuleContext?.displayElement ?? container,
               ...(resolvedBlockModuleContext?.borderTargetElement
                 ? { borderTargetElement: resolvedBlockModuleContext.borderTargetElement }
@@ -576,6 +576,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
           });
 
           const blockUi = resolveMergedBlockUi(ctx);
+          const blockRecord = toBlockObject(ctx.block);
           const trials = await args.getTrials(ctx);
           
           // Cache trials for the session runner.
@@ -584,7 +585,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
 
           await runBlockStartFlow({
             container: uiContainer,
-            blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
+            blockLabel: asString(blockRecord.label) || `Block ${ctx.blockIndex + 1}`,
             blockIndex: ctx.blockIndex,
             buttonIdPrefix: args.buttonIdPrefix,
             continueButtonStyle,
@@ -597,7 +598,7 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             cardColor,
             cardFontSize,
             cardFontFamily,
-            introText: blockUi.introText ?? (ctx.block as any).introText,
+            introText: blockUi.introText,
             showBlockIntro: blockUi.showBlockIntro,
             preBlockPages: blockUi.preBlockPages,
             showBlockLabel: blockUi.showBlockLabel,
@@ -607,8 +608,8 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
             afterPreInsertions: selectInsertionGroups("block_start_after_pre", ctx),
             variables: {
               nTrials: trials.length,
-              blockRule: (ctx.block as any).rule ?? "",
-              ...(ctx.block as any).variables,
+              blockRule: blockRecord.rule ?? "",
+              ...(asObject(blockRecord.variables) ?? {}),
             },
             renderHtml: args.renderInstruction,
           });
@@ -660,21 +661,12 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
               beforePostInsertions.push([summaryEntry]);
             }
           }
-          const repeatPostBlockPages = toInstructionScreenSpecs(
-            blockUi.repeatPostBlockPages ??
-              context.resolver.resolveInValue(
-                asObject(ctx.block)?.repeatAfterBlockScreens ?? asObject(ctx.block)?.repeatPostBlockScreens,
-                blockResolverContext,
-              ),
-          );
-          const postBlockPages = toInstructionScreenSpecs(
-            repeatEvaluation.shouldRepeat
-              ? repeatPostBlockPages
-              : (blockUi.postBlockPages ?? (ctx.block as any).afterBlockScreens),
-          );
+          const postBlockPages = repeatEvaluation.shouldRepeat
+            ? blockUi.repeatPostBlockPages
+            : blockUi.postBlockPages;
           await runBlockEndFlow({
             container: uiContainer,
-            blockLabel: (ctx.block as any).label || `Block ${ctx.blockIndex + 1}`,
+            blockLabel: asString(toBlockObject(ctx.block).label) || `Block ${ctx.blockIndex + 1}`,
             blockIndex: ctx.blockIndex,
             buttonIdPrefix: args.buttonIdPrefix,
             continueButtonStyle,
@@ -781,15 +773,19 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
 
     const payload = {
       selection,
-      mapping: (taskConfig as any).mapping,
-      timing: (taskConfig as any).timing,
-      blocks: sessionResult.blocks.map(b => ({
-        blockIndex: b.blockIndex,
-        label: (b.block as any).label,
-        ...((typeof (b.block as any).blockType === "string" && (b.block as any).blockType.trim().length > 0)
-          ? { blockType: (b.block as any).blockType }
-          : {}),
-      })),
+      mapping: taskConfig.mapping,
+      timing: taskConfig.timing,
+      blocks: sessionResult.blocks.map(b => {
+        const blockRecord = asObject(b.block) ?? {};
+        const blockType = blockRecord.blockType;
+        return {
+          blockIndex: b.blockIndex,
+          label: blockRecord.label,
+          ...((typeof blockType === "string" && blockType.trim().length > 0)
+            ? { blockType }
+            : {}),
+        };
+      }),
       ...(records.length > 0 ? { records } : {}),
       ...(args.excludeModuleResults ? {} : { moduleResults: moduleRunner.getResults() }),
       ...(!args.excludeEvents ? { events: (Array.isArray(taskEvents) ? taskEvents : []) } : {}),

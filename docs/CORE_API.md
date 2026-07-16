@@ -376,6 +376,18 @@ Common display helpers used by tasks:
 - `ensureJsPsychCanvasCentered`
 - `renderCenteredNotice`
 
+### `createCanvasPhaseDrawers(scene, drawStimulus): CanvasPhaseDrawers`
+
+Builds the standard fixation/blank/stimulus/feedback canvas renderers used by framed RT tasks (stroop, flanker, go_no_go, sft). Every phase draws the shared cue-and-frame scene; only the stimulus content differs per task and is supplied as the `drawStimulus(frame, trial)` callback.
+
+`scene` fields:
+- `layout`: a `CanvasFrameLayout` from `computeCanvasFrameLayout`
+- `frameBackground` / `frameBorder` / `cueColor`
+- `cueText`: static string or `(trial) => string` provider for per-trial cues (e.g. sft rule cues)
+- `fixation`: `{ text?, color?, fontSizePx?, fontWeight? }` — glyph defaults to `"+"`
+
+Returned drawers: `drawFixation(canvas, trial?)`, `drawBlank(canvas, trial?)`, `drawStimulus(canvas, trial)`, `drawFeedback(canvas, feedback, view)` (delegates to `drawTrialFeedbackOnCanvas`).
+
 ## 5. Scheduling and randomization
 
 ### `buildScheduledItems(args): T[]`
@@ -645,6 +657,10 @@ Builds an exact-quota condition sequence using full-factorial cells + optional w
 - `noImmediateRepeatFactors`
 
 Useful for balanced block construction in any trial task.
+
+### `parseQuotaMap(raw, labels, expectedTotal, options?): Record<string, number>`
+
+Parses a per-condition trial quota map from config. When no quota is provided for any label, trials are split evenly across labels (remainder distributed from the first label onward). When provided, the quotas must sum to `expectedTotal` or an error is thrown; pass `options.taskName` to prefix the error message (for example `"Stroop"`).
 
 ## 10. Semantic indexing helpers
 

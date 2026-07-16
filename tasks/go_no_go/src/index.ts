@@ -8,8 +8,7 @@ import {
   createMulberry32,
   createResponseSemantics,
   drawCanvasCenteredText,
-  drawCanvasFramedScene,
-  drawTrialFeedbackOnCanvas,
+  createCanvasPhaseDrawers,
   evaluateTrialOutcome,
   hashSeed,
   normalizeKey,
@@ -39,6 +38,7 @@ import {
   type RtTiming,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
+  type CanvasFrameLayout,
   type ResponseSemantics,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
@@ -396,6 +396,7 @@ function appendGoNoGoTrialTimeline(args: {
   });
 
   const state: { feedbackView: { text: string; color: string } | null } = { feedbackView: null };
+  const phaseDrawers = createGoNoGoPhaseDrawers(config, layout);
 
   const nodes = buildJsPsychRtTimelineNodes({
     phasePrefix: "",
@@ -411,10 +412,10 @@ function appendGoNoGoTrialTimeline(args: {
       condition: trial.condition,
       stimulus: trial.stimulus,
     },
-    renderFixation: (canvas: HTMLCanvasElement) => drawFixation(canvas, config, layout),
-    renderBlank: (canvas: HTMLCanvasElement) => drawBlank(canvas, config, layout),
-    renderStimulus: (canvas: HTMLCanvasElement) => drawStimulus(canvas, config, layout, trial),
-    renderFeedback: (canvas: HTMLCanvasElement) => drawFeedback(canvas, config, layout, feedback, state.feedbackView),
+    renderFixation: (canvas: HTMLCanvasElement) => phaseDrawers.drawFixation(canvas),
+    renderBlank: (canvas: HTMLCanvasElement) => phaseDrawers.drawBlank(canvas),
+    renderStimulus: (canvas: HTMLCanvasElement) => phaseDrawers.drawStimulus(canvas, trial),
+    renderFeedback: (canvas: HTMLCanvasElement) => phaseDrawers.drawFeedback(canvas, feedback, state.feedbackView),
     feedback: {
       enabled: feedback.enabled,
       durationMs: feedback.durationMs,
@@ -476,77 +477,25 @@ function appendGoNoGoTrialTimeline(args: {
   }
 }
 
-function drawFixation(
-  canvas: HTMLCanvasElement,
-  config: ParsedGoNoGoConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
+function createGoNoGoPhaseDrawers(config: ParsedGoNoGoConfig, layout: CanvasFrameLayout) {
+  return createCanvasPhaseDrawers<GeneratedGoNoGoTrial>(
     {
+      layout,
       frameBackground: config.display.frameBackground,
       frameBorder: config.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, "+", {
+      fixation: {
         color: config.display.fixationColor,
         fontSizePx: config.display.fixationFontSizePx,
         fontWeight: config.display.fixationFontWeight,
-      });
+      },
     },
-  );
-}
-
-function drawBlank(
-  canvas: HTMLCanvasElement,
-  config: ParsedGoNoGoConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(ctx, layout, {
-    frameBackground: config.display.frameBackground,
-    frameBorder: config.display.frameBorder,
-  });
-}
-
-function drawStimulus(
-  canvas: HTMLCanvasElement,
-  config: ParsedGoNoGoConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  trial: GeneratedGoNoGoTrial,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const color = trial.condition === "go" ? config.display.goStimulusColor : config.display.noGoStimulusColor;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
-    {
-      frameBackground: config.display.frameBackground,
-      frameBorder: config.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, trial.stimulus, {
+    ({ ctx, centerX, centerY }, trial) => {
+      const color = trial.condition === "go" ? config.display.goStimulusColor : config.display.noGoStimulusColor;
+      drawCanvasCenteredText(ctx, centerX, centerY, trial.stimulus, {
         color,
         fontSizePx: config.display.stimulusFontSizePx,
         fontWeight: config.display.stimulusFontWeight,
       });
     },
   );
-}
-
-function drawFeedback(
-  canvas: HTMLCanvasElement,
-  config: ParsedGoNoGoConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  feedback: TrialFeedbackConfig,
-  feedbackView: { text: string; color: string } | null,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawTrialFeedbackOnCanvas(ctx, layout, feedback, feedbackView);
 }

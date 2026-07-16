@@ -1,10 +1,7 @@
 import type { SelectionContext } from "../api/types";
 
-export function downloadJson(data: unknown, filePrefix: string, selection: SelectionContext): void {
-  const text = JSON.stringify(data, null, 2);
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `${filePrefix}_${selection.taskId}_${selection.configPath ?? ""}_${selection.participant.participantId}_${stamp}.json`;
-  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+function triggerDownload(contents: string, mimeType: string, fileName: string): void {
+  const blob = new Blob([contents], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -15,18 +12,23 @@ export function downloadJson(data: unknown, filePrefix: string, selection: Selec
   URL.revokeObjectURL(url);
 }
 
+function downloadFileStem(filePrefix: string, selection: SelectionContext): string {
+  return `${filePrefix}_${selection.taskId}_${selection.configPath ?? ""}_${selection.participant.participantId}`;
+}
+
+function downloadStamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+export function downloadJson(data: unknown, filePrefix: string, selection: SelectionContext): void {
+  const text = JSON.stringify(data, null, 2);
+  const fileName = `${downloadFileStem(filePrefix, selection)}_${downloadStamp()}.json`;
+  triggerDownload(text, "application/json;charset=utf-8", fileName);
+}
+
 export function downloadCsv(csv: string, filePrefix: string, selection: SelectionContext, suffix = "data"): void {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `${filePrefix}_${selection.taskId}_${selection.configPath ?? ""}_${selection.participant.participantId}_${suffix}_${stamp}.csv`;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  const fileName = `${downloadFileStem(filePrefix, selection)}_${suffix}_${downloadStamp()}.csv`;
+  triggerDownload(csv, "text/csv;charset=utf-8", fileName);
 }
 
 export function csvCell(value: unknown): string {
@@ -56,9 +58,8 @@ export function recordsToCsv<T extends object>(records: T[]): string {
   if (records.length === 0) return "";
 
   const columnSet = new Set<string>();
-  const scanLimit = Math.min(records.length, 100);
-  for (let i = 0; i < scanLimit; i++) {
-    for (const key of Object.keys(records[i] as Record<string, unknown>)) {
+  for (const record of records) {
+    for (const key of Object.keys(record as Record<string, unknown>)) {
       columnSet.add(key);
     }
   }
@@ -73,8 +74,6 @@ export function recordsToCsv<T extends object>(records: T[]): string {
 
   for (let i = 0; i < len; i++) {
     const record = records[i] as Record<string, unknown>;
-    // ⚡ Bolt: Use string concatenation instead of mapping to a temporary array and joining
-    // This avoids large numbers of intermediate allocations and speeds up execution by ~20%.
     let row = colLen > 0 ? csvCell(record[columns[0]]) : "";
     for (let j = 1; j < colLen; j++) {
       row += "," + csvCell(record[columns[j]]);

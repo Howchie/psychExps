@@ -88,6 +88,16 @@ describe('data', () => {
       const result = recordsToCsv(records);
       expect(result).toBe('city,population\n"New York, NY",8000000');
     });
+
+    it('includes columns that first appear beyond the 100th record', () => {
+      const records: Record<string, unknown>[] = Array.from({ length: 150 }, (_, i) => ({ id: i }));
+      records[120].lateColumn = "late";
+      const result = recordsToCsv(records);
+      const lines = result.split("\n");
+      expect(lines[0]).toBe("id,lateColumn");
+      expect(lines[121]).toBe("120,late");
+      expect(lines[1]).toBe("0,");
+    });
   });
 
   describe('inferCsvFromPayload', () => {

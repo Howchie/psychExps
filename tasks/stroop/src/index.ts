@@ -11,8 +11,7 @@ import {
   createSemanticResolver,
   createResponseSemantics,
   drawCanvasCenteredText,
-  drawCanvasFramedScene,
-  drawTrialFeedbackOnCanvas,
+  createCanvasPhaseDrawers,
   escapeHtml,
   evaluateTrialOutcome,
   hashSeed,
@@ -36,6 +35,7 @@ import {
   resolveBlockScreenSlotValue,
   ensureJsPsychCanvasCentered,
   maybeExportStimulusRows,
+  parseQuotaMap,
   applyTaskInstructionConfig,
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
@@ -46,6 +46,7 @@ import {
   type RtTiming,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
+  type CanvasFrameLayout,
   type ResponseSemantics,
   type EventLogger,
 } from "@experiments/core";
@@ -305,6 +306,7 @@ function appendStroopTrialTimeline(args: {
   });
 
   const state: { feedbackView: { text: string; color: string } | null } = { feedbackView: null };
+  const phaseDrawers = createStroopPhaseDrawers(parsed, layout);
 
   const nodes = buildJsPsychRtTimelineNodes({
     phasePrefix: "",
@@ -322,18 +324,10 @@ function appendStroopTrialTimeline(args: {
       fontColorToken: trial.fontColorToken,
       word: trial.word,
     },
-    renderFixation: (canvas: HTMLCanvasElement) => {
-      drawFixation(canvas, parsed, layout);
-    },
-    renderBlank: (canvas: HTMLCanvasElement) => {
-      drawBlank(canvas, parsed, layout);
-    },
-    renderStimulus: (canvas: HTMLCanvasElement) => {
-      drawStimulus(canvas, parsed, layout, trial);
-    },
-    renderFeedback: (canvas: HTMLCanvasElement) => {
-      drawFeedback(canvas, parsed, layout, feedback, state.feedbackView);
-    },
+    renderFixation: (canvas: HTMLCanvasElement) => phaseDrawers.drawFixation(canvas),
+    renderBlank: (canvas: HTMLCanvasElement) => phaseDrawers.drawBlank(canvas),
+    renderStimulus: (canvas: HTMLCanvasElement) => phaseDrawers.drawStimulus(canvas, trial),
+    renderFeedback: (canvas: HTMLCanvasElement) => phaseDrawers.drawFeedback(canvas, feedback, state.feedbackView),
     feedback: {
       enabled: feedback.enabled,
       durationMs: feedback.durationMs,
@@ -402,85 +396,27 @@ function appendStroopTrialTimeline(args: {
   }
 }
 
-function drawFixation(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
+function createStroopPhaseDrawers(parsed: ParsedStroopConfig, layout: CanvasFrameLayout) {
+  return createCanvasPhaseDrawers<PlannedTrial>(
     {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
+      layout,
       frameBackground: parsed.display.frameBackground,
       frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, "+", {
+      cueColor: parsed.display.cueColor,
+      fixation: {
         color: parsed.display.fixationColor,
         fontSizePx: parsed.display.fixationFontSizePx,
         fontWeight: parsed.display.fixationFontWeight,
-      });
+      },
     },
-  );
-}
-
-function drawBlank(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: "",
-    cueColor: parsed.display.cueColor,
-    frameBackground: parsed.display.frameBackground,
-    frameBorder: parsed.display.frameBorder,
-  });
-}
-
-function drawStimulus(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  trial: PlannedTrial,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
-    {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
-      frameBackground: parsed.display.frameBackground,
-      frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, trial.word, {
+    ({ ctx, centerX, centerY }, trial) => {
+      drawCanvasCenteredText(ctx, centerX, centerY, trial.word, {
         color: trial.fontColorHex,
         fontSizePx: parsed.display.stimulusFontSizePx,
         fontWeight: parsed.display.stimulusFontWeight,
       });
     },
   );
-}
-
-function drawFeedback(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  feedback: TrialFeedbackConfig,
-  feedbackView: { text: string; color: string } | null,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawTrialFeedbackOnCanvas(ctx, layout, feedback, feedbackView);
-  void parsed;
 }
 
 async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig> {
@@ -581,8 +517,8 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
   const labels = mode === "congruence"
     ? (["congruent", "incongruent", "neutral"] as StroopCondition[])
     : (["positive", "neutral", "negative"] as StroopCondition[]);
-  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock);
-  const fontColorQuotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.fontColorQuotaPerBlock), normalizedResponseColors, trialsPerBlock);
+  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock, { taskName: "Stroop" });
+  const fontColorQuotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.fontColorQuotaPerBlock), normalizedResponseColors, trialsPerBlock, { taskName: "Stroop" });
 
   const words = await resolveWords(stimuliRaw);
 
@@ -843,29 +779,6 @@ function assignColorsToConditionSequence(
 function parseMode(value: unknown): StroopMode {
   const mode = (asString(value) || "congruence").toLowerCase();
   return mode === "valence" ? "valence" : "congruence";
-}
-
-function parseQuotaMap(raw: Record<string, unknown> | null, labels: string[], expectedTotal: number): Record<string, number> {
-  const output: Record<string, number> = {};
-  const provided = raw ? labels.some((label) => Object.prototype.hasOwnProperty.call(raw, label)) : false;
-  if (!provided) {
-    const base = Math.floor(expectedTotal / labels.length);
-    let rem = expectedTotal - base * labels.length;
-    for (const label of labels) {
-      output[label] = base + (rem > 0 ? 1 : 0);
-      if (rem > 0) rem -= 1;
-    }
-    return output;
-  }
-
-  for (const label of labels) {
-    output[label] = toNonNegativeNumber(raw?.[label], 0);
-  }
-  const total = Object.values(output).reduce((acc, value) => acc + value, 0);
-  if (total !== expectedTotal) {
-    throw new Error(`Stroop config invalid: quota total (${total}) must equal blockTemplate.trials (${expectedTotal}).`);
-  }
-  return output;
 }
 
 async function resolveWords(stimuliRaw: Record<string, unknown> | null): Promise<string[]> {

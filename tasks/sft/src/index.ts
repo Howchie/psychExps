@@ -5,15 +5,13 @@ import {
   buildScheduledItems,
   createMulberry32,
   dbToLuminance,
-  drawTrialFeedbackOnCanvas,
+  createCanvasPhaseDrawers,
   escapeHtml,
   parseTrialFeedbackConfig,
   hashSeed,
   normalizeKey,
   evaluateTrialOutcome,
   computeCanvasFrameLayout,
-  drawCanvasFramedScene,
-  drawCanvasCenteredText,
   ensureJsPsychCanvasCentered,
   TaskEnvironmentGuard,
   pushJsPsychContinueScreen,
@@ -412,7 +410,7 @@ async function runSftTask(context: TaskAdapterContext): Promise<unknown> {
         timeline.push({
           type: CanvasKeyboardResponsePlugin,
           stimulus: (canvas: HTMLCanvasElement) => {
-            drawFeedbackPhase(canvas, parsed, block.feedback, feedbackView);
+            createSftPhaseDrawers(parsed).drawFeedback(canvas, block.feedback, feedbackView);
           },
           canvas_size: [computeCanvasLayout(parsed).totalHeightPx, parsed.display.aperturePx],
           choices: "NO_KEYS",
@@ -703,6 +701,7 @@ function appendDotTrialTimeline(args: {
 
   const baseData = dataContext ?? {};
   const layout = computeCanvasLayout(config);
+  const phaseDrawers = createSftPhaseDrawers(config);
   const jsPsychAllowedKeys = toJsPsychChoices(allowedKeys);
 
   const durations = {
@@ -724,19 +723,11 @@ function appendDotTrialTimeline(args: {
     canvasSize: [layout.totalHeightPx, config.display.aperturePx],
     allowedKeys: jsPsychAllowedKeys,
     baseData,
-    renderFixation: (canvas: HTMLCanvasElement) => {
-      drawFixationPhase(canvas, config, trialProvider());
-    },
-    renderBlank: (canvas: HTMLCanvasElement) => {
-      drawBlankPhase(canvas, config, trialProvider());
-    },
-    renderStimulus: (canvas: HTMLCanvasElement) => {
-      drawStimulusPhase(canvas, config, trialProvider());
-    },
+    renderFixation: (canvas: HTMLCanvasElement) => phaseDrawers.drawFixation(canvas, trialProvider()),
+    renderBlank: (canvas: HTMLCanvasElement) => phaseDrawers.drawBlank(canvas, trialProvider()),
+    renderStimulus: (canvas: HTMLCanvasElement) => phaseDrawers.drawStimulus(canvas, trialProvider()),
     renderFeedback: feedback
-      ? (canvas: HTMLCanvasElement) => {
-          drawFeedbackPhase(canvas, config, feedback.config, feedback.viewProvider());
-        }
+      ? (canvas: HTMLCanvasElement) => phaseDrawers.drawFeedback(canvas, feedback.config, feedback.viewProvider())
       : undefined,
     feedback: feedback
       ? {
@@ -1146,69 +1137,28 @@ function cueTextForTrial(trial: PlannedTrial | null): string {
   return `Rule: ${trial.ruleCueLabel || trial.rule}`;
 }
 
-function drawFixationPhase(canvas: HTMLCanvasElement, config: SftParsedConfig, trial: PlannedTrial | null): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const layout = computeCanvasLayout(config);
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: cueTextForTrial(trial),
-    cueColor: config.display.cueColor,
-    frameBackground: config.display.canvasBackground,
-    frameBorder: config.display.canvasBorder,
-  }, ({ centerX, centerY }) => {
-    drawCanvasCenteredText(ctx, centerX, centerY, "+", {
-      color: "#ffffff",
-      fontSizePx: 36,
-      fontWeight: 700,
-    });
-  });
-}
-
-function drawBlankPhase(canvas: HTMLCanvasElement, config: SftParsedConfig, trial: PlannedTrial | null): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const layout = computeCanvasLayout(config);
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: cueTextForTrial(trial),
-    cueColor: config.display.cueColor,
-    frameBackground: config.display.canvasBackground,
-    frameBorder: config.display.canvasBorder,
-  });
-}
-
-function drawStimulusPhase(canvas: HTMLCanvasElement, config: SftParsedConfig, trial: PlannedTrial | null): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const layout = computeCanvasLayout(config);
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: cueTextForTrial(trial),
-    cueColor: config.display.cueColor,
-    frameBackground: config.display.canvasBackground,
-    frameBorder: config.display.canvasBorder,
-  }, ({ centerX, centerY }) => {
-    if (!trial) return;
-    const positions = dotPositions(centerX, centerY, trial.layout, config.display.dotOffsetPx);
-    const dots = dotsFromStimCode(trial.stimCode, trial.salience, config.audio.mode);
-    for (const dot of dots) {
-      const p = positions[dot.loc];
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, config.display.dotRadiusPx, 0, Math.PI * 2);
-      ctx.fillStyle = luminanceToGray(dot.luminance);
-      ctx.fill();
-    }
-  });
-}
-
-function drawFeedbackPhase(
-  canvas: HTMLCanvasElement,
-  config: SftParsedConfig,
-  feedback: TrialFeedbackConfig,
-  view: { text: string; color: string } | null,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const layout = computeCanvasLayout(config);
-  drawTrialFeedbackOnCanvas(ctx, layout, feedback, view);
+function createSftPhaseDrawers(config: SftParsedConfig) {
+  return createCanvasPhaseDrawers<PlannedTrial>(
+    {
+      layout: computeCanvasLayout(config),
+      frameBackground: config.display.canvasBackground,
+      frameBorder: config.display.canvasBorder,
+      cueColor: config.display.cueColor,
+      cueText: cueTextForTrial,
+      fixation: { color: "#ffffff", fontSizePx: 36, fontWeight: 700 },
+    },
+    ({ ctx, centerX, centerY }, trial) => {
+      const positions = dotPositions(centerX, centerY, trial.layout, config.display.dotOffsetPx);
+      const dots = dotsFromStimCode(trial.stimCode, trial.salience, config.audio.mode);
+      for (const dot of dots) {
+        const p = positions[dot.loc];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, config.display.dotRadiusPx, 0, Math.PI * 2);
+        ctx.fillStyle = luminanceToGray(dot.luminance);
+        ctx.fill();
+      }
+    },
+  );
 }
 
 function renderKeySummary(responses: SftParsedConfig["responses"]): string {

@@ -105,7 +105,6 @@ export class StimulusInjectorModule implements TaskModule<StimulusInjectorModule
     const trials = Array.isArray(block?.trials) ? block.trials : [];
     if (trials.length === 0) return block;
 
-    // ⚡ Bolt: Consolidated chained array map/filter/map passes into a single loop to prevent intermediate allocations
     const eligibleIndices: number[] = [];
     const hasEligibleTypes = Array.isArray(injection.eligibleTrialTypes) && injection.eligibleTrialTypes.length > 0;
 

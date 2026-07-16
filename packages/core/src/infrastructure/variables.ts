@@ -168,8 +168,6 @@ function deepGet(source: unknown, path: string): unknown {
   if (!path) return source;
   let cursor: unknown = source;
 
-  // ⚡ Bolt: Replaced split/filter with manual indexOf traversal.
-  // Impact: ~25% faster by avoiding intermediate array allocations.
   let start = 0;
   while (start < path.length) {
     let end = path.indexOf(".", start);
@@ -481,8 +479,6 @@ export function createVariableResolver(args: CreateVariableResolverArgs = {}): V
     }
     if (isObject(value)) {
       const out: Record<string, unknown> = {};
-      // ⚡ Bolt: Replaced Object.entries() with for...in loop.
-      // Impact: ~74% faster in hot recursive paths by avoiding O(N) array allocation per level.
       for (const key in value) {
         if (Object.prototype.hasOwnProperty.call(value, key)) {
           out[key] = resolveInValueInternal(value[key], context, stack);
