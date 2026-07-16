@@ -11,8 +11,7 @@ import {
   createSemanticResolver,
   createResponseSemantics,
   drawCanvasCenteredText,
-  drawCanvasFramedScene,
-  drawTrialFeedbackOnCanvas,
+  createCanvasPhaseDrawers,
   escapeHtml,
   evaluateTrialOutcome,
   hashSeed,
@@ -47,6 +46,7 @@ import {
   type RtTiming,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
+  type CanvasFrameLayout,
   type ResponseSemantics,
   type EventLogger,
 } from "@experiments/core";
@@ -306,6 +306,7 @@ function appendStroopTrialTimeline(args: {
   });
 
   const state: { feedbackView: { text: string; color: string } | null } = { feedbackView: null };
+  const phaseDrawers = createStroopPhaseDrawers(parsed, layout);
 
   const nodes = buildJsPsychRtTimelineNodes({
     phasePrefix: "",
@@ -323,18 +324,10 @@ function appendStroopTrialTimeline(args: {
       fontColorToken: trial.fontColorToken,
       word: trial.word,
     },
-    renderFixation: (canvas: HTMLCanvasElement) => {
-      drawFixation(canvas, parsed, layout);
-    },
-    renderBlank: (canvas: HTMLCanvasElement) => {
-      drawBlank(canvas, parsed, layout);
-    },
-    renderStimulus: (canvas: HTMLCanvasElement) => {
-      drawStimulus(canvas, parsed, layout, trial);
-    },
-    renderFeedback: (canvas: HTMLCanvasElement) => {
-      drawFeedback(canvas, parsed, layout, feedback, state.feedbackView);
-    },
+    renderFixation: (canvas: HTMLCanvasElement) => phaseDrawers.drawFixation(canvas),
+    renderBlank: (canvas: HTMLCanvasElement) => phaseDrawers.drawBlank(canvas),
+    renderStimulus: (canvas: HTMLCanvasElement) => phaseDrawers.drawStimulus(canvas, trial),
+    renderFeedback: (canvas: HTMLCanvasElement) => phaseDrawers.drawFeedback(canvas, feedback, state.feedbackView),
     feedback: {
       enabled: feedback.enabled,
       durationMs: feedback.durationMs,
@@ -403,85 +396,27 @@ function appendStroopTrialTimeline(args: {
   }
 }
 
-function drawFixation(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
+function createStroopPhaseDrawers(parsed: ParsedStroopConfig, layout: CanvasFrameLayout) {
+  return createCanvasPhaseDrawers<PlannedTrial>(
     {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
+      layout,
       frameBackground: parsed.display.frameBackground,
       frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, "+", {
+      cueColor: parsed.display.cueColor,
+      fixation: {
         color: parsed.display.fixationColor,
         fontSizePx: parsed.display.fixationFontSizePx,
         fontWeight: parsed.display.fixationFontWeight,
-      });
+      },
     },
-  );
-}
-
-function drawBlank(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: "",
-    cueColor: parsed.display.cueColor,
-    frameBackground: parsed.display.frameBackground,
-    frameBorder: parsed.display.frameBorder,
-  });
-}
-
-function drawStimulus(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  trial: PlannedTrial,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
-    {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
-      frameBackground: parsed.display.frameBackground,
-      frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, trial.word, {
+    ({ ctx, centerX, centerY }, trial) => {
+      drawCanvasCenteredText(ctx, centerX, centerY, trial.word, {
         color: trial.fontColorHex,
         fontSizePx: parsed.display.stimulusFontSizePx,
         fontWeight: parsed.display.stimulusFontWeight,
       });
     },
   );
-}
-
-function drawFeedback(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedStroopConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  feedback: TrialFeedbackConfig,
-  feedbackView: { text: string; color: string } | null,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawTrialFeedbackOnCanvas(ctx, layout, feedback, feedbackView);
-  void parsed;
 }
 
 async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig> {

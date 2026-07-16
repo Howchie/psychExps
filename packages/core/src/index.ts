@@ -76,6 +76,7 @@ export * from "./web/taskUiFlow";
 export * from "./web/surveys";
 export * from "./web/experiment";
 export * from "./web/feedback";
+export * from "./web/canvasPhases";
 export * from "./web/stimulusExport";
 export * from "./web/panelLayout";
 

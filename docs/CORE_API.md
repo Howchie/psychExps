@@ -376,6 +376,18 @@ Common display helpers used by tasks:
 - `ensureJsPsychCanvasCentered`
 - `renderCenteredNotice`
 
+### `createCanvasPhaseDrawers(scene, drawStimulus): CanvasPhaseDrawers`
+
+Builds the standard fixation/blank/stimulus/feedback canvas renderers used by framed RT tasks (stroop, flanker, go_no_go, sft). Every phase draws the shared cue-and-frame scene; only the stimulus content differs per task and is supplied as the `drawStimulus(frame, trial)` callback.
+
+`scene` fields:
+- `layout`: a `CanvasFrameLayout` from `computeCanvasFrameLayout`
+- `frameBackground` / `frameBorder` / `cueColor`
+- `cueText`: static string or `(trial) => string` provider for per-trial cues (e.g. sft rule cues)
+- `fixation`: `{ text?, color?, fontSizePx?, fontWeight? }` — glyph defaults to `"+"`
+
+Returned drawers: `drawFixation(canvas, trial?)`, `drawBlank(canvas, trial?)`, `drawStimulus(canvas, trial)`, `drawFeedback(canvas, feedback, view)` (delegates to `drawTrialFeedbackOnCanvas`).
+
 ## 5. Scheduling and randomization
 
 ### `buildScheduledItems(args): T[]`

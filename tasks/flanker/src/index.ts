@@ -8,8 +8,7 @@ import {
   createMulberry32,
   createResponseSemantics,
   drawCanvasCenteredText,
-  drawCanvasFramedScene,
-  drawTrialFeedbackOnCanvas,
+  createCanvasPhaseDrawers,
   escapeHtml,
   evaluateTrialOutcome,
   hashSeed,
@@ -44,6 +43,7 @@ import {
   type RtTiming,
   type TaskAdapterContext,
   type TrialFeedbackConfig,
+  type CanvasFrameLayout,
   type ResponseSemantics,
 } from "@experiments/core";
 import { initJsPsych } from "jspsych";
@@ -503,65 +503,20 @@ function buildBlockTrials(args: {
   });
 }
 
-function drawFixation(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedFlankerConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
+function createFlankerPhaseDrawers(parsed: ParsedFlankerConfig, layout: CanvasFrameLayout) {
+  return createCanvasPhaseDrawers<PlannedTrial>(
     {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
+      layout,
       frameBackground: parsed.display.frameBackground,
       frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
-      drawCanvasCenteredText(frameCtx, centerX, centerY, "+", {
+      cueColor: parsed.display.cueColor,
+      fixation: {
         color: parsed.display.fixationColor,
         fontSizePx: parsed.display.fixationFontSizePx,
         fontWeight: parsed.display.fixationFontWeight,
-      });
+      },
     },
-  );
-}
-
-function drawBlank(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedFlankerConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(ctx, layout, {
-    cueText: "",
-    cueColor: parsed.display.cueColor,
-    frameBackground: parsed.display.frameBackground,
-    frameBorder: parsed.display.frameBorder,
-  });
-}
-
-function drawStimulus(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedFlankerConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  trial: PlannedTrial,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawCanvasFramedScene(
-    ctx,
-    layout,
-    {
-      cueText: "",
-      cueColor: parsed.display.cueColor,
-      frameBackground: parsed.display.frameBackground,
-      frameBorder: parsed.display.frameBorder,
-    },
-    ({ ctx: frameCtx, centerX, centerY }) => {
+    ({ ctx: frameCtx, centerX, centerY }, trial) => {
       // Calculate spacing
       const sideCount = Math.floor(parsed.stimuli.flankerCount / 2);
 
@@ -597,18 +552,6 @@ function drawStimulus(
   );
 }
 
-function drawFeedback(
-  canvas: HTMLCanvasElement,
-  parsed: ParsedFlankerConfig,
-  layout: ReturnType<typeof computeCanvasFrameLayout>,
-  feedback: TrialFeedbackConfig,
-  feedbackView: { text: string; color: string } | null,
-): void {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawTrialFeedbackOnCanvas(ctx, layout, feedback, feedbackView);
-}
-
 function appendFlankerTrialTimeline(args: {
   timeline: any[];
   parsed: ParsedFlankerConfig;
@@ -633,6 +576,7 @@ function appendFlankerTrialTimeline(args: {
   });
 
   const state: { feedbackView: { text: string; color: string } | null } = { feedbackView: null };
+  const phaseDrawers = createFlankerPhaseDrawers(parsed, layout);
 
   const nodes = buildJsPsychRtTimelineNodes({
     phasePrefix: "",
@@ -649,10 +593,10 @@ function appendFlankerTrialTimeline(args: {
       targetDirection: trial.targetDirection,
       flankerDirection: trial.flankerDirection,
     },
-    renderFixation: (canvas: HTMLCanvasElement) => drawFixation(canvas, parsed, layout),
-    renderBlank: (canvas: HTMLCanvasElement) => drawBlank(canvas, parsed, layout),
-    renderStimulus: (canvas: HTMLCanvasElement) => drawStimulus(canvas, parsed, layout, trial),
-    renderFeedback: (canvas: HTMLCanvasElement) => drawFeedback(canvas, parsed, layout, feedback, state.feedbackView),
+    renderFixation: (canvas: HTMLCanvasElement) => phaseDrawers.drawFixation(canvas),
+    renderBlank: (canvas: HTMLCanvasElement) => phaseDrawers.drawBlank(canvas),
+    renderStimulus: (canvas: HTMLCanvasElement) => phaseDrawers.drawStimulus(canvas, trial),
+    renderFeedback: (canvas: HTMLCanvasElement) => phaseDrawers.drawFeedback(canvas, feedback, state.feedbackView),
     feedback: {
       enabled: feedback.enabled,
       durationMs: feedback.durationMs,
