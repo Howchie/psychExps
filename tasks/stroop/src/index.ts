@@ -36,6 +36,7 @@ import {
   resolveBlockScreenSlotValue,
   ensureJsPsychCanvasCentered,
   maybeExportStimulusRows,
+  parseQuotaMap,
   applyTaskInstructionConfig,
   createTaskAdapter,
   buildJsPsychRtTimelineNodes,
@@ -581,8 +582,8 @@ async function parseStroopConfig(config: JSONObject): Promise<ParsedStroopConfig
   const labels = mode === "congruence"
     ? (["congruent", "incongruent", "neutral"] as StroopCondition[])
     : (["positive", "neutral", "negative"] as StroopCondition[]);
-  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock);
-  const fontColorQuotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.fontColorQuotaPerBlock), normalizedResponseColors, trialsPerBlock);
+  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock, { taskName: "Stroop" });
+  const fontColorQuotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.fontColorQuotaPerBlock), normalizedResponseColors, trialsPerBlock, { taskName: "Stroop" });
 
   const words = await resolveWords(stimuliRaw);
 
@@ -843,29 +844,6 @@ function assignColorsToConditionSequence(
 function parseMode(value: unknown): StroopMode {
   const mode = (asString(value) || "congruence").toLowerCase();
   return mode === "valence" ? "valence" : "congruence";
-}
-
-function parseQuotaMap(raw: Record<string, unknown> | null, labels: string[], expectedTotal: number): Record<string, number> {
-  const output: Record<string, number> = {};
-  const provided = raw ? labels.some((label) => Object.prototype.hasOwnProperty.call(raw, label)) : false;
-  if (!provided) {
-    const base = Math.floor(expectedTotal / labels.length);
-    let rem = expectedTotal - base * labels.length;
-    for (const label of labels) {
-      output[label] = base + (rem > 0 ? 1 : 0);
-      if (rem > 0) rem -= 1;
-    }
-    return output;
-  }
-
-  for (const label of labels) {
-    output[label] = toNonNegativeNumber(raw?.[label], 0);
-  }
-  const total = Object.values(output).reduce((acc, value) => acc + value, 0);
-  if (total !== expectedTotal) {
-    throw new Error(`Stroop config invalid: quota total (${total}) must equal blockTemplate.trials (${expectedTotal}).`);
-  }
-  return output;
 }
 
 async function resolveWords(stimuliRaw: Record<string, unknown> | null): Promise<string[]> {

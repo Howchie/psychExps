@@ -646,6 +646,10 @@ Builds an exact-quota condition sequence using full-factorial cells + optional w
 
 Useful for balanced block construction in any trial task.
 
+### `parseQuotaMap(raw, labels, expectedTotal, options?): Record<string, number>`
+
+Parses a per-condition trial quota map from config. When no quota is provided for any label, trials are split evenly across labels (remainder distributed from the first label onward). When provided, the quotas must sum to `expectedTotal` or an error is thrown; pass `options.taskName` to prefix the error message (for example `"Stroop"`).
+
 ## 10. Semantic indexing helpers
 
 ### `buildSemanticIndex(labelsToTerms, options?): Map<string, string>`

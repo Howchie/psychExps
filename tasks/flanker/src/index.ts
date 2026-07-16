@@ -38,6 +38,7 @@ import {
   resolveRtTaskConfig,
   buildConditionSequence,
   maybeExportStimulusRows,
+  parseQuotaMap,
   type ResolvedRtTaskConfig,
   type JSONObject,
   type RtTiming,
@@ -310,7 +311,7 @@ export async function parseFlankerConfig(config: JSONObject): Promise<ParsedFlan
   }));
 
   const labels = ["congruent", "incongruent", "neutral"] as FlankerCondition[];
-  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock);
+  const quotaPerBlock = parseQuotaMap(asObject(conditionsRaw?.quotaPerBlock), labels, trialsPerBlock, { taskName: "Flanker" });
 
   const instructionConfig = buildTaskInstructionConfig({
     title: asString(taskRaw?.title) || "Flanker Task",
@@ -370,29 +371,6 @@ export async function parseFlankerConfig(config: JSONObject): Promise<ParsedFlan
     },
     blocks,
   };
-}
-
-function parseQuotaMap(raw: Record<string, unknown> | null, labels: string[], expectedTotal: number): Record<string, number> {
-  const output: Record<string, number> = {};
-  const provided = raw ? labels.some((label) => Object.prototype.hasOwnProperty.call(raw, label)) : false;
-  if (!provided) {
-    const base = Math.floor(expectedTotal / labels.length);
-    let rem = expectedTotal - base * labels.length;
-    for (const label of labels) {
-      output[label] = base + (rem > 0 ? 1 : 0);
-      if (rem > 0) rem -= 1;
-    }
-    return output;
-  }
-
-  for (const label of labels) {
-    output[label] = toNonNegativeNumber(raw?.[label], 0);
-  }
-  const total = Object.values(output).reduce((acc, value) => acc + value, 0);
-  if (total !== expectedTotal) {
-    throw new Error(`Flanker config invalid: quota total (${total}) must equal blockTemplate.trials (${expectedTotal}).`);
-  }
-  return output;
 }
 
 interface PlannedTrial {

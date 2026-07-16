@@ -1,5 +1,6 @@
 import { nextSecureFloat } from "../infrastructure/random";
 import type { RNG } from "../infrastructure/scheduler";
+import { toNonNegativeNumber } from "../utils/coerce";
 
 export interface ConditionFactor {
   name: string;
@@ -193,4 +194,39 @@ export function buildConditionSequence(args: BuildConditionSequenceArgs): Condit
   }
 
   throw new Error("Failed to build condition sequence that satisfies adjacency constraints.");
+}
+
+/**
+ * Parse a per-condition trial quota map. When no quota is provided for any
+ * label, trials are split evenly across labels (remainder distributed from
+ * the first label onward). When provided, the quotas must sum to
+ * `expectedTotal`.
+ */
+export function parseQuotaMap(
+  raw: Record<string, unknown> | null,
+  labels: string[],
+  expectedTotal: number,
+  options?: { taskName?: string },
+): Record<string, number> {
+  const output: Record<string, number> = {};
+  const provided = raw ? labels.some((label) => Object.prototype.hasOwnProperty.call(raw, label)) : false;
+  if (!provided) {
+    const base = Math.floor(expectedTotal / labels.length);
+    let rem = expectedTotal - base * labels.length;
+    for (const label of labels) {
+      output[label] = base + (rem > 0 ? 1 : 0);
+      if (rem > 0) rem -= 1;
+    }
+    return output;
+  }
+
+  for (const label of labels) {
+    output[label] = toNonNegativeNumber(raw?.[label], 0);
+  }
+  const total = Object.values(output).reduce((acc, value) => acc + value, 0);
+  if (total !== expectedTotal) {
+    const prefix = options?.taskName ? `${options.taskName} config` : "Config";
+    throw new Error(`${prefix} invalid: quota total (${total}) must equal blockTemplate.trials (${expectedTotal}).`);
+  }
+  return output;
 }
