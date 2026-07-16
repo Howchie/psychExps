@@ -401,8 +401,6 @@ export function computeBlockSummaryStats(args: {
   const { trialResults, where, metrics } = args;
   const rows = Array.isArray(trialResults) ? trialResults : [];
 
-  // ⚡ Bolt: Hoist Object.entries and Set creation outside the filter loop
-  // to avoid redundant O(N) allocations for every trial row.
   let whereEntries: Array<[string, { exact: Set<string>; patterns: RegExp[] }]> | null = null;
   if (where) {
     whereEntries = Object.entries(where).map(([field, expectedRaw]) => {

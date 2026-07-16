@@ -491,8 +491,6 @@ function fitWaldAnalytic(rtWindow: number[], options: WaldFitOptions): WaldFitRe
   let maxPdfIndex = -1;
   let hasFinite = false;
 
-  // ⚡ Bolt: Consolidated multiple array passes (map, filter, reduce) into a single loop
-  // to avoid intermediate array allocations and improve execution speed by ~13x.
   for (let i = 0; i < xGrid.length; i += 1) {
     const value = saddlepointDensity(xGrid[i], meanV, varV, skewV);
     if (Number.isFinite(value) && value > 0) {
