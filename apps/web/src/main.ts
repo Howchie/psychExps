@@ -9,7 +9,6 @@ import {
   waitForJatosReady,
   resolveSelectionWithJatosRetry,
   resolveRuntimePath,
-  buildTaskMap,
   installFullscreenOnFirstInteraction,
   installGlobalScrollBlocker,
   resolvePageBackground,
@@ -19,24 +18,29 @@ import {
 } from "@experiments/core";
 import type { CoreConfig, JSONObject, TaskAdapter } from "@experiments/core";
 
-import { sftAdapter } from "@experiments/task-sft";
-import { nbackAdapter } from "@experiments/task-nback";
-import { bricksAdapter } from "@experiments/task-bricks";
-import { stroopAdapter } from "@experiments/task-stroop";
-import { trackingAdapter } from "@experiments/task-tracking";
-import { rdkAdapter } from "@experiments/task-rdk";
-import { changeDetectionAdapter } from "@experiments/task-change-detection";
-import { flankerAdapter } from "@experiments/task-flanker";
-import { goNoGoAdapter } from "@experiments/task-go-no-go";
-import { matbTrackingAdapter } from "@experiments/task-matb-tracking";
-import { matbSysmonAdapter } from "@experiments/task-matb-sysmon";
-import { matbResmanAdapter } from "@experiments/task-matb-resman";
-import { matbCommsAdapter } from "@experiments/task-matb-comms";
-import { matbAdapter } from "@experiments/task-matb";
-
 import { coreDefaultConfig } from "./appCoreConfig";
 import { taskConfigsByPath } from "./taskVariantConfigs";
 import { buildConfigReferenceCandidates, toBundledConfigKey, toConfigFetchPath } from "./configResolution";
+
+// Adapters are loaded on demand so each session only downloads the code for
+// its selected task. Keys must match each adapter's manifest.taskId (asserted
+// after load).
+const adapterLoaders: Record<string, () => Promise<TaskAdapter>> = {
+  sft: async () => (await import("@experiments/task-sft")).sftAdapter,
+  nback: async () => (await import("@experiments/task-nback")).nbackAdapter,
+  bricks: async () => (await import("@experiments/task-bricks")).bricksAdapter,
+  stroop: async () => (await import("@experiments/task-stroop")).stroopAdapter,
+  tracking: async () => (await import("@experiments/task-tracking")).trackingAdapter,
+  rdk: async () => (await import("@experiments/task-rdk")).rdkAdapter,
+  change_detection: async () => (await import("@experiments/task-change-detection")).changeDetectionAdapter,
+  flanker: async () => (await import("@experiments/task-flanker")).flankerAdapter,
+  go_no_go: async () => (await import("@experiments/task-go-no-go")).goNoGoAdapter,
+  "matb-tracking": async () => (await import("@experiments/task-matb-tracking")).matbTrackingAdapter,
+  "matb-sysmon": async () => (await import("@experiments/task-matb-sysmon")).matbSysmonAdapter,
+  "matb-resman": async () => (await import("@experiments/task-matb-resman")).matbResmanAdapter,
+  "matb-comms": async () => (await import("@experiments/task-matb-comms")).matbCommsAdapter,
+  matb: async () => (await import("@experiments/task-matb")).matbAdapter,
+};
 
 async function bootstrap(): Promise<void> {
   const app = document.querySelector("#app");
@@ -45,29 +49,18 @@ async function bootstrap(): Promise<void> {
   }
 
   const configManager = new ConfigurationManager();
-  const adapters: TaskAdapter[] = [
-    sftAdapter,
-    nbackAdapter,
-    bricksAdapter,
-    stroopAdapter,
-    trackingAdapter,
-    rdkAdapter,
-    changeDetectionAdapter,
-    flankerAdapter,
-    goNoGoAdapter,
-    matbTrackingAdapter,
-    matbSysmonAdapter,
-    matbResmanAdapter,
-    matbCommsAdapter,
-    matbAdapter,
-  ];
-  const adapterMap = buildTaskMap(adapters);
 
   const initialSelection = await resolveSelectionWithJatosRetry(coreDefaultConfig);
   const selection = initialSelection;
-  const adapter = adapterMap.get(selection.taskId);
-  if (!adapter) {
-    throw new Error(`Unknown task '${selection.taskId}'. Available: ${adapters.map((a) => a.manifest.taskId).join(", ")}`);
+  const loadAdapter = adapterLoaders[selection.taskId];
+  if (!loadAdapter) {
+    throw new Error(`Unknown task '${selection.taskId}'. Available: ${Object.keys(adapterLoaders).join(", ")}`);
+  }
+  const adapter = await loadAdapter();
+  if (adapter.manifest.taskId !== selection.taskId) {
+    throw new Error(
+      `Adapter manifest mismatch: loader '${selection.taskId}' resolved adapter '${adapter.manifest.taskId}'.`,
+    );
   }
 
   let resolvedVariantConfig = {} as Record<string, unknown>;
@@ -156,7 +149,7 @@ async function bootstrap(): Promise<void> {
   validateTaskConfigIsolation(
     selection.taskId,
     mergedTaskConfig,
-    adapters.map((entry) => entry.manifest.taskId),
+    Object.keys(adapterLoaders),
   );
   await ensureEegBridgeReady(mergedCoreConfig, mergedTaskConfig);
 
