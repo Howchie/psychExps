@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --exclude \"**/dist/**\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@experiments/core": "0.1.0",
