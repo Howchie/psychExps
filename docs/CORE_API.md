@@ -508,6 +508,7 @@ Behavior:
 - Session lifecycle events and trial results are emitted incrementally as envelopes.
 - Local CSV/JSON save remains available for testing and debugging.
 - Task adapters should not implement JATOS submission directly.
+- The final task payload's `blocks[]` entries contain `blockIndex` and `label`, plus an optional semantic `blockType` copied from the planned block.
 
 ### TaskOrchestrator Instruction Defaults
 

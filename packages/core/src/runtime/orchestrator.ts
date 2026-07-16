@@ -786,6 +786,9 @@ export class TaskOrchestrator<TBlock, TTrial, TTrialResult> {
       blocks: sessionResult.blocks.map(b => ({
         blockIndex: b.blockIndex,
         label: (b.block as any).label,
+        ...((typeof (b.block as any).blockType === "string" && (b.block as any).blockType.trim().length > 0)
+          ? { blockType: (b.block as any).blockType }
+          : {}),
       })),
       ...(records.length > 0 ? { records } : {}),
       ...(args.excludeModuleResults ? {} : { moduleResults: moduleRunner.getResults() }),

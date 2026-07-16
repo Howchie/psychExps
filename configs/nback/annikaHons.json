@@ -213,6 +213,7 @@
         "values": [
           {
             "cell1Enabled": true,
+            "cell1BlockType": "PM1",
             "cell1PmCount": 10,
             "cell1PmCategories": ["$var.pmOrder.0.label"],
             "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\n\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response.\n\nYou need to remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
@@ -221,6 +222,7 @@
             "cell1AfterIntro": "$var.afterIntroGenericPM",
             "cell1PostScreen": "Well done!\n\nYou will no longer be required to respond to \"${var.pmOrder.0.categoryKey}\" words.\n\nIn the next set of trials, you will be given a new set of categories for the PM task.",
             "cell2Enabled": true,
+            "cell2BlockType": "PM3",
             "cell2PmCount": 10,
             "cell2PmCategories": ["$var.pmOrder.1.label", "$var.pmOrder.2.label", "$var.pmOrder.3.label"],
             "cell2Intro": "For the following blocks, the PM categories are\n\n\"${var.pmOrder.1.categoryKey}\": \"${var.pmOrder.1.descriptor}.\n\"${var.pmOrder.2.categoryKey}\": \"${var.pmOrder.2.descriptor}.\n\"${var.pmOrder.3.categoryKey}\": \"${var.pmOrder.3.descriptor}.\"\n\nPress '${var.keys.pm}' for items in any of these categories.\n\nYou will continue to respond to the n-back task when words do not belong to the PM categories.",
@@ -229,6 +231,7 @@
             "cell2PreScreen": "",
             "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
+            "cell3BlockType": "Control",
             "cell3PmCount": 0,
             "cell3PmCategories": [],
             "cell3Intro": "You will now complete the next set of 2-back trials.",
@@ -239,6 +242,7 @@
           },
           {
             "cell1Enabled": true,
+            "cell1BlockType": "PM3",
             "cell1PmCount": 10,
             "cell1PmCategories": ["$var.pmOrder.1.label", "$var.pmOrder.2.label", "$var.pmOrder.3.label"],
             "cell1PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\n\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response.\n\nYou need to remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
@@ -247,6 +251,7 @@
             "cell1AfterIntro": "$var.afterIntroGenericPM3",
             "cell1PostScreen": "Well done!\n\nYou will no longer be required to respond to \"${var.pmOrder.1.categoryKey},\" \"${var.pmOrder.2.categoryKey}\", or \"${var.pmOrder.3.categoryKey}\" words.\n\nIn the next set of trials, you will be given a new category for the PM task.",
             "cell2Enabled": true,
+            "cell2BlockType": "PM1",
             "cell2PmCount": 10,
             "cell2PmCategories": ["$var.pmOrder.0.label"],
             "cell2Intro": "For the following blocks, the PM category is:\n\n\"${var.pmOrder.0.categoryKey}\": \"${var.pmOrder.0.descriptor}.\"\n\nPress '${var.keys.pm}' for items in this category.\n\nYou will continue to respond to the n-back task when words do not belong to the PM category.",
@@ -255,6 +260,7 @@
             "cell2PreScreen": "",
             "cell2PostScreen": "There will be no more PM trials in the experiment.\nFor the remaining trials, please complete the n-back task as usual.\nYou do not need to look for any word categories.",
             "cell3Enabled": false,
+            "cell3BlockType": "Control",
             "cell3PmCount": 0,
             "cell3PmCategories": [],
             "cell3Intro": "You will now complete the next set of 2-back trials.",
@@ -265,6 +271,7 @@
           },
           {
             "cell1Enabled": false,
+            "cell1BlockType": "Control",
             "cell1PmCount": 0,
             "cell1PmCategories": [],
             "cell1Intro": "You will now complete the next set of 2-back trials.",
@@ -273,6 +280,7 @@
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
+            "cell2BlockType": "PM1",
             "cell2PmCount": 10,
             "cell2PmCategories": ["$var.pmOrder.0.label"],
             "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\n\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response.\n\nYou need to remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
@@ -281,6 +289,7 @@
             "cell2AfterIntro": "$var.afterIntroGenericPM",
             "cell2PostScreen": "Well done!\n\nYou will no longer be required to respond to \"${var.pmOrder.0.categoryKey}\" words.\n\nIn the next set of trials, you will be given a new set of categories for the PM task.",
             "cell3Enabled": true,
+            "cell3BlockType": "PM3",
             "cell3PmCount": 10,
             "cell3PmCategories": ["$var.pmOrder.1.label", "$var.pmOrder.2.label", "$var.pmOrder.3.label"],
             "cell3Intro": "For the following blocks, the PM categories are\n\n\"${var.pmOrder.1.categoryKey}\": \"${var.pmOrder.1.descriptor}.\n\"${var.pmOrder.2.categoryKey}\": \"${var.pmOrder.2.descriptor}.\n\"${var.pmOrder.3.categoryKey}\": \"${var.pmOrder.3.descriptor}.\"\n\nPress '${var.keys.pm}' for items in any of these categories.\n\nYou will continue to respond to the n-back task when words do not belong to the PM categories.",
@@ -291,6 +300,7 @@
           },
           {
             "cell1Enabled": false,
+            "cell1BlockType": "Control",
             "cell1PmCount": 0,
             "cell1PmCategories": [],
             "cell1Intro": "You will now complete the next set of 2-back trials.",
@@ -299,6 +309,7 @@
             "cell1PreScreen": "",
             "cell1PostScreen": "",
             "cell2Enabled": true,
+            "cell2BlockType": "PM3",
             "cell2PmCount": 10,
             "cell2PmCategories": ["$var.pmOrder.1.label", "$var.pmOrder.2.label", "$var.pmOrder.3.label"],
             "cell2PreScreen": "In the following blocks you will also perform a task we call \"PM\" (Prospective Memory).\n\nThe PM task requires you to press the '${var.keys.pm}' key on trials where a word belongs to a certain category.\nYou will be told what categories require a PM response.\n\nYou need to remember to press '${var.keys.pm}' whenever you see a word belonging to those categories.",
@@ -307,6 +318,7 @@
             "cell2AfterIntro": "$var.afterIntroGenericPM3",
             "cell2PostScreen": "Well done!\n\nYou will no longer be required to respond to \"${var.pmOrder.1.categoryKey},\" \"${var.pmOrder.2.categoryKey}\", or \"${var.pmOrder.3.categoryKey}\" words.\n\nIn the next set of trials, you will be given a new category for the PM task.",
             "cell3Enabled": true,
+            "cell3BlockType": "PM1",
             "cell3PmCount": 10,
             "cell3PmCategories": ["$var.pmOrder.0.label"],
             "cell3Intro": "For the following blocks, the PM category is:\n\n\"${var.pmOrder.0.categoryKey}\": \"${var.pmOrder.0.descriptor}.\"\n\nPress '${var.keys.pm}' for items in this category.\n\nYou will continue to respond to the n-back task when words do not belong to the PM category.",
@@ -356,6 +368,7 @@
         "id": "cell_1",
         "overrides": {
           "nLevel": 2,
+          "blockType": "$between.cell1BlockType",
           "variables": {
             "pmEnabled": "$between.cell1Enabled",
             "pmCount": "$between.cell1PmCount",
@@ -377,6 +390,7 @@
         "id": "cell_2",
         "overrides": {
           "nLevel": 2,
+          "blockType": "$between.cell2BlockType",
           "variables": {
             "pmEnabled": "$between.cell2Enabled",
             "pmCount": "$between.cell2PmCount",
@@ -398,6 +412,7 @@
         "id": "cell_3",
         "overrides": {
           "nLevel": 2,
+          "blockType": "$between.cell3BlockType",
           "variables": {
             "pmEnabled": "$between.cell3Enabled",
             "pmCount": "$between.cell3PmCount",

@@ -145,6 +145,7 @@ describe('NbackTaskAdapter', () => {
       expect.objectContaining({
         blockIndex: 0,
         trialIndex: 3,
+        blockType: 'practice',
         responseKey: 'm',
         responseCorrect: 1,
         responseRtMs: 450,
@@ -180,6 +181,31 @@ describe('NbackTaskAdapter', () => {
     const blockIntroTexts = parsed.mainBlocks.map((block: any) => String(block.variables.blockIntro ?? ''));
     expect(blockIntroTexts.some((text) => text.includes('fruit or vegetable') || text.includes('colour') || text.includes('animal') || text.includes('wear'))).toBe(true);
     expect(blockIntroTexts.join('\n')).not.toContain('${var.pmOrder');
+
+    const blockTypes = parsed.mainBlocks.map((block: any) => block.blockType);
+    expect(blockTypes.every((type: string) => ['Control', 'PM1', 'PM3'].includes(type))).toBe(true);
+    expect(blockTypes).not.toContain('main');
+  });
+
+  it('uses configured semantic blockType in stimulus export rows', () => {
+    const rows = __testing__.computeNbackExportRows({
+      plan: [{
+        blockIndex: 0,
+        label: 'Block 1',
+        blockType: 'PM3',
+        isPractice: false,
+        nLevel: 2,
+        trials: [{
+          trialIndex: 0,
+          trialType: 'F',
+          item: 'item-1',
+          sourceCategory: 'control',
+          correctResponse: 'd',
+        }],
+      }],
+    } as any);
+
+    expect(rows[0]).toEqual(expect.objectContaining({ block_type: 'PM3' }));
   });
 
   it('Monte Carlo: eligible positions and PM placement reliability post-fix', () => {

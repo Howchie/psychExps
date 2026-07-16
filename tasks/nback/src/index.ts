@@ -149,7 +149,11 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
       },
       onBlockStart: (ctx) => {
         primeUpcomingBlockStimuli(parsed, ctx.block, 0, runtime.variableResolver, 10);
-        eventLogger.emit("block_start", { label: ctx.block.label, nLevel: ctx.block.nLevel }, { blockIndex: ctx.blockIndex });
+        eventLogger.emit(
+          "block_start",
+          { label: ctx.block.label, blockType: ctx.block.blockType, nLevel: ctx.block.nLevel },
+          { blockIndex: ctx.blockIndex },
+        );
       },
       runTrial: async (ctx) => {
         if (!jsPsych) throw new Error("jsPsych not initialized");
@@ -185,7 +189,13 @@ async function runNbackTask(context: TaskAdapterContext): Promise<unknown> {
         
         eventLogger.emit(
           "block_end",
-          { label: ctx.block.label, nLevel: ctx.block.nLevel, accuracy, responded: blockResponded },
+          {
+            label: ctx.block.label,
+            blockType: ctx.block.blockType,
+            nLevel: ctx.block.nLevel,
+            accuracy,
+            responded: blockResponded,
+          },
           { blockIndex: ctx.blockIndex },
         );
       }
@@ -214,17 +224,12 @@ export const nbackAdapter = createTaskAdapter({
 });
 
 function computeNbackExportRows(runtime: NbackRuntimeState): any[] {
-  const exportBlockType = (block: PlannedBlock): string => {
-    if (block.isPractice) return "practice";
-    const hasPmTrials = block.trials.some((trial) => trial.trialType === "PM");
-    return hasPmTrials ? "pm" : "control";
-  };
   return runtime.plan.flatMap((block) =>
     block.trials.map((trial) => ({
       block_label: block.label,
       block_index: block.blockIndex,
       block_phase: block.isPractice ? "practice" : "main",
-      block_type: exportBlockType(block),
+      block_type: block.blockType,
       n_level: block.nLevel,
       trial_index: trial.trialIndex,
       trial_type: trial.trialType,
@@ -275,6 +280,8 @@ type NbackDrtConfig = DrtControllerConfig & {
 
 interface NbackBlockConfig {
   label: string;
+  /** Semantic condition label; falls back to practice/main when omitted. */
+  blockType: string;
   isPractice: boolean;
   nLevel: number;
   trials: number;
@@ -975,6 +982,8 @@ function parseBlock(
   const resolvedIsPractice = variableResolver.resolveToken(b.isPractice, scope);
   const inferredPractice = typeof resolvedIsPractice === "boolean" ? resolvedIsPractice : phaseRaw === "practice";
   const isPracticeResolved = isPractice ?? inferredPractice;
+  const resolvedBlockType = variableResolver.resolveToken(b.blockType, scope);
+  const blockType = asString(resolvedBlockType) || (isPracticeResolved ? "practice" : "main");
   const resolvedLabel = variableResolver.resolveToken(b.label, scope);
   const label = asString(resolvedLabel) || `${isPracticeResolved ? "Practice" : "Block"} ${index + 1}`;
   const resolvedTrials = variableResolver.resolveToken(b.trials, scope);
@@ -1071,6 +1080,7 @@ function parseBlock(
 
   return {
     label,
+    blockType,
     isPractice: isPracticeResolved,
     nLevel,
     trials,
@@ -1359,7 +1369,7 @@ function buildBlockPlanAttempt(
   let planned: PlannedBlock = {
     blockIndex,
     label: block.label,
-    blockType: block.isPractice ? "practice" : "main",
+    blockType: block.blockType,
     isPractice: block.isPractice,
     nLevel: block.nLevel,
     stimulusVariant,
@@ -1670,6 +1680,7 @@ export const __testing__ = {
   appendJsPsychNbackTrial,
   applyNbackRootPresentation,
   restoreNbackRootPresentation,
+  computeNbackExportRows,
   injectNBackTargets,
   injectNBackLures,
   parseNbackConfig,

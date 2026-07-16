@@ -75,6 +75,26 @@ describe('TaskOrchestrator', () => {
     expect(mockModuleRunner.stopScopedModules).toHaveBeenCalled();
   });
 
+  it('includes semantic blockType in final block metadata when provided', async () => {
+    mockContext.taskConfig.plan.blocks = [{ label: 'Block 1', blockType: 'PM1', trials: 1 }];
+    const orchestrator = new TaskOrchestrator(mockContext);
+
+    await orchestrator.run({
+      getBlocks: (config: any) => config.plan.blocks,
+      getTrials: ({ block }: any) => Array.from({ length: block.trials }, (_, i) => ({ id: i })),
+      runTrial: vi.fn().mockResolvedValue({ score: 1 }),
+      buttonIdPrefix: 'test',
+    });
+
+    expect(finalizeTaskRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          blocks: [{ blockIndex: 0, label: 'Block 1', blockType: 'PM1' }],
+        }),
+      }),
+    );
+  });
+
   it('should handle no blocks gracefully', async () => {
     mockContext.taskConfig.plan.blocks = [];
     const orchestrator = new TaskOrchestrator(mockContext);

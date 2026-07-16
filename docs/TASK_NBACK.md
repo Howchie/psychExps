@@ -83,6 +83,7 @@ The `plan` object defines the sequence of trials and condition assignments.
 Each block can override global settings or use tokenized variables.
 
 - `label`: String identifier for the block (used in output and intros).
+- `blockType`: Optional semantic condition label (for example, `Control`, `PM1`, or `PM3`). It is copied to block/trial output. If omitted, it falls back to `practice` or `main` for backward compatibility. Because manipulations are applied before block parsing, a manipulation can override this field with a resolved variable token.
 - `phase`: `"practice"` or `"main"` (also sets `isPractice` if not specified explicitly).
 - `isPractice`: boolean override for practice status.
 - `nLevel`: The "N" in N-Back (e.g., `1`, `2`, `3`).
@@ -106,6 +107,7 @@ Define reusable sets of overrides:
   "id": "high_load",
   "overrides": {
     "nLevel": 3,
+    "blockType": "high_load",
     "targetCount": 20,
     "rtTask": { "timing": { "trialDurationMs": 2000 } }
   }
@@ -176,7 +178,7 @@ Controls how targets and lures are inserted into the trial sequence.
 The NBack task produces a consolidated CSV/JSON payload with suffix `nback_trials`.
 
 - **Trial Records:** Every N-Back, PM, and Injector trial is exported as a primary row.
-- **Fields:** `trialType` (`N`, `F`, `PM`, `L<lag>`), `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`, etc.
+- **Fields:** `blockType` (configured semantic condition, or the compatibility fallback `practice`/`main`), `trialType` (`N`, `F`, `PM`, `L<lag>`), `correctResponse`, `responseKey`, `responseRtMs`, `responseCorrect`, etc.
 - **Module Results:** Detailed DRT and injector module outputs (e.g., transform estimates, raw module logs) are included in the `moduleResults` object in the final JSON payload.
 - **Raw jsPsych Rows (optional):** Full `jsPsychData` is excluded by default to keep JATOS payloads compact. Enable it only when needed with `data.includeJsPsychData: true` (or `task.includeJsPsychData: true`).
 
@@ -185,4 +187,4 @@ The NBack task produces a consolidated CSV/JSON payload with suffix `nback_trial
 To export the planned stimulus list without running the task, launch with the URL parameter:
 `?task=nback&variant=<id>&exportStimuli=true`
 
-This saves a CSV with the planned sequence, including `block_type`, `trial_type`, and `item` identifiers.
+This saves a CSV with the planned sequence, including the configured semantic `block_type`, `trial_type`, and `item` identifiers.
