@@ -58,6 +58,7 @@
       {
         "phase": "main",
         "label": "Main 2-back PM Export",
+        "blockType": "pm",
         "nLevel": 2,
         "trials": 36,
         "targetCount": 8,
